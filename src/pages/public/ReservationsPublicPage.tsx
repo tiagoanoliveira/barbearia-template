@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
@@ -14,6 +15,12 @@ export default function ReservationsPublicPage() {
   const [params] = useSearchParams()
   const confirmed = params.get('confirmed') === '1'
 
+  const [editing, setEditing] = useState<Reservation | null>(null)
+  const [editDate, setEditDate] = useState('')
+  const [editTime, setEditTime] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+
   const { data, isLoading } = useQuery({
     queryKey: ['my-reservations'],
     queryFn: () => api.get<Reservation[]>('/api/my-reservations'),
@@ -25,9 +32,46 @@ export default function ReservationsPublicPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['my-reservations'] }),
   })
 
+  const edit = useMutation({
+    mutationFn: async ({ id, date, time, notes }: { id: number; date: string; time: string; notes?: string }) => {
+      const res = await api.put(`/api/reservations/${id}`, {
+        date,
+        time,
+        notes: notes || undefined,
+      })
+      if (!res.success) {
+        throw new Error(res.error ?? 'Erro ao atualizar reserva.')
+      }
+      return res
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-reservations'] })
+      setEditing(null)
+    },
+    onError: (e: Error) => setEditError(e.message),
+  })
+
   const reservations = data?.data ?? []
   const upcoming     = reservations.filter(r => r.status !== 'cancelada' && r.status !== 'concluida')
   const past         = reservations.filter(r => r.status === 'concluida' || r.status === 'cancelada')
+
+  const openEdit = (r: Reservation) => {
+    const dt = parseISO(r.data_hora)
+    setEditDate(format(dt, 'yyyy-MM-dd'))
+    setEditTime(format(dt, 'HH:mm'))
+    setEditNotes(r.comentario ?? '')
+    setEditing(r)
+    setEditError(null)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editing) return
+    if (!editDate || !editTime) {
+      setEditError('Data e hora são obrigatórias.')
+      return
+    }
+    edit.mutate({ id: editing.id, date: editDate, time: editTime, notes: editNotes })
+  }
 
   if (isLoading) {
     return (
@@ -70,7 +114,12 @@ export default function ReservationsPublicPage() {
           ) : (
             <div className="space-y-3">
               {upcoming.map(r => (
-                <ReservationCard key={r.id} r={r} onCancel={() => cancel.mutate(r.id)} />
+                <ReservationCard
+                  key={r.id}
+                  r={r}
+                  onCancel={() => cancel.mutate(r.id)}
+                  onEdit={() => openEdit(r)}
+                />
               ))}
             </div>
           )}
@@ -87,12 +136,79 @@ export default function ReservationsPublicPage() {
           </div>
         )}
       </div>
+
+      {editing && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
+          <div className="bg-gray-900 rounded-2xl p-5 w-full max-w-md border border-white/10 space-y-4">
+            <h2 className="text-lg font-semibold text-white">Editar reserva</h2>
+            <p className="text-sm text-gray-400">
+              {editing.service_name} · {editing.barber_name}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Data</label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={e => setEditDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                             text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Hora</label>
+                <input
+                  type="time"
+                  value={editTime}
+                  onChange={e => setEditTime(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                             text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Notas (opcional)</label>
+                <textarea
+                  rows={3}
+                  value={editNotes}
+                  onChange={e => setEditNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                             text-white focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+                />
+              </div>
+            </div>
+            {editError && (
+              <p className="text-sm text-red-400 bg-red-950/50 border border-red-800/50 rounded-xl px-3 py-2">
+                {editError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => !edit.isPending && setEditing(null)}
+                className="px-4 py-2 text-xs text-gray-300 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={edit.isPending}
+                className="px-4 py-2 text-xs bg-brand-500 text-white rounded-xl hover:bg-brand-600
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {edit.isPending ? 'A guardar...' : 'Guardar alterações'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function ReservationCard({ r, onCancel }: { r: Reservation; onCancel?: () => void }) {
+function ReservationCard({ r, onCancel, onEdit }: { r: Reservation; onCancel?: () => void; onEdit?: () => void }) {
   const canCancel = r.status === 'pendente' || r.status === 'confirmada'
+  const canEdit   = canCancel
   const dt = parseISO(r.data_hora)
   return (
     <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-4">
@@ -109,11 +225,21 @@ function ReservationCard({ r, onCancel }: { r: Reservation; onCancel?: () => voi
           {r.barber_name} · {format(dt, 'HH:mm')}
         </p>
       </div>
-      <div className="flex flex-col items-end gap-2">
+      <div className="flex flex-col items-end gap-1">
         <StatusBadge status={r.status} />
+        {canEdit && onEdit && (
+          <button
+            onClick={onEdit}
+            className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
+          >
+            Editar
+          </button>
+        )}
         {canCancel && onCancel && (
-          <button onClick={onCancel}
-                  className="text-xs text-red-400 hover:text-red-300 transition-colors">
+          <button
+            onClick={onCancel}
+            className="text-xs text-red-400 hover:text-red-300 transition-colors"
+          >
             Cancelar
           </button>
         )}

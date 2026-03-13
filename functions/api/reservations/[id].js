@@ -1,5 +1,15 @@
 import { authenticateClient } from '../../utils/auth.js'
-import { ok, unauthorized, notFound, forbidden, badRequest, serverError, corsOptions } from '../../utils/response.js'
+import {
+  ok,
+  unauthorized,
+  notFound,
+  forbidden,
+  badRequest,
+  conflict,
+  serverError,
+  corsOptions,
+} from '../../utils/response.js'
+import { isValidDate, isValidTime, sanitize } from '../../utils/validators.js'
 
 export async function onRequest(context) {
   const { request, env, params } = context
@@ -12,7 +22,21 @@ export async function onRequest(context) {
   if (isNaN(id) || id < 1) return badRequest('ID inválido')
 
   const reservation = await env.DB.prepare(
-    'SELECT id, cliente_id, status FROM reservas WHERE id = ?'
+    `SELECT
+       r.id,
+       r.cliente_id,
+       r.barbeiro_id,
+       r.servico_id,
+       r.data_hora,
+       r.status,
+       r.comentario,
+       r.historico_edicoes,
+       c.nome AS cliente_nome,
+       b.nome AS barbeiro_nome
+     FROM reservas r
+     JOIN clientes  c ON r.cliente_id  = c.id
+     JOIN barbeiros b ON r.barbeiro_id = b.id
+    WHERE r.id = ?`
   ).bind(id).first()
 
   if (!reservation) return notFound('Reserva não encontrada')
@@ -24,12 +48,30 @@ export async function onRequest(context) {
         return badRequest('Apenas reservas pendentes ou confirmadas podem ser canceladas')
       }
 
-      // Actualizar status e atualizado_em — schema original
       await env.DB.prepare(
         `UPDATE reservas
-         SET status = 'cancelada', atualizado_em = CURRENT_TIMESTAMP
+           SET status = 'cancelada', atualizado_em = CURRENT_TIMESTAMP
          WHERE id = ?`
       ).bind(id).run()
+
+      // Notificação interna de cancelamento (não falha a request em caso de erro)
+      try {
+        const dt      = new Date(reservation.data_hora)
+        const dateStr = dt.toLocaleDateString('pt-PT')
+        const timeStr = dt.toTimeString().substring(0, 5)
+
+        const message = `${reservation.cliente_nome} cancelou a reserva com ${reservation.barbeiro_nome} de ${dateStr} às ${timeStr}`
+
+        await insertNotification(env, {
+          type: 'cancelled',
+          message,
+          reservationId: reservation.id,
+          clientName: reservation.cliente_nome,
+          barberId: reservation.barbeiro_id,
+        })
+      } catch (e) {
+        console.error('Erro ao criar notificação de cancelamento:', e)
+      }
 
       return ok({ message: 'Reserva cancelada' })
     } catch (e) {
@@ -37,5 +79,163 @@ export async function onRequest(context) {
     }
   }
 
+  if (request.method === 'PUT') {
+    try {
+      const body = await request.json()
+      const date = body.date
+      const time = body.time
+      const notes = body.notes ?? body.comentario ?? ''
+
+      if (!isValidDate(date)) return badRequest('Data inválida')
+      if (!isValidTime(time)) return badRequest('Hora inválida')
+
+      const now      = new Date()
+      const current  = new Date(reservation.data_hora)
+      const diffHrs  = (current.getTime() - now.getTime()) / (1000 * 60 * 60)
+
+      if (diffHrs < 5) {
+        return badRequest('Só é possível editar reservas com pelo menos 5 horas de antecedência')
+      }
+
+      if (!['pendente', 'confirmada'].includes(reservation.status)) {
+        return badRequest('Apenas reservas pendentes ou confirmadas podem ser editadas')
+      }
+
+      const newDataHora = `${date}T${time}:00`
+      const newDateObj  = new Date(newDataHora)
+      if (newDateObj <= now) return badRequest('Não pode reagendar para datas passadas')
+
+      // Verificar conflitos — barbeiro e cliente
+      const [conflictBarber, conflictClient] = await Promise.all([
+        env.DB.prepare(
+          `SELECT id FROM reservas
+            WHERE barbeiro_id = ? AND data_hora = ?
+              AND status IN ('confirmada','faltou','concluida')
+              AND id != ?
+            LIMIT 1`
+        ).bind(reservation.barbeiro_id, newDataHora, reservation.id).first(),
+        env.DB.prepare(
+          `SELECT id FROM reservas
+             WHERE cliente_id = ? AND data_hora = ?
+               AND status IN ('confirmada','faltou','concluida')
+               AND id != ?
+             LIMIT 1`
+        ).bind(reservation.cliente_id, newDataHora, reservation.id).first(),
+      ])
+
+      if (conflictBarber) return conflict('Horário já reservado')
+      if (conflictClient) return conflict('Já tem uma reserva neste horário')
+
+      const sanitizedComment = sanitize(notes ?? '', 2000)
+
+      // Construir objecto de alterações para histórico + notificação
+      const changes = {}
+      if (reservation.data_hora !== newDataHora) {
+        changes.data_hora = {
+          anterior: reservation.data_hora,
+          novo: newDataHora,
+        }
+      }
+      if ((reservation.comentario ?? '') !== sanitizedComment) {
+        changes.comentario = true
+      }
+
+      let history = []
+      try {
+        history = JSON.parse(reservation.historico_edicoes || '[]')
+        if (!Array.isArray(history)) history = []
+      } catch {
+        history = []
+      }
+
+      history.push({
+        date: new Date().toISOString(),
+        changed_by: 'client',
+        changes,
+      })
+
+      await env.DB.prepare(
+        `UPDATE reservas
+           SET data_hora = ?, comentario = ?, historico_edicoes = ?, atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).bind(
+        newDataHora,
+        sanitizedComment,
+        JSON.stringify(history),
+        reservation.id,
+      ).run()
+
+      // Notificação interna de edição
+      try {
+        const message = buildEditedMessage(reservation.cliente_nome, changes)
+        await insertNotification(env, {
+          type: 'edited',
+          message,
+          reservationId: reservation.id,
+          clientName: reservation.cliente_nome,
+          barberId: reservation.barbeiro_id,
+        })
+      } catch (e) {
+        console.error('Erro ao criar notificação de edição:', e)
+      }
+
+      return ok({ message: 'Reserva atualizada' })
+    } catch (e) {
+      return serverError('Erro ao editar reserva', e.message)
+    }
+  }
+
   return badRequest('Método não suportado')
+}
+
+async function insertNotification(env, { type, message, reservationId, clientName, barberId }) {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO notifications (type, message, reservation_id, client_name, barber_id)
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind(type, message, reservationId, clientName, barberId).run()
+  } catch (e) {
+    console.error('Erro ao inserir notificação:', e)
+  }
+}
+
+function buildEditedMessage(clientName, changes) {
+  const hasSubstantial = changes.barbeiro || changes.servico || changes.data_hora
+
+  if (changes.comentario === true && !hasSubstantial) {
+    return `${clientName} adicionou uma nota à reserva`
+  }
+
+  const parts = []
+
+  if (changes.barbeiro) {
+    parts.push(`barbeiro (${changes.barbeiro.anterior} → ${changes.barbeiro.novo})`)
+  }
+
+  if (changes.servico) {
+    parts.push(`serviço (${changes.servico.anterior} → ${changes.servico.novo})`)
+  }
+
+  if (changes.data_hora) {
+    try {
+      const prev = new Date(changes.data_hora.anterior)
+      const next = new Date(changes.data_hora.novo)
+
+      const prevDate = prev.toLocaleDateString('pt-PT')
+      const prevTime = prev.toTimeString().substring(0, 5)
+      const nextDate = next.toLocaleDateString('pt-PT')
+      const nextTime = next.toTimeString().substring(0, 5)
+
+      parts.push(`data/hora (${prevDate} ${prevTime} → ${nextDate} ${nextTime})`)
+    } catch {
+      // fallback genérico
+      parts.push('data/hora')
+    }
+  }
+
+  if (parts.length === 0) {
+    return `${clientName} alterou a reserva`
+  }
+
+  return `${clientName} alterou: ${parts.join(', ')}`
 }
