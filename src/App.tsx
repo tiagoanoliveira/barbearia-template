@@ -3,6 +3,7 @@ import { ROUTES } from '@/config/routes'
 
 // Layouts
 import AdminLayout from '@/components/admin/AdminLayout'
+import PublicLayout from '@/components/public/PublicLayout'
 
 // Admin pages
 import DashboardPage from '@/pages/admin/DashboardPage'
@@ -15,24 +16,34 @@ import LoginPage from '@/pages/admin/LoginPage'
 
 // Public pages
 import HomePage from '@/pages/public/HomePage'
+import BookingPage from '@/pages/public/BookingPage'
+import ProfilePage from '@/pages/public/ProfilePage'
+import ReservationsPublicPage from '@/pages/public/ReservationsPublicPage'
+import PublicLoginPage from '@/pages/public/PublicLoginPage'
 
 export default function App() {
   return (
     <Routes>
       {/* Público */}
-      <Route path={ROUTES.HOME} element={<HomePage />} />
+      <Route element={<PublicLayout />}>
+        <Route path={ROUTES.HOME} element={<HomePage />} />
+        <Route path="/reservar"    element={<BookingPage />} />
+        <Route path="/perfil"      element={<ProfilePage />} />
+        <Route path="/reservations" element={<ReservationsPublicPage />} />
+        <Route path="/login"       element={<PublicLoginPage />} />
+      </Route>
 
-      {/* Auth */}
+      {/* Admin auth */}
       <Route path={ROUTES.ADMIN_LOGIN} element={<LoginPage />} />
 
       {/* Admin (layout com sidebar) */}
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Navigate to={ROUTES.ADMIN_DASHBOARD} replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="calendario" element={<CalendarPage />} />
-        <Route path="reservas" element={<ReservationsPage />} />
-        <Route path="clientes" element={<ClientsPage />} />
-        <Route path="clientes/:id" element={<ClientDetailPage />} />
+        <Route path="dashboard"          element={<DashboardPage />} />
+        <Route path="calendario"         element={<CalendarPage />} />
+        <Route path="reservas"           element={<ReservationsPage />} />
+        <Route path="clientes"           element={<ClientsPage />} />
+        <Route path="clientes/:id"       element={<ClientDetailPage />} />
         <Route path="indisponibilidades" element={<UnavailablePage />} />
       </Route>
 

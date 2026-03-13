@@ -1,9 +1,10 @@
 export const ROUTES = {
   // Público
   HOME: '/',
-  SERVICES: '/servicos',
-  CONTACT: '/contacto',
   BOOKING: '/reservar',
+  PROFILE: '/perfil',
+  RESERVATIONS_PUBLIC: '/reservations',
+  PUBLIC_LOGIN: '/login',
 
   // Admin
   ADMIN: '/admin',
