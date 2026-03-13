@@ -15,8 +15,8 @@ export const barberShopConfig = {
   // ─ Branding visual ─────────────────────────────────────────────
   // Coloca a URL do R2 (ou /public/...) quando tiveres os ficheiros.
   // null = usa o icóne de tesoura como fallback.
-  logoUrl:     null as string | null,   // ex: 'https://pub-xxx.r2.dev/logo.png'
-  faviconUrl:  null as string | null,   // ex: 'https://pub-xxx.r2.dev/favicon.png'
+  logoUrl:     'https://pub-394b18eed1e94fcd86f2d647e456f996.r2.dev/logo.png',
+  faviconUrl:  'https://pub-394b18eed1e94fcd86f2d647e456f996.r2.dev/favicon.png',
 
   // Título e descrição para <title> e meta description
   siteTitle:       'Brooklyn Barbearia — Reservas Online',
@@ -24,11 +24,11 @@ export const barberShopConfig = {
 
   // Horário
   workingHours: {
-    monday:    { open: '09:00', close: '19:00', closed: false },
-    tuesday:   { open: '09:00', close: '19:00', closed: false },
-    wednesday: { open: '09:00', close: '19:00', closed: false },
-    thursday:  { open: '09:00', close: '20:00', closed: false },
-    friday:    { open: '09:00', close: '20:00', closed: false },
+    monday:    { open: '10:00', close: '20:00', closed: false },
+    tuesday:   { open: '10:00', close: '20:00', closed: false },
+    wednesday: { open: '10:00', close: '20:00', closed: false },
+    thursday:  { open: '10:00', close: '20:00', closed: false },
+    friday:    { open: '10:00', close: '20:00', closed: false },
     saturday:  { open: '09:00', close: '18:00', closed: false },
     sunday:    { open: '00:00', close: '00:00', closed: true  },
   },

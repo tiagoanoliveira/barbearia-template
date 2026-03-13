@@ -10,12 +10,9 @@ binding = "DB"
 database_name = "barbearia-template"
 database_id = "7f747077-69ba-4e7d-bfc7-32e2fd353dc8"
 
-# ================================================
-# Environment Variables (secrets via wrangler secret)
-# ================================================
-# wrangler secret put JWT_SECRET
-# wrangler secret put JWT_ADMIN_SECRET
-# wrangler secret put RESEND_API_KEY
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "barbearia-assets"
 
 # ================================================
 # Local dev overrides
