@@ -25,16 +25,14 @@ export default function AdminLayout() {
       : { title: 'Admin' })
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    // admin-root força variáveis CSS light mesmo em dispositivos com dark mode
+    <div className="admin-root min-h-screen bg-[var(--surface-subtle)]">
       <Sidebar />
-
-      {/* Main content */}
       <div
         className="flex flex-col min-h-screen"
         style={{ marginLeft: 'var(--sidebar-width)' }}
       >
         <Header title={pageInfo.title} subtitle={pageInfo.subtitle} />
-
         <main
           className="flex-1 p-6 overflow-auto"
           style={{ marginTop: 'var(--header-height)' }}

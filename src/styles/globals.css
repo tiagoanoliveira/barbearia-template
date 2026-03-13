@@ -2,9 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── CSS Variables de tema (injectadas pelo ThemeProvider) ──────────────── */
+/* ─── Brand colours (injectadas pelo ThemeProvider) ─────────────────────── */
 :root {
-  /* Brand — dourado Brooklyn (default) */
   --color-brand-50:  #fefdf7;
   --color-brand-100: #fdf9e7;
   --color-brand-200: #faf0c2;
@@ -16,12 +15,55 @@
   --color-brand-800: #6b4d07;
   --color-brand-900: #3d2c04;
 
-  /* Admin layout */
-  --sidebar-width: 260px;
-  --header-height: 64px;
+  --sidebar-width:  260px;
+  --header-height:  64px;
 }
 
-/* ─── Base ──────────────────────────────────────────────────────────────── */
+/* ─── Superfícies semânticas — LIGHT (default) ───────────────────────────── */
+:root {
+  --surface:        #ffffff;
+  --surface-subtle: #f9fafb;
+  --surface-raised: #f3f4f6;
+
+  --text:           #111827;
+  --text-muted:     #6b7280;
+  --text-subtle:    #9ca3af;
+
+  --border:         #e5e7eb;
+}
+
+/* ─── Superfícies semânticas — DARK ─────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface:        #1f2937;
+    --surface-subtle: #111827;
+    --surface-raised: #374151;
+
+    --text:           #f9fafb;
+    --text-muted:     #9ca3af;
+    --text-subtle:    #6b7280;
+
+    --border:         #374151;
+  }
+}
+
+/* ─── O painel admin é SEMPRE claro ─────────────────────────────────────── */
+/* A classe .admin-root é colocada no AdminLayout wrapper */
+@media (prefers-color-scheme: dark) {
+  .admin-root {
+    --surface:        #ffffff;
+    --surface-subtle: #f9fafb;
+    --surface-raised: #f3f4f6;
+
+    --text:           #111827;
+    --text-muted:     #6b7280;
+    --text-subtle:    #9ca3af;
+
+    --border:         #e5e7eb;
+  }
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
 @layer base {
   * {
     box-sizing: border-box;
@@ -33,31 +75,50 @@
   }
 
   body {
-    @apply bg-gray-50 text-gray-900;
+    background-color: var(--surface-subtle);
+    color: var(--text);
   }
 
-  /* Scrollbar customizada */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
+  /* Scrollbar — adapta ao tema */
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 rounded-full;
+    background-color: var(--border);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-400;
+    background-color: var(--text-subtle);
   }
 }
 
-/* ─── Utilitários de componente ─────────────────────────────────────────── */
+/* ─── Componentes partilhados (usados em admin + public) ─────────────────── */
 @layer components {
+
+  /* Card — light/dark automático via variáveis */
   .card {
-    @apply bg-white rounded-2xl shadow-card border border-gray-100;
+    background-color: var(--surface);
+    border-color: var(--border);
+    @apply rounded-2xl shadow-card border;
   }
 
+  /* Inputs */
+  .input {
+    background-color: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+    @apply w-full px-3 py-2 rounded-xl text-sm
+           placeholder:text-[var(--text-subtle)]
+           focus:outline-none focus:ring-2
+           focus:ring-brand-500 focus:border-transparent
+           transition-shadow border;
+  }
+
+  .label {
+    color: var(--text-muted);
+    @apply block text-sm font-medium mb-1;
+  }
+
+  /* Botões */
   .btn-primary {
     @apply inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white
            font-medium rounded-xl hover:bg-brand-600 active:bg-brand-700
@@ -65,9 +126,14 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700
-           font-medium rounded-xl hover:bg-gray-200 active:bg-gray-300
+    background-color: var(--surface-raised);
+    color: var(--text-muted);
+    @apply inline-flex items-center gap-2 px-4 py-2
+           font-medium rounded-xl
            transition-colors duration-150;
+  }
+  .btn-secondary:hover {
+    background-color: var(--border);
   }
 
   .btn-danger {
@@ -76,23 +142,11 @@
            transition-colors duration-150;
   }
 
-  .input {
-    @apply w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm
-           placeholder:text-gray-400 focus:outline-none focus:ring-2
-           focus:ring-brand-500 focus:border-transparent transition-shadow;
-  }
-
-  .label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
-  }
-
-  .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
-  }
-
-  .badge-pending   { @apply badge bg-yellow-100 text-yellow-800; }
-  .badge-confirmed { @apply badge bg-blue-100 text-blue-800; }
-  .badge-completed { @apply badge bg-green-100 text-green-800; }
-  .badge-cancelled { @apply badge bg-red-100 text-red-800; }
-  .badge-no_show   { @apply badge bg-gray-100 text-gray-600; }
+  /* Badges */
+  .badge           { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+  .badge-pending   { @apply badge bg-yellow-100  text-yellow-800; }
+  .badge-confirmed { @apply badge bg-blue-100    text-blue-800; }
+  .badge-completed { @apply badge bg-green-100   text-green-800; }
+  .badge-cancelled { @apply badge bg-red-100     text-red-800; }
+  .badge-no_show   { @apply badge bg-gray-100    text-gray-600; }
 }
