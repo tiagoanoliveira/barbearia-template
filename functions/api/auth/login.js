@@ -14,8 +14,9 @@ export async function onRequest(context) {
 
     const emailClean = sanitize(email, 200).toLowerCase()
 
+    // Usar colunas exatas do schema original
     const client = await env.DB.prepare(
-      'SELECT id, nome, email, password_hash FROM clientes WHERE email = ?'
+      'SELECT id, nome, email, password_hash, foto_perfil FROM clientes WHERE email = ?'
     ).bind(emailClean).first()
 
     if (!client) return unauthorized()
@@ -25,7 +26,15 @@ export async function onRequest(context) {
 
     const token = await signJWT({ id: client.id, email: client.email }, env.JWT_SECRET)
 
-    return ok({ token, user: { id: client.id, name: client.nome, email: client.email } })
+    return ok({
+      token,
+      user: {
+        id:        client.id,
+        name:      client.nome,
+        email:     client.email,
+        photo_url: client.foto_perfil,
+      },
+    })
   } catch (e) {
     return serverError('Erro ao fazer login', e.message)
   }

@@ -8,26 +8,42 @@ export async function onRequest(context) {
   if (request.method !== 'POST') return badRequest('Método não permitido')
 
   try {
-    const { email, password } = await request.json()
-    if (!email || !password) return badRequest('Email e password obrigatórios')
+    const { username, password } = await request.json()
+    if (!username || !password) return badRequest('Username e password obrigatórios')
 
+    // admin_users usa 'username' (não email) — schema original
     const admin = await env.DB.prepare(
-      'SELECT id, nome, email, password_hash FROM admins WHERE email = ?'
-    ).bind(email.toLowerCase()).first()
+      `SELECT id, username, nome, password_hash, role, barbeiro_id
+       FROM admin_users WHERE username = ? AND ativo = 1`
+    ).bind(username.toLowerCase()).first()
 
     if (!admin) return unauthorized()
 
     const valid = await verifyPassword(password, admin.password_hash)
     if (!valid)  return unauthorized()
 
+    // Actualizar ultimo_login
+    await env.DB.prepare(
+      'UPDATE admin_users SET ultimo_login = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(admin.id).run()
+
     const secret = env.JWT_ADMIN_SECRET ?? env.JWT_SECRET
     const token  = await signJWT(
-      { id: admin.id, email: admin.email, role: 'admin' },
+      { id: admin.id, username: admin.username, role: admin.role, barbeiro_id: admin.barbeiro_id },
       secret,
-      86400 * 7 // 7 dias
+      86400 * 7
     )
 
-    return ok({ token, user: { id: admin.id, name: admin.nome, email: admin.email, role: 'admin' } })
+    return ok({
+      token,
+      user: {
+        id:          admin.id,
+        username:    admin.username,
+        name:        admin.nome,
+        role:        admin.role,
+        barbeiro_id: admin.barbeiro_id,
+      },
+    })
   } catch (e) {
     return serverError('Erro ao fazer login', e.message)
   }

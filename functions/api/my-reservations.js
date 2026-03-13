@@ -9,22 +9,23 @@ export async function onRequest(context) {
   if (!auth.success) return unauthorized()
 
   try {
+    // Usar v_reservas_complete (view do schema original)
     const { results } = await env.DB.prepare(`
       SELECT
-        r.id,
-        s.nome  AS service_name,
-        b.nome  AS barber_name,
-        date(r.data_hora) AS date,
-        time(r.data_hora) AS time,
-        r.status,
-        r.comentario AS notes,
-        r.duracao_minutos AS duration,
-        s.preco AS price
-      FROM reservas r
-      JOIN servicos   s ON s.id = r.servico_id
-      JOIN barbeiros  b ON b.id = r.barbeiro_id
-      WHERE r.cliente_id = ?
-      ORDER BY r.data_hora DESC
+        id,
+        data_hora,
+        status,
+        comentario,
+        duracao_efetiva       AS duration,
+        servico_nome          AS service_name,
+        servico_preco         AS price,
+        servico_abreviacao    AS service_abbr,
+        barbeiro_nome         AS barber_name,
+        barbeiro_foto         AS barber_photo,
+        barbeiro_color        AS barber_color
+      FROM v_reservas_complete
+      WHERE cliente_id = ?
+      ORDER BY data_hora DESC
       LIMIT 50
     `).bind(auth.clientId).all()
 

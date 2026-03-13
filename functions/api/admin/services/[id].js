@@ -12,16 +12,20 @@ export async function onRequest(context) {
   const id = parseInt(params.id)
 
   if (request.method === 'PUT') {
-    const { name, duration, price, active } = await request.json()
+    const { name, duration, price, svg, abreviacao, color } = await request.json()
     await env.DB.prepare(
-      'UPDATE servicos SET nome = ?, duracao = ?, preco = ?, ativo = ? WHERE id = ?'
-    ).bind(sanitize(name, 100), parseInt(duration), parseInt(price), active ? 1 : 0, id).run()
+      'UPDATE servicos SET nome = ?, duracao = ?, preco = ?, svg = ?, abreviacao = ?, color = ? WHERE id = ?'
+    ).bind(
+      sanitize(name, 100), parseInt(duration), parseInt(price),
+      svg ?? 'null', sanitize(abreviacao ?? 'null', 10), color ?? '#0f7e44',
+      id
+    ).run()
     return ok({ message: 'Serviço atualizado' })
   }
 
   if (request.method === 'DELETE') {
-    await env.DB.prepare('UPDATE servicos SET ativo = 0 WHERE id = ?').bind(id).run()
-    return ok({ message: 'Serviço desativado' })
+    await env.DB.prepare('DELETE FROM servicos WHERE id = ?').bind(id).run()
+    return ok({ message: 'Serviço eliminado' })
   }
 
   return badRequest('Método não suportado')

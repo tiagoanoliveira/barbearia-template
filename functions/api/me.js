@@ -10,23 +10,30 @@ export async function onRequest(context) {
   const auth = await authenticateClient(request, env)
   if (!auth.success) return unauthorized()
 
-  // GET — perfil
+  // GET — perfil (colunas do schema original)
   if (request.method === 'GET') {
     try {
       const client = await env.DB.prepare(
-        'SELECT id, nome, email, telefone, nif, photo_url, created_at FROM clientes WHERE id = ?'
+        `SELECT id, nome, email, telefone, nif, foto_perfil,
+                reservas_concluidas, next_appointment_date, last_appointment_date,
+                criado_em, auth_methods
+         FROM clientes WHERE id = ?`
       ).bind(auth.clientId).first()
 
       if (!client) return notFound('Cliente não encontrado')
 
       return ok({
-        id: client.id,
-        name: client.nome,
-        email: client.email,
-        phone: client.telefone,
-        nif: client.nif,
-        photo_url: client.photo_url,
-        created_at: client.created_at,
+        id:                      client.id,
+        name:                    client.nome,
+        email:                   client.email,
+        phone:                   client.telefone,
+        nif:                     client.nif,
+        photo_url:               client.foto_perfil,
+        completed_reservations:  client.reservas_concluidas,
+        next_appointment:        client.next_appointment_date,
+        last_appointment:        client.last_appointment_date,
+        created_at:              client.criado_em,
+        auth_methods:            client.auth_methods,
       })
     } catch (e) {
       return serverError('Erro ao carregar perfil', e.message)
@@ -41,7 +48,6 @@ export async function onRequest(context) {
 
       if (!name) return badRequest('Nome é obrigatório')
 
-      // Alterar password opcionalmente
       if (new_password) {
         if (!current_password) return badRequest('Password atual é necessária')
         if (new_password.length < 8) return badRequest('Nova password mínimo 8 caracteres')
@@ -55,17 +61,19 @@ export async function onRequest(context) {
 
         const newHash = await hashPassword(new_password)
         await env.DB.prepare(
-          'UPDATE clientes SET password_hash = ? WHERE id = ?'
+          'UPDATE clientes SET password_hash = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?'
         ).bind(newHash, auth.clientId).run()
       }
 
       await env.DB.prepare(
-        'UPDATE clientes SET nome = ?, email = ?, telefone = ?, nif = ? WHERE id = ?'
+        `UPDATE clientes
+         SET nome = ?, email = ?, telefone = ?, nif = ?, atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
       ).bind(
         sanitize(name, 100),
         sanitize(email ?? '', 200).toLowerCase(),
         sanitize(phone ?? '', 30),
-        sanitize(nif ?? '', 20),
+        nif ?? null,
         auth.clientId
       ).run()
 

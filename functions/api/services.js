@@ -5,8 +5,9 @@ export async function onRequest(context) {
   if (context.request.method === 'OPTIONS') return corsOptions()
 
   try {
+    // sem coluna 'ordem' nem 'ativo' no schema original
     const { results } = await env.DB.prepare(
-      'SELECT id, nome AS name, duracao AS duration, preco AS price, ativo AS active FROM servicos ORDER BY ordem, id'
+      'SELECT id, nome AS name, duracao AS duration, preco AS price, svg, abreviacao, color FROM servicos ORDER BY id'
     ).all()
 
     return ok(results)

@@ -11,13 +11,7 @@ export async function onRequest(context) {
   try {
     const today = new Date().toISOString().split('T')[0]
 
-    const [
-      todayRes,
-      weekRes,
-      monthRes,
-      totalClients,
-      recentRes,
-    ] = await Promise.all([
+    const [todayRes, weekRes, monthRes, totalClients, recentRes, unreadNotifs] = await Promise.all([
       env.DB.prepare(
         `SELECT COUNT(*) AS count FROM reservas
          WHERE date(data_hora) = ? AND status NOT IN ('cancelada')`
@@ -37,28 +31,29 @@ export async function onRequest(context) {
 
       env.DB.prepare('SELECT COUNT(*) AS count FROM clientes').first(),
 
+      // Usar v_reservas_complete — view do schema original
       env.DB.prepare(`
-        SELECT
-          r.id, r.data_hora, r.status,
-          c.nome AS client_name,
-          b.nome AS barber_name,
-          s.nome AS service_name,
-          s.preco AS price
-        FROM reservas r
-        JOIN clientes  c ON c.id = r.cliente_id
-        JOIN barbeiros b ON b.id = r.barbeiro_id
-        JOIN servicos  s ON s.id = r.servico_id
-        ORDER BY r.data_hora DESC
+        SELECT id, data_hora, status,
+               cliente_nome, barbeiro_nome, servico_nome, servico_preco AS price,
+               barbeiro_color
+        FROM v_reservas_complete
+        ORDER BY criado_em DESC
         LIMIT 10
       `).all(),
+
+      // Notificações não lidas
+      env.DB.prepare(
+        'SELECT COUNT(*) AS count FROM notifications WHERE is_read = 0'
+      ).first(),
     ])
 
     return ok({
       stats: {
-        today:         todayRes?.count   ?? 0,
-        week:          weekRes?.count    ?? 0,
-        month:         monthRes?.count   ?? 0,
-        total_clients: totalClients?.count ?? 0,
+        today:           todayRes?.count    ?? 0,
+        week:            weekRes?.count     ?? 0,
+        month:           monthRes?.count    ?? 0,
+        total_clients:   totalClients?.count ?? 0,
+        unread_notifications: unreadNotifs?.count ?? 0,
       },
       recent: recentRes.results,
     })

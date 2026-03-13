@@ -1,131 +1,311 @@
 -- ================================================
 -- Brooklyn Barbearia Template — D1 Database Schema
--- Compatible: Cloudflare D1 (SQLite dialect)
+-- Estrutura compatível com schema original brooklyn
+-- para facilitar migração de dados
 -- ================================================
 
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
 -- ================================================
--- ADMINS
--- ================================================
-CREATE TABLE IF NOT EXISTS admins (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  nome          TEXT    NOT NULL,
-  email         TEXT    NOT NULL UNIQUE,
-  password_hash TEXT    NOT NULL,
-  created_at    TEXT    DEFAULT (datetime('now'))
-);
-
--- ================================================
 -- CLIENTES
 -- ================================================
 CREATE TABLE IF NOT EXISTS clientes (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  nome          TEXT    NOT NULL,
-  email         TEXT    NOT NULL UNIQUE,
-  telefone      TEXT,
-  nif           TEXT,
-  photo_url     TEXT,
-  password_hash TEXT,
-  created_at    TEXT    DEFAULT (datetime('now'))
+  id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome                      TEXT    NOT NULL,
+  email                     TEXT    NOT NULL UNIQUE,
+  telefone                  TEXT,
+  password_hash             TEXT    NOT NULL,
+  email_verificado          BOOLEAN DEFAULT 1,
+  token_verificacao         TEXT,
+  token_reset_password      TEXT,
+  token_reset_expira        DATETIME,
+  criado_em                 DATETIME DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em             DATETIME DEFAULT CURRENT_TIMESTAMP,
+  google_id                 TEXT,
+  facebook_id               TEXT,
+  instagram_id              TEXT,
+  auth_methods              TEXT    DEFAULT 'password',
+  token_verificacao_expira  TEXT,
+  reservas_concluidas       INTEGER DEFAULT 0,
+  nif                       INT(9),
+  next_appointment_date     DATETIME,
+  last_appointment_date     DATETIME,
+  notas                     TEXT,
+  foto_perfil               TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_clientes_email ON clientes(email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_email_unique ON clientes(email);
+CREATE INDEX IF NOT EXISTS idx_clientes_email         ON clientes(email);
+CREATE INDEX IF NOT EXISTS idx_clientes_telefone      ON clientes(telefone);
+CREATE INDEX IF NOT EXISTS idx_clientes_search        ON clientes(nome COLLATE NOCASE, email COLLATE NOCASE, telefone);
+CREATE INDEX IF NOT EXISTS idx_clientes_next_appointment ON clientes(next_appointment_date) WHERE next_appointment_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_google_id              ON clientes(google_id);
+CREATE INDEX IF NOT EXISTS idx_facebook_id            ON clientes(facebook_id);
+CREATE INDEX IF NOT EXISTS idx_instagram_id           ON clientes(instagram_id);
+CREATE INDEX IF NOT EXISTS idx_auth_methods           ON clientes(auth_methods);
+CREATE INDEX IF NOT EXISTS idx_clientes_token_verificacao ON clientes(token_verificacao);
+CREATE INDEX IF NOT EXISTS idx_clientes_foto_perfil   ON clientes(foto_perfil) WHERE foto_perfil IS NOT NULL;
 
 -- ================================================
 -- BARBEIROS
 -- ================================================
 CREATE TABLE IF NOT EXISTS barbeiros (
-  id        INTEGER PRIMARY KEY AUTOINCREMENT,
-  nome      TEXT    NOT NULL,
-  foto_url  TEXT,
-  ativo     INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT   DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome          TEXT    NOT NULL,
+  especialidades TEXT   NOT NULL DEFAULT '',
+  foto          TEXT,
+  ativo         INTEGER DEFAULT 1,
+  color         TEXT    DEFAULT '#ffffff'
 );
+
+CREATE INDEX IF NOT EXISTS idx_barbeiros_ativo ON barbeiros(ativo);
 
 -- ================================================
 -- SERVIÇOS
 -- ================================================
 CREATE TABLE IF NOT EXISTS servicos (
-  id      INTEGER PRIMARY KEY AUTOINCREMENT,
-  nome    TEXT    NOT NULL,
-  duracao INTEGER NOT NULL DEFAULT 60,  -- minutos
-  preco   INTEGER NOT NULL DEFAULT 0,   -- cêntimos (€ * 100)
-  ativo   INTEGER NOT NULL DEFAULT 1,
-  ordem   INTEGER NOT NULL DEFAULT 0
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome        TEXT    NOT NULL,
+  preco       INTEGER NOT NULL DEFAULT 0,   -- cêntimos (€ * 100)
+  duracao     INTEGER DEFAULT 60,            -- minutos
+  svg         TEXT    NOT NULL DEFAULT 'null',
+  abreviacao  TEXT    NOT NULL DEFAULT 'null',
+  color       TEXT    NOT NULL DEFAULT '#0f7e44'
 );
 
 -- ================================================
 -- RESERVAS
 -- ================================================
 CREATE TABLE IF NOT EXISTS reservas (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  cliente_id       INTEGER NOT NULL REFERENCES clientes(id)  ON DELETE CASCADE,
-  barbeiro_id      INTEGER NOT NULL REFERENCES barbeiros(id) ON DELETE RESTRICT,
-  servico_id       INTEGER NOT NULL REFERENCES servicos(id)  ON DELETE RESTRICT,
-  data_hora        TEXT    NOT NULL,  -- ISO 8601: YYYY-MM-DDTHH:MM:SS
-  status           TEXT    NOT NULL DEFAULT 'confirmada'
-                     CHECK (status IN ('pendente','confirmada','concluida','cancelada','faltou')),
-  comentario       TEXT,
-  duracao_minutos  INTEGER,
-  created_by       TEXT    NOT NULL DEFAULT 'online'
-                     CHECK (created_by IN ('online','admin')),
-  created_at       TEXT    DEFAULT (datetime('now'))
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente_id            INTEGER NOT NULL,
+  barbeiro_id           INTEGER NOT NULL,
+  servico_id            INTEGER NOT NULL,
+  data_hora             DATETIME NOT NULL,
+  comentario            TEXT,
+  nota_privada          TEXT,
+  status                TEXT    DEFAULT 'confirmada',
+  criado_em             DATETIME DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em         DATETIME DEFAULT CURRENT_TIMESTAMP,
+  historico_edicoes     TEXT    DEFAULT '[]',
+  moloni_document_id    INTEGER,
+  moloni_document_number TEXT,
+  created_by            TEXT    CHECK(created_by IN ('online', 'admin', 'barbeiro')),
+  duracao_minutos       INTEGER DEFAULT NULL,
+  wpp_lembrete          DEFAULT TRUE,
+  FOREIGN KEY (cliente_id)  REFERENCES clientes(id)  ON DELETE CASCADE,
+  FOREIGN KEY (barbeiro_id) REFERENCES barbeiros(id),
+  FOREIGN KEY (servico_id)  REFERENCES servicos(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_reservas_data        ON reservas(data_hora);
-CREATE INDEX IF NOT EXISTS idx_reservas_barbeiro    ON reservas(barbeiro_id, data_hora);
-CREATE INDEX IF NOT EXISTS idx_reservas_cliente     ON reservas(cliente_id,  data_hora);
-CREATE INDEX IF NOT EXISTS idx_reservas_status_data ON reservas(status, data_hora);
+CREATE INDEX IF NOT EXISTS idx_reservas_cliente_data       ON reservas(cliente_id, data_hora);
+CREATE INDEX IF NOT EXISTS idx_reservas_cliente_data_opt   ON reservas(cliente_id, data_hora DESC);
+CREATE INDEX IF NOT EXISTS idx_reservas_barbeiro_data_status ON reservas(barbeiro_id, data_hora, status);
+CREATE INDEX IF NOT EXISTS idx_reservas_created_by         ON reservas(created_by);
+CREATE INDEX IF NOT EXISTS idx_reservas_created_by_online  ON reservas(created_by, data_hora) WHERE created_by = 'online';
+CREATE INDEX IF NOT EXISTS idx_reservas_disponibilidade    ON reservas(barbeiro_id, data_hora, status) WHERE status IN ('confirmada', 'faltou', 'concluida');
+CREATE INDEX IF NOT EXISTS idx_reservas_cliente_status_data ON reservas(cliente_id, status, data_hora) WHERE status IN ('confirmada', 'faltou', 'concluida');
+CREATE INDEX IF NOT EXISTS idx_reservas_cliente_concluida  ON reservas(cliente_id, status, data_hora DESC) WHERE status = 'concluida';
+CREATE INDEX IF NOT EXISTS idx_reservas_status_data        ON reservas(status, data_hora) WHERE status = 'confirmada';
+CREATE INDEX IF NOT EXISTS idx_reservas_status_concluida_data ON reservas(status, cliente_id, data_hora DESC) WHERE status = 'concluida';
+CREATE INDEX IF NOT EXISTS idx_reservas_moloni_document    ON reservas(moloni_document_id) WHERE moloni_document_id IS NOT NULL;
 
 -- ================================================
 -- HORÁRIOS INDISPONÍVEIS
 -- ================================================
 CREATE TABLE IF NOT EXISTS horarios_indisponiveis (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  barbeiro_id       INTEGER NOT NULL REFERENCES barbeiros(id) ON DELETE CASCADE,
-  data_hora_inicio  TEXT    NOT NULL,
-  data_hora_fim     TEXT    NOT NULL,
-  is_all_day        INTEGER NOT NULL DEFAULT 0,
-  tipo              TEXT    NOT NULL DEFAULT 'folga'
-                      CHECK (tipo IN ('folga','ferias','formacao','outro')),
-  motivo            TEXT,
-  created_at        TEXT    DEFAULT (datetime('now'))
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  barbeiro_id         INTEGER NOT NULL,
+  data_hora_inicio    TEXT    NOT NULL,
+  data_hora_fim       TEXT    NOT NULL,
+  tipo                TEXT    NOT NULL CHECK(tipo IN ('folga', 'almoco', 'ferias', 'ausencia', 'outro')),
+  motivo              TEXT,
+  is_all_day          INTEGER DEFAULT 0,
+  recurrence_type     TEXT    DEFAULT 'none' CHECK(recurrence_type IN ('none', 'daily', 'weekly')),
+  recurrence_end_date TEXT,
+  recurrence_group_id TEXT,
+  created_at          TEXT    DEFAULT (datetime('now')),
+  FOREIGN KEY (barbeiro_id) REFERENCES barbeiros(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_indisponiveis_barbeiro ON horarios_indisponiveis(barbeiro_id, data_hora_inicio);
+CREATE INDEX IF NOT EXISTS idx_horarios_barbeiro_datas ON horarios_indisponiveis(barbeiro_id, data_hora_inicio, data_hora_fim);
+CREATE INDEX IF NOT EXISTS idx_horarios_recorrencia    ON horarios_indisponiveis(recurrence_type, recurrence_end_date) WHERE recurrence_type = 'weekly';
 
 -- ================================================
--- VIEW: reservas com duração (compat. Brooklyn)
+-- ADMIN USERS
 -- ================================================
+CREATE TABLE IF NOT EXISTS admin_users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  username      TEXT    NOT NULL UNIQUE,
+  password_hash TEXT    NOT NULL,
+  nome          TEXT    NOT NULL,
+  role          TEXT    NOT NULL CHECK(role IN ('admin', 'barbeiro')),
+  barbeiro_id   INTEGER,
+  ativo         INTEGER DEFAULT 1,
+  criado_em     DATETIME DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  ultimo_login  DATETIME,
+  FOREIGN KEY (barbeiro_id) REFERENCES barbeiros(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_users_username   ON admin_users(username);
+CREATE INDEX IF NOT EXISTS idx_admin_users_role       ON admin_users(role);
+CREATE INDEX IF NOT EXISTS idx_admin_users_barbeiro_id ON admin_users(barbeiro_id);
+
+-- ================================================
+-- NOTIFICATIONS
+-- ================================================
+CREATE TABLE IF NOT EXISTS notifications (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  type           TEXT    NOT NULL,
+  message        TEXT    NOT NULL,
+  reservation_id INTEGER,
+  client_name    TEXT,
+  barber_id      INTEGER,
+  is_read        BOOLEAN DEFAULT 0,
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read     ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at  ON notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_barber      ON notifications(barber_id, created_at DESC, is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread      ON notifications(is_read, created_at DESC) WHERE is_read = 0;
+CREATE INDEX IF NOT EXISTS idx_notifications_reservation ON notifications(reservation_id, created_at DESC);
+
+-- ================================================
+-- TRIGGERS — manter reservas_concluidas, last/next_appointment
+-- ================================================
+CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_increment
+AFTER UPDATE ON reservas FOR EACH ROW
+WHEN NEW.status = 'concluida' AND OLD.status != 'concluida'
+BEGIN
+  UPDATE clientes
+  SET reservas_concluidas = reservas_concluidas + 1,
+      last_appointment_date = NEW.data_hora,
+      atualizado_em = CURRENT_TIMESTAMP
+  WHERE id = NEW.cliente_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_decrement
+AFTER UPDATE ON reservas FOR EACH ROW
+WHEN OLD.status = 'concluida' AND NEW.status != 'concluida'
+BEGIN
+  UPDATE clientes
+  SET reservas_concluidas = MAX(0, reservas_concluidas - 1),
+      atualizado_em = CURRENT_TIMESTAMP
+  WHERE id = NEW.cliente_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tr_reserva_insert_next_appointment
+AFTER INSERT ON reservas FOR EACH ROW
+WHEN NEW.status = 'confirmada' AND datetime(NEW.data_hora) > datetime('now')
+BEGIN
+  UPDATE clientes
+  SET next_appointment_date = (
+    SELECT MIN(data_hora) FROM reservas
+    WHERE cliente_id = NEW.cliente_id
+      AND status = 'confirmada'
+      AND datetime(data_hora) > datetime('now')
+  ),
+  atualizado_em = CURRENT_TIMESTAMP
+  WHERE id = NEW.cliente_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tr_reserva_cancelada_next_appointment
+AFTER UPDATE ON reservas FOR EACH ROW
+WHEN NEW.status = 'cancelada' AND OLD.status != 'cancelada'
+BEGIN
+  UPDATE clientes
+  SET next_appointment_date = (
+    SELECT MIN(data_hora) FROM reservas
+    WHERE cliente_id = NEW.cliente_id
+      AND status = 'confirmada'
+      AND datetime(data_hora) > datetime('now')
+      AND id != NEW.id
+  ),
+  atualizado_em = CURRENT_TIMESTAMP
+  WHERE id = NEW.cliente_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tr_reserva_update_datetime
+AFTER UPDATE ON reservas FOR EACH ROW
+WHEN NEW.data_hora != OLD.data_hora AND NEW.status = 'confirmada'
+BEGIN
+  UPDATE clientes
+  SET next_appointment_date = (
+    SELECT MIN(data_hora) FROM reservas
+    WHERE cliente_id = NEW.cliente_id
+      AND status = 'confirmada'
+      AND datetime(data_hora) > datetime('now')
+  ),
+  atualizado_em = CURRENT_TIMESTAMP
+  WHERE id = NEW.cliente_id;
+END;
+
+-- ================================================
+-- VIEWS
+-- ================================================
+CREATE VIEW IF NOT EXISTS v_reservas_complete AS
+SELECT
+  r.id, r.cliente_id, r.barbeiro_id, r.servico_id,
+  r.data_hora, r.comentario, r.nota_privada, r.status,
+  r.created_by, r.duracao_minutos, r.criado_em, r.atualizado_em,
+  r.historico_edicoes, r.wpp_lembrete,
+  r.moloni_document_id, r.moloni_document_number,
+  c.nome AS cliente_nome, c.email AS cliente_email,
+  c.telefone AS cliente_telefone, c.nif AS cliente_nif,
+  c.reservas_concluidas AS cliente_total_reservas,
+  b.nome AS barbeiro_nome, b.foto AS barbeiro_foto, b.color AS barbeiro_color,
+  s.nome AS servico_nome, s.preco AS servico_preco,
+  s.duracao AS servico_duracao, s.abreviacao AS servico_abreviacao,
+  s.svg AS servico_svg, s.color AS servico_color,
+  COALESCE(r.duracao_minutos, s.duracao) AS duracao_efetiva
+FROM reservas r
+INNER JOIN clientes  c ON r.cliente_id  = c.id
+INNER JOIN barbeiros b ON r.barbeiro_id = b.id
+INNER JOIN servicos  s ON r.servico_id  = s.id;
+
 CREATE VIEW IF NOT EXISTS v_reservas_duracao AS
-  SELECT
-    r.*,
-    COALESCE(r.duracao_minutos, s.duracao, 60) AS duracao_calculada
-  FROM reservas r
-  JOIN servicos s ON s.id = r.servico_id;
+SELECT
+  r.id, r.cliente_id, r.barbeiro_id, r.servico_id,
+  r.data_hora, r.status,
+  COALESCE(r.duracao_minutos, s.duracao, 60) AS duracao_minutos,
+  c.nome AS cliente_nome, s.nome AS servico_nome
+FROM reservas r
+JOIN clientes c ON r.cliente_id = c.id
+JOIN servicos s ON r.servico_id = s.id;
+
+CREATE VIEW IF NOT EXISTS v_notifications_recent AS
+SELECT n.*, b.nome AS barber_name, b.color AS barber_color
+FROM notifications n
+LEFT JOIN barbeiros b ON n.barber_id = b.id
+WHERE datetime(n.created_at) > datetime('now', '-1 day')
+ORDER BY n.created_at DESC;
+
+CREATE VIEW IF NOT EXISTS v_notifications_unread AS
+SELECT n.*, b.nome AS barber_name, b.color AS barber_color
+FROM notifications n
+LEFT JOIN barbeiros b ON n.barber_id = b.id
+WHERE n.is_read = 0 AND datetime(n.created_at) > datetime('now', '-7 days')
+ORDER BY n.created_at DESC;
 
 -- ================================================
--- SEED: Admin padrão
--- Alterar password antes de usar em produção!
--- hash de 'admin123' (PBKDF2-SHA256)
+-- SEED: Serviços e Barbeiros de exemplo
 -- ================================================
--- INSERT INTO admins (nome, email, password_hash)
--- VALUES ('Admin', 'admin@barbearia.pt', '<hash>');
+INSERT OR IGNORE INTO servicos (id, nome, preco, duracao, abreviacao) VALUES
+  (1, 'Corte de Cabelo',    1200, 45, 'CC'),
+  (2, 'Barba',               800, 30, 'BA'),
+  (3, 'Corte + Barba',      1800, 60, 'CB'),
+  (4, 'Corte Máquina',       900, 30, 'CM'),
+  (5, 'Hidratação Capilar', 1500, 30, 'HC'),
+  (6, 'Corte Infantil',      900, 30, 'CI');
 
--- ================================================
--- SEED: Dados de exemplo
--- ================================================
-INSERT OR IGNORE INTO servicos (id, nome, duracao, preco, ordem) VALUES
-  (1, 'Corte de Cabelo',       45, 1200, 1),
-  (2, 'Barba',                 30,  800, 2),
-  (3, 'Corte + Barba',         60, 1800, 3),
-  (4, 'Corte Máquina',         30,  900, 4),
-  (5, 'Hidratação Capilar',   30, 1500, 5),
-  (6, 'Corte Infantil',        30,  900, 6);
+INSERT OR IGNORE INTO barbeiros (id, nome, especialidades, ativo) VALUES
+  (1, 'João',  'Corte clássico, Barba', 1),
+  (2, 'Pedro', 'Corte moderno, Fade',  1),
+  (3, 'Tiago', 'Barba, Bigode',        1);
 
-INSERT OR IGNORE INTO barbeiros (id, nome, ativo) VALUES
-  (1, 'João',  1),
-  (2, 'Pedro', 1),
-  (3, 'Tiago', 1);
+-- Admin por defeito — substituir password antes de usar!
+-- INSERT INTO admin_users (username, password_hash, nome, role)
+-- VALUES ('admin', '<hash>', 'Admin', 'admin');

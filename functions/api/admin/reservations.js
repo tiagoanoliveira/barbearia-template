@@ -9,35 +9,32 @@ export async function onRequest(context) {
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
 
-  // GET — listar (com filtros)
   if (request.method === 'GET') {
     try {
       const url    = new URL(request.url)
       const date   = url.searchParams.get('date')
       const status = url.searchParams.get('status')
-      const limit  = Math.min(parseInt(url.searchParams.get('limit') ?? '100'), 200)
+      const limit  = Math.min(parseInt(url.searchParams.get('limit')  ?? '100'), 200)
       const offset = parseInt(url.searchParams.get('offset') ?? '0')
 
       let where  = []
       let params = []
 
-      if (date) { where.push('date(r.data_hora) = ?'); params.push(date) }
-      if (status) { where.push('r.status = ?'); params.push(status) }
+      if (date)   { where.push('date(data_hora) = ?'); params.push(date) }
+      if (status) { where.push('status = ?');          params.push(status) }
 
       const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
+      // Usar v_reservas_complete
       const { results } = await env.DB.prepare(`
         SELECT
-          r.id, r.data_hora, r.status, r.comentario, r.duracao_minutos,
-          c.id AS client_id,  c.nome AS client_name,  c.email AS client_email,  c.telefone AS client_phone,
-          b.id AS barber_id,  b.nome AS barber_name,
-          s.id AS service_id, s.nome AS service_name, s.preco AS price
-        FROM reservas r
-        JOIN clientes  c ON c.id = r.cliente_id
-        JOIN barbeiros b ON b.id = r.barbeiro_id
-        JOIN servicos  s ON s.id = r.servico_id
+          id, data_hora, status, comentario, nota_privada, duracao_efetiva,
+          cliente_id,  cliente_nome,  cliente_email, cliente_telefone, cliente_nif,
+          barbeiro_id, barbeiro_nome, barbeiro_color,
+          servico_id,  servico_nome,  servico_preco
+        FROM v_reservas_complete
         ${whereClause}
-        ORDER BY r.data_hora DESC
+        ORDER BY data_hora DESC
         LIMIT ? OFFSET ?
       `).bind(...params, limit, offset).all()
 
@@ -47,7 +44,6 @@ export async function onRequest(context) {
     }
   }
 
-  // POST — criar reserva manualmente (admin)
   if (request.method === 'POST') {
     try {
       const body = await request.json()
@@ -60,11 +56,11 @@ export async function onRequest(context) {
       if (!isValidTime(time))      return badRequest('Hora inválida')
 
       const dataHora = `${date}T${time}:00`
-
-      const service = await env.DB.prepare('SELECT duracao FROM servicos WHERE id = ?').bind(service_id).first()
+      const service  = await env.DB.prepare('SELECT duracao FROM servicos WHERE id = ?').bind(service_id).first()
 
       const result = await env.DB.prepare(
-        `INSERT INTO reservas (cliente_id, barbeiro_id, servico_id, data_hora, comentario, duracao_minutos, created_by, status)
+        `INSERT INTO reservas
+           (cliente_id, barbeiro_id, servico_id, data_hora, comentario, duracao_minutos, created_by, status)
          VALUES (?, ?, ?, ?, ?, ?, 'admin', 'confirmada')`
       ).bind(
         client_id, barber_id, service_id,

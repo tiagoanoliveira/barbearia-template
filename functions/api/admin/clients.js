@@ -11,22 +11,26 @@ export async function onRequest(context) {
   try {
     const url    = new URL(request.url)
     const search = url.searchParams.get('search') ?? ''
-    const limit  = Math.min(parseInt(url.searchParams.get('limit') ?? '50'), 100)
+    const limit  = Math.min(parseInt(url.searchParams.get('limit')  ?? '50'), 100)
     const offset = parseInt(url.searchParams.get('offset') ?? '0')
 
+    // Usar idx_clientes_search que já existe no schema original
     const { results } = await env.DB.prepare(`
       SELECT
-        c.id, c.nome AS name, c.email, c.telefone AS phone, c.nif,
-        c.created_at,
-        COUNT(r.id)            AS total_reservations,
-        SUM(CASE WHEN r.status = 'concluida' THEN s.preco ELSE 0 END) AS total_spent,
-        MAX(r.data_hora)       AS last_visit
+        c.id,
+        c.nome          AS name,
+        c.email,
+        c.telefone      AS phone,
+        c.nif,
+        c.foto_perfil   AS photo_url,
+        c.reservas_concluidas,
+        c.next_appointment_date,
+        c.last_appointment_date,
+        c.notas,
+        c.criado_em     AS created_at
       FROM clientes c
-      LEFT JOIN reservas  r ON r.cliente_id = c.id
-      LEFT JOIN servicos  s ON s.id = r.servico_id
       ${search ? 'WHERE c.nome LIKE ? OR c.email LIKE ? OR c.telefone LIKE ?' : ''}
-      GROUP BY c.id
-      ORDER BY c.nome
+      ORDER BY c.nome COLLATE NOCASE
       LIMIT ? OFFSET ?
     `).bind(
       ...(search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []),

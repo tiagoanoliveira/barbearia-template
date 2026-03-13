@@ -1,7 +1,7 @@
 import { authenticateClient } from '../utils/auth.js'
 import {
   ok, created, badRequest, unauthorized, notFound,
-  conflict, forbidden, serverError, corsOptions
+  conflict, serverError, corsOptions
 } from '../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../utils/validators.js'
 
@@ -12,7 +12,6 @@ export async function onRequest(context) {
   const auth = await authenticateClient(request, env)
   if (!auth.success) return unauthorized()
 
-  // POST — Criar reserva
   if (request.method === 'POST') {
     try {
       const body = await request.json()
@@ -26,7 +25,6 @@ export async function onRequest(context) {
       const dataHora = `${date}T${time}:00`
       if (new Date(dataHora) <= new Date()) return badRequest('Não pode reservar para datas passadas')
 
-      // Verificar conflitos e buscar dados em paralelo
       const [conflictBarber, conflictClient, service, barber] = await Promise.all([
         env.DB.prepare(
           `SELECT id FROM reservas WHERE barbeiro_id = ? AND data_hora = ?
@@ -37,6 +35,7 @@ export async function onRequest(context) {
            AND status IN ('confirmada','faltou','concluida') LIMIT 1`
         ).bind(auth.clientId, dataHora).first(),
         env.DB.prepare('SELECT id, nome, duracao FROM servicos WHERE id = ?').bind(service_id).first(),
+        // foto (não foto_url)
         env.DB.prepare('SELECT id, nome FROM barbeiros WHERE id = ? AND ativo = 1').bind(barber_id).first(),
       ])
 
@@ -45,8 +44,10 @@ export async function onRequest(context) {
       if (!service)       return notFound('Serviço não encontrado')
       if (!barber)        return notFound('Barbeiro não encontrado')
 
+      // criado_em (não created_at) — schema original
       const result = await env.DB.prepare(
-        `INSERT INTO reservas (cliente_id, barbeiro_id, servico_id, data_hora, comentario, duracao_minutos, created_by)
+        `INSERT INTO reservas
+           (cliente_id, barbeiro_id, servico_id, data_hora, comentario, duracao_minutos, created_by)
          VALUES (?, ?, ?, ?, ?, ?, 'online')`
       ).bind(
         auth.clientId, barber_id, service_id,
@@ -54,7 +55,18 @@ export async function onRequest(context) {
         service.duracao || 60
       ).run()
 
-      // Enviar email de confirmação (fire-and-forget)
+      // Notificação
+      await env.DB.prepare(
+        `INSERT INTO notifications (type, message, reservation_id, client_name, barber_id)
+         VALUES ('new_booking', ?, ?, ?, ?)`
+      ).bind(
+        `Nova reserva: cliente ${auth.clientId} às ${time}`,
+        result.meta.last_row_id,
+        String(auth.clientId),
+        barber_id
+      ).run().catch(() => {}) // fire-and-forget
+
+      // Email (fire-and-forget)
       sendConfirmationEmail(env, {
         reservationId: result.meta.last_row_id,
         clientId: auth.clientId,
@@ -72,10 +84,8 @@ export async function onRequest(context) {
   return badRequest('Método não suportado')
 }
 
-// Fire-and-forget: envia email via Resend
 async function sendConfirmationEmail(env, { reservationId, clientId, barberName, serviceName, dataHora }) {
   if (!env.RESEND_API_KEY) return
-
   const client = await env.DB.prepare('SELECT nome, email FROM clientes WHERE id = ?').bind(clientId).first()
   if (!client?.email) return
 
@@ -85,28 +95,15 @@ async function sendConfirmationEmail(env, { reservationId, clientId, barberName,
 
   await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: 'Brooklyn Barbearia <noreply@brooklynbarbearia.pt>',
+      from: 'Barbearia <noreply@brooklynbarbearia.pt>',
       to:   client.email,
-      subject: `Reserva #${reservationId} confirmada — Brooklyn Barbearia`,
-      html: `
-        <h2>Reserva confirmada!</h2>
-        <p>Olá <strong>${client.nome}</strong>,</p>
-        <p>A tua reserva foi confirmada com sucesso:</p>
-        <ul>
-          <li><strong>Serviço:</strong> ${serviceName}</li>
-          <li><strong>Barbeiro:</strong> ${barberName}</li>
-          <li><strong>Data:</strong> ${dateStr}</li>
-          <li><strong>Hora:</strong> ${timeStr}</li>
-        </ul>
-        <p>Qualquer dúvida, entra em contacto connosco.</p>
-        <p>Obrigado pela preferência!</p>
-        <p><em>Brooklyn Barbearia</em></p>
-      `,
+      subject: `Reserva #${reservationId} confirmada`,
+      html: `<p>Olá <strong>${client.nome}</strong>,</p>
+             <p><strong>Serviço:</strong> ${serviceName}<br>
+             <strong>Barbeiro:</strong> ${barberName}<br>
+             <strong>Data:</strong> ${dateStr} às ${timeStr}</p>`,
     }),
   })
 }

@@ -16,27 +16,28 @@ export async function onRequest(context) {
   if (!isValidId(serviceId))  return badRequest('ID do serviço inválido')
 
   try {
-    // Dia da semana
     const dayOfWeek = new Date(date).getDay()
     const hours     = getOpenClose(dayOfWeek)
     if (!hours) return ok([]) // Domingo — fechado
 
-    // Buscar serviço e reservas/indispon. em paralelo
     const [service, { results: reservations }, { results: unavailabilities }] = await Promise.all([
       env.DB.prepare('SELECT id, duracao FROM servicos WHERE id = ?').bind(serviceId).first(),
+
+      // Usar v_reservas_duracao (existe no schema original)
       env.DB.prepare(`
-        SELECT r.data_hora, r.duracao_minutos
-        FROM reservas r
-        WHERE r.barbeiro_id = ?
-          AND date(r.data_hora) = ?
-          AND r.status IN ('confirmada', 'faltou', 'concluida')
+        SELECT data_hora, duracao_minutos
+        FROM v_reservas_duracao
+        WHERE barbeiro_id = ?
+          AND date(data_hora) = ?
+          AND status IN ('confirmada', 'faltou', 'concluida')
       `).bind(barberId, date).all(),
+
       env.DB.prepare(`
         SELECT data_hora_inicio, data_hora_fim, is_all_day
         FROM horarios_indisponiveis
         WHERE barbeiro_id = ?
           AND date(data_hora_inicio) <= ?
-          AND date(data_hora_fim) >= ?
+          AND date(data_hora_fim)    >= ?
       `).bind(barberId, date, date).all(),
     ])
 
