@@ -5,18 +5,18 @@ import { barberShopConfig } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
 
 const navLinks = [
-  { to: ROUTES.HOME,  label: 'Início',   hash: '' },
-  { to: '/#servicos', label: 'Serviços', hash: 'servicos' },
-  { to: '/#equipa',   label: 'Equipa',   hash: 'equipa' },
-  { to: '/#galeria',  label: 'Galeria',  hash: 'galeria' },
-  { to: '/#contacto', label: 'Contacto', hash: 'contacto' },
+  { to: ROUTES.HOME,  label: 'Início'   },
+  { to: '/#servicos', label: 'Serviços' },
+  { to: '/#equipa',   label: 'Equipa'   },
+  { to: '/#galeria',  label: 'Galeria'  },
+  { to: '/#contacto', label: 'Contacto' },
 ]
 
 export default function Navbar() {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]       = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const location = useLocation()
-  const navigate = useNavigate()
+  const location  = useLocation()
+  const navigate  = useNavigate()
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 40)
@@ -26,17 +26,30 @@ export default function Navbar() {
 
   useEffect(() => setOpen(false), [location])
 
-  const isHome = location.pathname === '/'
+  const isHome      = location.pathname === '/'
   const transparent = isHome && !scrolled && !open
 
   const handleProfile = () => {
-    const token = localStorage.getItem('user_token')
-    if (token) {
-      navigate('/perfil')
-    } else {
-      navigate('/login?redirect=/perfil')
-    }
+    localStorage.getItem('user_token')
+      ? navigate('/perfil')
+      : navigate('/login?redirect=/perfil')
   }
+
+  // Logo: imagem do R2 se configurada, senão icóne de tesoura
+  const LogoMark = () =>
+    barberShopConfig.logoUrl ? (
+      <img
+        src={barberShopConfig.logoUrl}
+        alt={barberShopConfig.name}
+        className="w-9 h-9 rounded-xl object-contain bg-brand-500 p-1
+                   group-hover:opacity-90 transition-opacity"
+      />
+    ) : (
+      <div className="w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center
+                      group-hover:bg-brand-600 transition-colors">
+        <Scissors size={17} className="text-white" />
+      </div>
+    )
 
   return (
     <header
@@ -48,12 +61,10 @@ export default function Navbar() {
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
+
           {/* Logo */}
           <Link to={ROUTES.HOME} className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center
-                            group-hover:bg-brand-600 transition-colors">
-              <Scissors size={17} className="text-white" />
-            </div>
+            <LogoMark />
             <span className="text-white font-bold text-sm tracking-wide">
               {barberShopConfig.name}
             </span>
@@ -63,8 +74,8 @@ export default function Navbar() {
           <nav className="hidden md:flex items-center gap-1">
             {navLinks.map(({ to, label }) => (
               <a key={to} href={to}
-                 className="px-3 py-2 text-sm text-gray-400 hover:text-white rounded-lg
-                            hover:bg-white/5 transition-all">
+                 className="px-3 py-2 text-sm text-gray-400 hover:text-white
+                            rounded-lg hover:bg-white/5 transition-all">
                 {label}
               </a>
             ))}
@@ -77,12 +88,9 @@ export default function Navbar() {
                              rounded-xl hover:bg-brand-600 transition-colors">
               Reservar
             </Link>
-            <button
-              onClick={handleProfile}
-              className="p-2 rounded-xl text-gray-400 hover:text-white
-                         hover:bg-white/5 transition-all"
-              aria-label="Perfil"
-            >
+            <button onClick={handleProfile} aria-label="Perfil"
+                    className="p-2 rounded-xl text-gray-400 hover:text-white
+                               hover:bg-white/5 transition-all">
               <User size={18} />
             </button>
           </div>
@@ -106,11 +114,9 @@ export default function Navbar() {
             </a>
           ))}
           <div className="pt-3 border-t border-white/5 mt-3 flex flex-col gap-2">
-            <button
-              onClick={handleProfile}
-              className="flex items-center gap-2 px-4 py-3 text-gray-300 text-sm
-                         hover:bg-white/5 rounded-xl w-full text-left"
-            >
+            <button onClick={handleProfile}
+                    className="flex items-center gap-2 px-4 py-3 text-gray-300 text-sm
+                               hover:bg-white/5 rounded-xl w-full text-left">
               <User size={16} /> A minha conta
             </button>
             <Link to={ROUTES.BOOKING}
