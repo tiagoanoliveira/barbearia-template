@@ -7,18 +7,18 @@ import { ROUTES } from '@/config/routes'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [showPw, setShowPw] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [showPw, setShowPw]     = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [loading, setLoading]   = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
-    const res = await authApi.login({ email, password })
+    const res = await authApi.login({ username, password })
     setLoading(false)
 
     if (!res.success || !res.data) {
@@ -34,7 +34,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
+
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
             <Scissors size={26} className="text-white" />
@@ -43,16 +43,16 @@ export default function LoginPage() {
           <p className="text-gray-500 text-sm mt-1">Painel de administração</p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1.5">Email</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Username</label>
             <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
               required
-              placeholder="admin@barbearia.pt"
+              autoComplete="username"
+              placeholder="admin"
               className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
                          text-white placeholder:text-gray-600 text-sm
                          focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
@@ -67,6 +67,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
                 placeholder="••••••••"
                 className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
                            text-white placeholder:text-gray-600 text-sm pr-11
@@ -74,8 +75,9 @@ export default function LoginPage() {
               />
               <button
                 type="button"
-                onClick={() => setShowPw(!showPw)}
+                onClick={() => setShowPw(v => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                aria-label={showPw ? 'Ocultar password' : 'Mostrar password'}
               >
                 {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>

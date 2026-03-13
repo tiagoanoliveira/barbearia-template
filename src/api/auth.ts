@@ -1,8 +1,9 @@
 import { api } from './client'
 
 export const authApi = {
-  login: (data: { email: string; password: string }) =>
-    api.post<{ token: string; user: { id: number; name: string; email: string; role: string } }>(
+  // Admin login — envia {username, password} para /api/admin/login
+  login: (data: { username: string; password: string }) =>
+    api.post<{ token: string; user: { id: number; name: string; username: string; role: string } }>(
       '/api/admin/login', data
     ),
 

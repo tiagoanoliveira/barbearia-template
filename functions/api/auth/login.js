@@ -9,20 +9,38 @@ export async function onRequest(context) {
   if (request.method !== 'POST') return badRequest('Método não permitido')
 
   try {
-    const { email, password } = await request.json()
-    if (!email || !password) return badRequest('Email e password são obrigatórios')
+    const body = await request.json()
 
-    const emailClean = sanitize(email, 200).toLowerCase()
+    // Aceita {identifier} (email ou telefone) ou {email} por compatibilidade
+    const raw      = body.identifier ?? body.email ?? ''
+    const password = body.password   ?? ''
 
-    // Usar colunas exatas do schema original
-    const client = await env.DB.prepare(
-      'SELECT id, nome, email, password_hash, foto_perfil FROM clientes WHERE email = ?'
-    ).bind(emailClean).first()
+    if (!raw || !password) return badRequest('Identificador e password são obrigatórios')
+
+    const identifier = sanitize(raw, 200).toLowerCase().trim()
+
+    // Primeiro tenta por email, depois por telefone
+    let client = await env.DB.prepare(
+      'SELECT id, nome, email, telefone, password_hash, foto_perfil FROM clientes WHERE email = ?'
+    ).bind(identifier).first()
+
+    if (!client) {
+      // Normaliza telefone: remove espaços e caracteres não numéricos para comparar
+      client = await env.DB.prepare(
+        `SELECT id, nome, email, telefone, password_hash, foto_perfil
+         FROM clientes WHERE replace(replace(telefone,' ',''),'-','') = replace(replace(?,' ',''),'-','')`
+      ).bind(identifier).first()
+    }
 
     if (!client) return unauthorized()
 
+    // Verifica password — pode ser null em contas OAuth puras
+    if (!client.password_hash) {
+      return unauthorized()
+    }
+
     const valid = await verifyPassword(password, client.password_hash)
-    if (!valid)  return unauthorized()
+    if (!valid) return unauthorized()
 
     const token = await signJWT({ id: client.id, email: client.email }, env.JWT_SECRET)
 
