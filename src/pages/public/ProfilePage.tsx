@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link, Navigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { LogOut, Edit2, Camera, X, Save } from 'lucide-react'
+import { LogOut, Edit2, Camera, X, Save, Link2, Unlink, Star } from 'lucide-react'
 import { api } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -27,6 +27,7 @@ export default function ProfilePage() {
     current_password: '', new_password: '', new_password_confirm: '',
   })
   const [formError, setFormError] = useState<string | null>(null)
+  const [linkError, setLinkError] = useState<string | null>(null)
 
   // Redirect imediato se não há token
   const hasToken = !!localStorage.getItem('user_token')
@@ -40,7 +41,10 @@ export default function ProfilePage() {
     retry: false,
   })
 
-  const user = meRes?.data
+  const user = meRes?.data as (Client & {
+    completed_reservations?: number
+    auth_methods?: string
+  }) | undefined
 
   useEffect(() => {
     if (user) {
@@ -48,7 +52,7 @@ export default function ProfilePage() {
         ...f,
         name:  user.name  ?? '',
         email: user.email ?? '',
-        phone: user.phone ?? '',
+        phone: (user as any).phone ?? '',
         nif:   (user as any).nif ?? '',
       }))
     }
@@ -91,6 +95,36 @@ export default function ProfilePage() {
   const field = (key: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [key]: e.target.value }))
 
+  const methods = (user?.auth_methods ?? '').split(',').map(m => m.trim()).filter(Boolean)
+  const hasGoogle   = methods.includes('google')
+  const hasFacebook = methods.includes('facebook')
+  const hasPassword = methods.includes('password')
+
+  const handleLinkGoogle = () => {
+    setLinkError(null)
+    window.location.href = `/api/auth/google?redirect=${encodeURIComponent('/perfil')}`
+  }
+
+  const handleUnlinkGoogle = async () => {
+    setLinkError(null)
+    const res = await api.delete<{ message: string }>('/api/auth/google/unlink')
+    if (!res.success) {
+      setLinkError(res.error ?? 'Não foi possível desassociar a conta Google.')
+    } else {
+      qc.invalidateQueries({ queryKey: ['me'] })
+    }
+  }
+
+  const handleUnlinkFacebook = async () => {
+    setLinkError(null)
+    const res = await api.delete<{ message: string }>('/api/auth/facebook/unlink')
+    if (!res.success) {
+      setLinkError(res.error ?? 'Não foi possível desassociar a conta Facebook.')
+    } else {
+      qc.invalidateQueries({ queryKey: ['me'] })
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="pt-24 flex justify-center py-20">
@@ -103,6 +137,10 @@ export default function ProfilePage() {
   if (!user) {
     return <Navigate to="/login?redirect=/perfil" replace />
   }
+
+  const totalCompleted = user.completed_reservations ?? 0
+  const currentStamps  = totalCompleted % 10
+  const isNextFree     = currentStamps === 9
 
   return (
     <div className="pt-24 pb-16 min-h-screen bg-gray-950 text-white">
@@ -129,6 +167,55 @@ export default function ProfilePage() {
             <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
         </Link>
+
+        {/* Cartão de fidelização */}
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Star size={16} className="text-amber-400" />
+              <h3 className="text-sm font-semibold text-gray-900">Cartão de fidelização</h3>
+            </div>
+            <span className="text-xs text-gray-500">{totalCompleted} cortes concluídos</span>
+          </div>
+
+          <p className="text-xs text-gray-500 mb-3">
+            A cada 10 reservas concluídas, tens um serviço grátis.
+          </p>
+
+          <div className="grid grid-cols-5 gap-2 mb-3">
+            {Array.from({ length: 10 }).map((_, i) => {
+              const isFilled = i < currentStamps
+              const isGift   = i === 9
+              const isNext   = isGift && isNextFree
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center justify-center aspect-square rounded-2xl text-xs font-semibold border
+                    ${isGift
+                      ? isNext
+                        ? 'bg-amber-500 text-white border-amber-400 animate-pulse'
+                        : 'bg-amber-500/10 text-amber-400 border-amber-400/40'
+                      : isFilled
+                        ? 'bg-brand-500 text-white border-brand-500/80'
+                        : 'bg-white/5 text-gray-500 border-white/10'
+                    }`}
+                >
+                  {isGift ? '10' : i + 1}
+                </div>
+              )
+            })}
+          </div>
+
+          {isNextFree ? (
+            <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+              A tua próxima reserva será gratuita. Fala connosco no balcão para aplicar a oferta.
+            </p>
+          ) : (
+            <p className="text-xs text-gray-500">
+              Faltam <span className="font-semibold text-gray-700">{10 - currentStamps}</span> reservas para o próximo corte grátis.
+            </p>
+          )}
+        </Card>
 
         {/* Foto */}
         <Card>
@@ -180,7 +267,7 @@ export default function ProfilePage() {
             {[
               { label: 'Nome',     value: user.name },
               { label: 'Email',    value: user.email },
-              { label: 'Telefone', value: user.phone || '—' },
+              { label: 'Telefone', value: (user as any).phone || '—' },
               { label: 'NIF',      value: (user as any).nif || '—' },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between py-2
@@ -190,6 +277,85 @@ export default function ProfilePage() {
               </div>
             ))}
           </dl>
+        </Card>
+
+        {/* Métodos de autenticação */}
+        <Card>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Métodos de autenticação</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Podes associar a tua conta do Google ou Facebook. Para remover todos os métodos sociais,
+            é obrigatório ter uma password definida.
+          </p>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between py-2 border-b border-gray-50">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Password</p>
+                <p className="text-xs text-gray-500">
+                  {hasPassword ? 'Password definida' : 'Ainda não definiste uma password.'}
+                </p>
+              </div>
+              {hasPassword ? (
+                <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 font-medium">
+                  Ativo
+                </span>
+              ) : (
+                <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-600 font-medium">
+                  Recomendado
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between py-2 border-b border-gray-50">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Google</p>
+                <p className="text-xs text-gray-500">
+                  {hasGoogle ? 'Conta Google associada.' : 'Usa a tua conta Google para entrar rapidamente.'}
+                </p>
+              </div>
+              {hasGoogle ? (
+                <button
+                  onClick={handleUnlinkGoogle}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full
+                             bg-red-50 text-red-600 hover:bg-red-100"
+                >
+                  <Unlink size={12} /> Desassociar
+                </button>
+              ) : (
+                <button
+                  onClick={handleLinkGoogle}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full
+                             bg-white text-gray-800 border border-gray-200 hover:bg-gray-50"
+                >
+                  <Link2 size={12} /> Associar Google
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Facebook</p>
+                <p className="text-xs text-gray-500">
+                  {hasFacebook
+                    ? 'Conta Facebook associada.'
+                    : 'Disponível em breve. Usa o Google ou password por agora.'}
+                </p>
+              </div>
+              {hasFacebook && (
+                <button
+                  onClick={handleUnlinkFacebook}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full
+                             bg-red-50 text-red-600 hover:bg-red-100"
+                >
+                  <Unlink size={12} /> Desassociar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {linkError && (
+            <p className="mt-3 text-xs text-red-500">{linkError}</p>
+          )}
         </Card>
       </div>
 

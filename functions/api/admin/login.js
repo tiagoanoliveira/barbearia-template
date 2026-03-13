@@ -1,6 +1,6 @@
 import { verifyPassword } from '../../utils/crypto.js'
 import { signJWT } from '../../utils/jwt.js'
-import { ok, badRequest, unauthorized, serverError, corsOptions } from '../../utils/response.js'
+import { ok, badRequest, serverError, corsOptions } from '../../utils/response.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -11,16 +11,16 @@ export async function onRequest(context) {
     const { username, password } = await request.json()
     if (!username || !password) return badRequest('Username e password obrigatórios')
 
-    // admin_users usa 'username' (não email) — schema original
+    // admin_users usa 'username' (não email) — preservar exactamente o valor guardado
     const admin = await env.DB.prepare(
       `SELECT id, username, nome, password_hash, role, barbeiro_id
        FROM admin_users WHERE username = ? AND ativo = 1`
-    ).bind(username.toLowerCase()).first()
+    ).bind(username).first()
 
-    if (!admin) return unauthorized()
+    if (!admin) return badRequest('Credenciais inválidas')
 
     const valid = await verifyPassword(password, admin.password_hash)
-    if (!valid)  return unauthorized()
+    if (!valid)  return badRequest('Credenciais inválidas')
 
     // Actualizar ultimo_login
     await env.DB.prepare(
