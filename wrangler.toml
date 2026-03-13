@@ -11,7 +11,7 @@ database_name = "barbearia-template"
 database_id = "7f747077-69ba-4e7d-bfc7-32e2fd353dc8"
 
 [[r2_buckets]]
-binding = "ASSETS"
+binding = "R2"
 bucket_name = "barbearia-assets"
 
 # ================================================
