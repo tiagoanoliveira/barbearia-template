@@ -21,16 +21,32 @@ import ProfilePage from '@/pages/public/ProfilePage'
 import ReservationsPublicPage from '@/pages/public/ReservationsPublicPage'
 import PublicLoginPage from '@/pages/public/PublicLoginPage'
 
+// Legal & support pages
+import FaqPage from '@/pages/public/FaqPage'
+import PrivacyPage from '@/pages/public/PrivacyPage'
+import CookiesPage from '@/pages/public/CookiesPage'
+import TermsPage from '@/pages/public/TermsPage'
+import BookingConditionsPage from '@/pages/public/BookingConditionsPage'
+import SupportPage from '@/pages/public/SupportPage'
+
 export default function App() {
   return (
     <Routes>
       {/* Público */}
       <Route element={<PublicLayout />}>
-        <Route path={ROUTES.HOME} element={<HomePage />} />
-        <Route path="/reservar"    element={<BookingPage />} />
-        <Route path="/perfil"      element={<ProfilePage />} />
-        <Route path="/reservations" element={<ReservationsPublicPage />} />
-        <Route path="/login"       element={<PublicLoginPage />} />
+        <Route path={ROUTES.HOME}         element={<HomePage />} />
+        <Route path="/reservar"           element={<BookingPage />} />
+        <Route path="/perfil"             element={<ProfilePage />} />
+        <Route path="/reservations"       element={<ReservationsPublicPage />} />
+        <Route path="/login"              element={<PublicLoginPage />} />
+
+        {/* Legal */}
+        <Route path="/faq"                element={<FaqPage />} />
+        <Route path="/privacidade"        element={<PrivacyPage />} />
+        <Route path="/cookies"            element={<CookiesPage />} />
+        <Route path="/termos"             element={<TermsPage />} />
+        <Route path="/condicoes-reserva"  element={<BookingConditionsPage />} />
+        <Route path="/suporte"            element={<SupportPage />} />
       </Route>
 
       {/* Admin auth */}

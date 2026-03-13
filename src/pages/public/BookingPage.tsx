@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Check, Scissors, User, Calendar, Clock } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Scissors, User, Calendar, Clock, LogIn } from 'lucide-react'
 import { format, addMonths, subMonths, getDaysInMonth, startOfMonth, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 import { api } from '@/api/client'
@@ -26,6 +26,8 @@ export default function BookingPage() {
   const [booking, setBooking] = useState<BookingState>(INITIAL)
   const [calMonth, setCalMonth] = useState(new Date())
   const [error, setError] = useState<string | null>(null)
+
+  const isLoggedIn = !!localStorage.getItem('user_token')
 
   const { data: servicesRes } = useQuery({
     queryKey: ['public-services'],
@@ -61,7 +63,6 @@ export default function BookingPage() {
     onError: (e: Error) => setError(e?.message ?? 'Erro ao confirmar reserva.'),
   })
 
-  // Calendário — tipo explícito para evitar TS2769
   const today     = new Date()
   const firstDay  = startOfMonth(calMonth).getDay() || 7
   const daysCount = getDaysInMonth(calMonth)
@@ -83,6 +84,9 @@ export default function BookingPage() {
     (step === 3 && !!booking.date && !!booking.time) ||
     step === 4
   )
+
+  // Se chegar ao passo 4 sem estar autenticado, mostra gate
+  const showLoginGate = step === 4 && !isLoggedIn
 
   return (
     <div className="min-h-screen relative flex items-start justify-center pt-24 pb-16 px-4">
@@ -118,196 +122,233 @@ export default function BookingPage() {
         </div>
 
         <div className="bg-gray-900/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/10">
-          <h2 className="text-xl font-bold text-white mb-6">
-            {step === 1 && 'Escolha o serviço'}
-            {step === 2 && 'Escolha o barbeiro'}
-            {step === 3 && 'Escolha a data e hora'}
-            {step === 4 && 'Confirmar reserva'}
-          </h2>
-
-          {/* PASSO 1: Serviço */}
-          {step === 1 && (
-            <div className="grid gap-3">
-              {services.map(s => (
-                <button key={s.id}
-                  onClick={() => setBooking(b => ({ ...b, service: s }))}
-                  className={`flex items-center justify-between p-4 rounded-2xl border
-                    transition-all text-left ${
-                      booking.service?.id === s.id
-                        ? 'bg-brand-500/20 border-brand-500 text-white'
-                        : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
-                    }`}>
-                  <div>
-                    <p className="font-semibold">{s.name}</p>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                      <Clock size={12} className="inline mr-1" />{s.duration} min
-                    </p>
-                  </div>
-                  <span className="text-brand-400 font-bold text-lg">{(s.price / 100).toFixed(0)}€</span>
+          {/* LOGIN GATE — sobreposto ao passo 4 se não estiver autenticado */}
+          {showLoginGate ? (
+            <div className="text-center py-4">
+              <div className="w-16 h-16 bg-brand-500/20 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <LogIn size={28} className="text-brand-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Precisas de fazer login</h2>
+              <p className="text-gray-400 text-sm mb-6">
+                Para confirmar a reserva é necessário ter sessão iniciada.
+              </p>
+              <div className="space-y-3">
+                <Link
+                  to="/login?redirect=/reservar"
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-brand-500
+                             text-white font-semibold rounded-xl hover:bg-brand-600 transition-colors"
+                >
+                  <LogIn size={18} /> Fazer login
+                </Link>
+                <button
+                  onClick={() => setStep(3)}
+                  className="w-full py-3 bg-white/5 text-gray-400 rounded-xl hover:bg-white/10
+                             text-sm transition-all"
+                >
+                  Voltar e alterar data
                 </button>
-              ))}
+              </div>
+              <p className="text-xs text-gray-600 mt-4">
+                Sem conta?{' '}
+                <Link to="/login?redirect=/reservar" className="text-brand-400 hover:underline">
+                  Regista-te gratuitamente
+                </Link>
+              </p>
             </div>
-          )}
+          ) : (
+            <>
+              <h2 className="text-xl font-bold text-white mb-6">
+                {step === 1 && 'Escolha o serviço'}
+                {step === 2 && 'Escolha o barbeiro'}
+                {step === 3 && 'Escolha a data e hora'}
+                {step === 4 && 'Confirmar reserva'}
+              </h2>
 
-          {/* PASSO 2: Barbeiro */}
-          {step === 2 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {barbers.map(b => (
-                <button key={b.id}
-                  onClick={() => setBooking(bk => ({ ...bk, barber: b }))}
-                  className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
-                    booking.barber?.id === b.id
-                      ? 'bg-brand-500/20 border-brand-500'
-                      : 'bg-white/5 border-white/10 hover:bg-white/10'
-                  }`}>
-                  <div className="w-12 h-12 rounded-2xl bg-gray-700 overflow-hidden flex-shrink-0">
-                    {b.photo_url
-                      ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
-                      : <span className="w-full h-full flex items-center justify-center text-white font-bold">{b.name.charAt(0)}</span>}
-                  </div>
-                  <p className="text-white font-semibold">{b.name}</p>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* PASSO 3: Data & Hora */}
-          {step === 3 && (
-            <div className="space-y-6">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <button onClick={() => setCalMonth(m => subMonths(m, 1))}
-                          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all">
-                    <ArrowLeft size={16} />
-                  </button>
-                  <span className="text-white font-semibold capitalize">
-                    {format(calMonth, 'MMMM yyyy', { locale: pt })}
-                  </span>
-                  <button onClick={() => setCalMonth(m => addMonths(m, 1))}
-                          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all">
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
-                <div className="grid grid-cols-7 mb-2">
-                  {['S','T','Q','Q','S','S','D'].map((d, i) => (
-                    <div key={i} className="text-center text-xs text-gray-600 py-1">{d}</div>
+              {/* PASSO 1 */}
+              {step === 1 && (
+                <div className="grid gap-3">
+                  {services.map(s => (
+                    <button key={s.id}
+                      onClick={() => setBooking(b => ({ ...b, service: s }))}
+                      className={`flex items-center justify-between p-4 rounded-2xl border
+                        transition-all text-left ${
+                          booking.service?.id === s.id
+                            ? 'bg-brand-500/20 border-brand-500 text-white'
+                            : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                        }`}>
+                      <div>
+                        <p className="font-semibold">{s.name}</p>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          <Clock size={12} className="inline mr-1" />{s.duration} min
+                        </p>
+                      </div>
+                      <span className="text-brand-400 font-bold text-lg">{(s.price / 100).toFixed(0)}€</span>
+                    </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-7 gap-1">
-                  {calDays.map((day, i) => {
-                    if (!day) return <div key={`e-${i}`} />
-                    const d    = new Date(calMonth.getFullYear(), calMonth.getMonth(), day)
-                    const past = d < new Date(today.setHours(0,0,0,0))
-                    const sun  = d.getDay() === 0
-                    const sel  = booking.date === format(d, 'yyyy-MM-dd')
-                    return (
-                      <button key={day} onClick={() => selectDate(day)} disabled={past || sun}
-                              className={`aspect-square rounded-xl text-sm font-medium transition-all ${
-                                sel ? 'bg-brand-500 text-white' :
-                                past || sun ? 'text-gray-700 cursor-not-allowed' :
-                                'text-gray-300 hover:bg-white/10'
-                              }`}>
-                        {day}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+              )}
 
-              {booking.date && (
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-400 mb-3 capitalize">
-                    {format(parseISO(booking.date), "EEEE, d 'de' MMMM", { locale: pt })}
-                  </h4>
-                  {slots.length === 0 ? (
-                    <p className="text-center text-gray-500 py-4">Sem horários disponíveis neste dia.</p>
-                  ) : (
-                    <div className="grid grid-cols-4 gap-2">
-                      {slots.map(slot => (
-                        <button key={slot}
-                          onClick={() => setBooking(b => ({ ...b, time: slot }))}
-                          className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
-                            booking.time === slot ? 'bg-brand-500 text-white' : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                          }`}>
-                          {slot}
-                        </button>
+              {/* PASSO 2 */}
+              {step === 2 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {barbers.map(b => (
+                    <button key={b.id}
+                      onClick={() => setBooking(bk => ({ ...bk, barber: b }))}
+                      className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
+                        booking.barber?.id === b.id
+                          ? 'bg-brand-500/20 border-brand-500'
+                          : 'bg-white/5 border-white/10 hover:bg-white/10'
+                      }`}>
+                      <div className="w-12 h-12 rounded-2xl bg-gray-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {b.photo_url
+                          ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
+                          : <span className="text-white font-bold">{b.name.charAt(0)}</span>}
+                      </div>
+                      <p className="text-white font-semibold">{b.name}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* PASSO 3 */}
+              {step === 3 && (
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <button onClick={() => setCalMonth(m => subMonths(m, 1))}
+                              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all">
+                        <ArrowLeft size={16} />
+                      </button>
+                      <span className="text-white font-semibold capitalize">
+                        {format(calMonth, 'MMMM yyyy', { locale: pt })}
+                      </span>
+                      <button onClick={() => setCalMonth(m => addMonths(m, 1))}
+                              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all">
+                        <ArrowRight size={16} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-7 mb-2">
+                      {['S','T','Q','Q','S','S','D'].map((d, i) => (
+                        <div key={i} className="text-center text-xs text-gray-600 py-1">{d}</div>
                       ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-1">
+                      {calDays.map((day, i) => {
+                        if (!day) return <div key={`e-${i}`} />
+                        const d    = new Date(calMonth.getFullYear(), calMonth.getMonth(), day)
+                        const past = d < new Date(today.setHours(0,0,0,0))
+                        const sun  = d.getDay() === 0
+                        const sel  = booking.date === format(d, 'yyyy-MM-dd')
+                        return (
+                          <button key={day} onClick={() => selectDate(day)} disabled={past || sun}
+                                  className={`aspect-square rounded-xl text-sm font-medium transition-all ${
+                                    sel ? 'bg-brand-500 text-white' :
+                                    past || sun ? 'text-gray-700 cursor-not-allowed' :
+                                    'text-gray-300 hover:bg-white/10'
+                                  }`}>
+                            {day}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {booking.date && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-400 mb-3 capitalize">
+                        {format(parseISO(booking.date), "EEEE, d 'de' MMMM", { locale: pt })}
+                      </h4>
+                      {slots.length === 0 ? (
+                        <p className="text-center text-gray-500 py-4">Sem horários disponíveis neste dia.</p>
+                      ) : (
+                        <div className="grid grid-cols-4 gap-2">
+                          {slots.map(slot => (
+                            <button key={slot}
+                              onClick={() => setBooking(b => ({ ...b, time: slot }))}
+                              className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
+                                booking.time === slot ? 'bg-brand-500 text-white' : 'bg-white/5 text-gray-300 hover:bg-white/10'
+                              }`}>
+                              {slot}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* PASSO 4: Confirmação */}
-          {step === 4 && (
-            <div className="space-y-4">
-              {[
-                { icon: Scissors, label: 'Serviço',  value: `${booking.service?.name} — ${((booking.service?.price ?? 0) / 100).toFixed(0)}€` },
-                { icon: User,     label: 'Barbeiro', value: booking.barber?.name ?? '' },
-                { icon: Calendar, label: 'Data',     value: booking.date ? format(parseISO(booking.date), "EEEE, d 'de' MMMM yyyy", { locale: pt }) : '' },
-                { icon: Clock,    label: 'Hora',     value: booking.time },
-              ].map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex items-center gap-4 bg-white/5 rounded-2xl p-4">
-                  <Icon size={18} className="text-brand-500 flex-shrink-0" />
+              {/* PASSO 4 */}
+              {step === 4 && (
+                <div className="space-y-4">
+                  {[
+                    { icon: Scissors, label: 'Serviço',  value: `${booking.service?.name} — ${((booking.service?.price ?? 0) / 100).toFixed(0)}€` },
+                    { icon: User,     label: 'Barbeiro', value: booking.barber?.name ?? '' },
+                    { icon: Calendar, label: 'Data',     value: booking.date ? format(parseISO(booking.date), "EEEE, d 'de' MMMM yyyy", { locale: pt }) : '' },
+                    { icon: Clock,    label: 'Hora',     value: booking.time },
+                  ].map(({ icon: Icon, label, value }) => (
+                    <div key={label} className="flex items-center gap-4 bg-white/5 rounded-2xl p-4">
+                      <Icon size={18} className="text-brand-500 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-gray-500">{label}</p>
+                        <p className="text-white font-semibold capitalize">{value}</p>
+                      </div>
+                    </div>
+                  ))}
                   <div>
-                    <p className="text-xs text-gray-500">{label}</p>
-                    <p className="text-white font-semibold capitalize">{value}</p>
+                    <label className="block text-sm text-gray-400 mb-1.5">Notas adicionais (opcional)</label>
+                    <textarea rows={2} placeholder="Ex: cabelo mais curto nos lados..."
+                              value={booking.notes}
+                              onChange={e => setBooking(b => ({ ...b, notes: e.target.value }))}
+                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3
+                                         text-white placeholder:text-gray-600 text-sm resize-none
+                                         focus:outline-none focus:ring-2 focus:ring-brand-500" />
                   </div>
+                  <p className="text-xs text-gray-600">
+                    Ao reservar concorda com as{' '}
+                    <Link to="/condicoes-reserva" className="underline hover:text-gray-400">Condições de Reserva</Link>{' '}e{' '}
+                    <Link to="/privacidade" className="underline hover:text-gray-400">Política de Privacidade</Link>.
+                  </p>
+                  {error && (
+                    <p className="text-sm text-red-400 bg-red-950/50 border border-red-800/50 rounded-xl px-4 py-2.5">
+                      {error}
+                    </p>
+                  )}
                 </div>
-              ))}
-              <div>
-                <label className="block text-sm text-gray-400 mb-1.5">Notas adicionais (opcional)</label>
-                <textarea rows={2} placeholder="Ex: cabelo mais curto nos lados..."
-                          value={booking.notes}
-                          onChange={e => setBooking(b => ({ ...b, notes: e.target.value }))}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3
-                                     text-white placeholder:text-gray-600 text-sm resize-none
-                                     focus:outline-none focus:ring-2 focus:ring-brand-500" />
-              </div>
-              <p className="text-xs text-gray-600">
-                Ao reservar concorda com as{' '}
-                <a href="/infos/booking-conditions" className="underline hover:text-gray-400">Condições de Reserva</a>{' '}e{' '}
-                <a href="/infos/privacy" className="underline hover:text-gray-400">Política de Privacidade</a>.
-              </p>
-              {error && (
-                <p className="text-sm text-red-400 bg-red-950/50 border border-red-800/50 rounded-xl px-4 py-2.5">
-                  {error}
-                </p>
               )}
-            </div>
-          )}
 
-          {/* Navegação */}
-          <div className="flex items-center justify-between mt-8">
-            <button
-              onClick={() => setStep(s => (s - 1) as Step)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                step === 1 ? 'invisible' : 'bg-white/5 text-gray-300 hover:bg-white/10'
-              }`}>
-              <ArrowLeft size={16} /> Voltar
-            </button>
+              {/* Navegação */}
+              <div className="flex items-center justify-between mt-8">
+                <button
+                  onClick={() => setStep(s => (s - 1) as Step)}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    step === 1 ? 'invisible' : 'bg-white/5 text-gray-300 hover:bg-white/10'
+                  }`}>
+                  <ArrowLeft size={16} /> Voltar
+                </button>
 
-            {step < 4 ? (
-              <button onClick={() => setStep(s => (s + 1) as Step)} disabled={!canNext}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-brand-500 text-white
-                                 rounded-xl text-sm font-semibold hover:bg-brand-600 transition-all
-                                 disabled:opacity-40 disabled:cursor-not-allowed">
-                Continuar <ArrowRight size={16} />
-              </button>
-            ) : (
-              <button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-brand-500 text-white
-                                 rounded-xl text-sm font-semibold hover:bg-brand-600 transition-all
-                                 disabled:opacity-40">
-                {confirmMutation.isPending ? (
-                  <span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                {step < 4 ? (
+                  <button onClick={() => setStep(s => (s + 1) as Step)} disabled={!canNext}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-brand-500 text-white
+                                     rounded-xl text-sm font-semibold hover:bg-brand-600 transition-all
+                                     disabled:opacity-40 disabled:cursor-not-allowed">
+                    Continuar <ArrowRight size={16} />
+                  </button>
                 ) : (
-                  <><Check size={16} /> Confirmar reserva</>
+                  <button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-brand-500 text-white
+                                     rounded-xl text-sm font-semibold hover:bg-brand-600 transition-all
+                                     disabled:opacity-40">
+                    {confirmMutation.isPending ? (
+                      <span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                    ) : (
+                      <><Check size={16} /> Confirmar reserva</>
+                    )}
+                  </button>
                 )}
-              </button>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

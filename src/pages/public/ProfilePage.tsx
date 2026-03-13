@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, Navigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { LogOut, Edit2, Camera, X, Save } from 'lucide-react'
 import { api } from '@/api/client'
@@ -28,6 +28,12 @@ export default function ProfilePage() {
   })
   const [formError, setFormError] = useState<string | null>(null)
 
+  // Redirect imediato se não há token
+  const hasToken = !!localStorage.getItem('user_token')
+  if (!hasToken) {
+    return <Navigate to="/login?redirect=/perfil" replace />
+  }
+
   const { data: meRes, isLoading } = useQuery({
     queryKey: ['me'],
     queryFn: () => api.get<Client>('/api/me'),
@@ -36,7 +42,6 @@ export default function ProfilePage() {
 
   const user = meRes?.data
 
-  // Preencher form ao abrir
   useEffect(() => {
     if (user) {
       setForm(f => ({
@@ -83,6 +88,9 @@ export default function ProfilePage() {
     navigate('/login')
   }
 
+  const field = (key: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [key]: e.target.value }))
+
   if (isLoading) {
     return (
       <div className="pt-24 flex justify-center py-20">
@@ -91,28 +99,14 @@ export default function ProfilePage() {
     )
   }
 
+  // Token existe mas API rejeitou (token expirado)
   if (!user) {
-    return (
-      <div className="pt-24 min-h-screen flex items-center justify-center px-4">
-        <div className="text-center">
-          <p className="text-gray-400 mb-6">Tens de fazer login para aceder ao perfil.</p>
-          <Link to="/login"
-                className="px-6 py-3 bg-brand-500 text-white font-semibold rounded-xl
-                           hover:bg-brand-600 transition-colors">
-            Fazer login
-          </Link>
-        </div>
-      </div>
-    )
+    return <Navigate to="/login?redirect=/perfil" replace />
   }
-
-  const field = (key: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm(f => ({ ...f, [key]: e.target.value }))
 
   return (
     <div className="pt-24 pb-16 min-h-screen bg-gray-950 text-white">
       <div className="max-w-2xl mx-auto px-4 space-y-5">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-black">O meu perfil</h1>
           <button
@@ -124,7 +118,6 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        {/* Reservas */}
         <Link
           to="/reservations"
           className="flex items-center justify-between px-5 py-4 bg-brand-500/10
@@ -132,7 +125,9 @@ export default function ProfilePage() {
                      transition-all"
         >
           <span className="text-brand-400 font-semibold">Ver as minhas reservas</span>
-          <ArrowRight />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
         </Link>
 
         {/* Foto */}
@@ -161,10 +156,11 @@ export default function ProfilePage() {
               </button>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Clica na câmara para alterar a foto.</p>
+              <p className="text-sm text-gray-600">Upload de foto disponível em breve (R2).</p>
               <p className="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WebP</p>
             </div>
-            <input type="file" ref={photoRef} accept="image/*" className="hidden" />
+            <input type="file" ref={photoRef} accept="image/*" className="hidden"
+                   onChange={() => alert('Upload de foto será activado em breve.')} />
           </div>
         </Card>
 
@@ -250,14 +246,5 @@ export default function ProfilePage() {
         </div>
       )}
     </div>
-  )
-}
-
-function ArrowRight({ className = '' }: { className?: string }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" strokeWidth="2" className={className}>
-      <path d="M5 12h14M12 5l7 7-7 7" />
-    </svg>
   )
 }

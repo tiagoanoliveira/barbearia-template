@@ -1,21 +1,22 @@
 import { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Scissors, Menu, X, User } from 'lucide-react'
 import { barberShopConfig } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
 
 const navLinks = [
-  { to: ROUTES.HOME,     label: 'Início',   hash: '' },
-  { to: '/#servicos',    label: 'Serviços', hash: 'servicos' },
-  { to: '/#equipa',      label: 'Equipa',   hash: 'equipa' },
-  { to: '/#galeria',     label: 'Galeria',  hash: 'galeria' },
-  { to: '/#contacto',    label: 'Contacto', hash: 'contacto' },
+  { to: ROUTES.HOME,  label: 'Início',   hash: '' },
+  { to: '/#servicos', label: 'Serviços', hash: 'servicos' },
+  { to: '/#equipa',   label: 'Equipa',   hash: 'equipa' },
+  { to: '/#galeria',  label: 'Galeria',  hash: 'galeria' },
+  { to: '/#contacto', label: 'Contacto', hash: 'contacto' },
 ]
 
 export default function Navbar() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 40)
@@ -27,6 +28,15 @@ export default function Navbar() {
 
   const isHome = location.pathname === '/'
   const transparent = isHome && !scrolled && !open
+
+  const handleProfile = () => {
+    const token = localStorage.getItem('user_token')
+    if (token) {
+      navigate('/perfil')
+    } else {
+      navigate('/login?redirect=/perfil')
+    }
+  }
 
   return (
     <header
@@ -52,41 +62,34 @@ export default function Navbar() {
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-1">
             {navLinks.map(({ to, label }) => (
-              <a
-                key={to}
-                href={to}
-                className="px-3 py-2 text-sm text-gray-400 hover:text-white rounded-lg
-                           hover:bg-white/5 transition-all"
-              >
+              <a key={to} href={to}
+                 className="px-3 py-2 text-sm text-gray-400 hover:text-white rounded-lg
+                            hover:bg-white/5 transition-all">
                 {label}
               </a>
             ))}
           </nav>
 
-          {/* CTA + user */}
+          {/* CTA + perfil */}
           <div className="hidden md:flex items-center gap-3">
-            <Link
-              to={ROUTES.BOOKING}
-              className="px-4 py-2 bg-brand-500 text-white text-sm font-semibold
-                         rounded-xl hover:bg-brand-600 transition-colors"
-            >
+            <Link to={ROUTES.BOOKING}
+                  className="px-4 py-2 bg-brand-500 text-white text-sm font-semibold
+                             rounded-xl hover:bg-brand-600 transition-colors">
               Reservar
             </Link>
-            <Link
-              to="/perfil"
+            <button
+              onClick={handleProfile}
               className="p-2 rounded-xl text-gray-400 hover:text-white
                          hover:bg-white/5 transition-all"
+              aria-label="Perfil"
             >
               <User size={18} />
-            </Link>
+            </button>
           </div>
 
           {/* Mobile burger */}
-          <button
-            className="md:hidden p-2 rounded-lg text-gray-400 hover:text-white transition-colors"
-            onClick={() => setOpen(o => !o)}
-            aria-label="Menu"
-          >
+          <button className="md:hidden p-2 rounded-lg text-gray-400 hover:text-white transition-colors"
+                  onClick={() => setOpen(o => !o)} aria-label="Menu">
             {open ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
@@ -96,28 +99,23 @@ export default function Navbar() {
       {open && (
         <div className="md:hidden bg-gray-950 border-t border-white/5 px-4 py-4 space-y-1">
           {navLinks.map(({ to, label }) => (
-            <a
-              key={to}
-              href={to}
-              className="block px-4 py-3 text-gray-300 hover:text-white
-                         hover:bg-white/5 rounded-xl transition-all text-sm"
-            >
+            <a key={to} href={to}
+               className="block px-4 py-3 text-gray-300 hover:text-white
+                          hover:bg-white/5 rounded-xl transition-all text-sm">
               {label}
             </a>
           ))}
           <div className="pt-3 border-t border-white/5 mt-3 flex flex-col gap-2">
-            <Link
-              to="/perfil"
+            <button
+              onClick={handleProfile}
               className="flex items-center gap-2 px-4 py-3 text-gray-300 text-sm
-                         hover:bg-white/5 rounded-xl"
+                         hover:bg-white/5 rounded-xl w-full text-left"
             >
               <User size={16} /> A minha conta
-            </Link>
-            <Link
-              to={ROUTES.BOOKING}
-              className="flex items-center justify-center py-3 bg-brand-500
-                         text-white font-semibold rounded-xl text-sm"
-            >
+            </button>
+            <Link to={ROUTES.BOOKING}
+                  className="flex items-center justify-center py-3 bg-brand-500
+                             text-white font-semibold rounded-xl text-sm">
               Reservar agora
             </Link>
           </div>
