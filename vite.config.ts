@@ -1,6 +1,7 @@
+/// <reference types="node" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { resolve } from 'node:path'
+import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [react()],

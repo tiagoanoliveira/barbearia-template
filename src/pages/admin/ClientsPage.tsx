@@ -71,14 +71,14 @@ export default function ClientsPage() {
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  {c.total_visits !== undefined && (
+                  {c.reservas_concluidas !== undefined && (
                     <p className="text-xs font-medium text-gray-700">
-                      {c.total_visits} visita{c.total_visits !== 1 ? 's' : ''}
+                      {c.reservas_concluidas} visita{c.reservas_concluidas !== 1 ? 's' : ''}
                     </p>
                   )}
-                  {c.last_visit && (
+                  {c.last_appointment_date && (
                     <p className="text-xs text-gray-400">
-                      Última: {format(parseISO(c.last_visit), "d MMM yy", { locale: pt })}
+                      Última: {format(parseISO(c.last_appointment_date), "d MMM yy", { locale: pt })}
                     </p>
                   )}
                 </div>
