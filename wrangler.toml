@@ -6,9 +6,9 @@ pages_build_output_dir = "dist"
 # Cloudflare D1 Database
 # ================================================
 [[d1_databases]]
-binding     = "DB"
+binding = "DB"
 database_name = "barbearia-template"
-database_id   = "YOUR_D1_DATABASE_ID"  # substituir após criar com: wrangler d1 create barbearia-template
+database_id = "7f747077-69ba-4e7d-bfc7-32e2fd353dc8"
 
 # ================================================
 # Environment Variables (secrets via wrangler secret)
