@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Filter, Plus, MoreVertical } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
@@ -13,12 +13,12 @@ import { ClipboardList } from 'lucide-react'
 import type { ReservationStatus } from '@/types'
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Todos os estados' },
-  { value: 'pending',   label: 'Pendentes' },
-  { value: 'confirmed', label: 'Confirmadas' },
-  { value: 'completed', label: 'Concluídas' },
-  { value: 'cancelled', label: 'Canceladas' },
-  { value: 'no_show',   label: 'Não vieram' },
+  { value: '',            label: 'Todos os estados' },
+  { value: 'pendente',    label: 'Pendentes' },
+  { value: 'confirmada',  label: 'Confirmadas' },
+  { value: 'concluida',   label: 'Concluídas' },
+  { value: 'cancelada',   label: 'Canceladas' },
+  { value: 'faltou',      label: 'Não vieram' },
 ]
 
 export default function ReservationsPage() {
@@ -113,26 +113,28 @@ export default function ReservationsPage() {
                     <td className="px-5 py-3 text-sm text-gray-700">{r.barber_name}</td>
                     <td className="px-5 py-3">
                       <p className="text-sm text-gray-900">
-                        {format(parseISO(`${r.date}T${r.time}`), "d MMM yyyy", { locale: pt })}
+                        {format(parseISO(r.data_hora), "d MMM yyyy", { locale: pt })}
                       </p>
-                      <p className="text-xs text-gray-500">{r.time}</p>
+                      <p className="text-xs text-gray-500">
+                        {format(parseISO(r.data_hora), 'HH:mm')}
+                      </p>
                     </td>
                     <td className="px-5 py-3">
                       <StatusBadge status={r.status} />
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        {r.status === 'pending' && (
+                        {r.status === 'pendente' && (
                           <button
-                            onClick={() => updateStatus.mutate({ id: r.id, status: 'confirmed' })}
+                            onClick={() => updateStatus.mutate({ id: r.id, status: 'confirmada' })}
                             className="text-xs font-medium text-blue-600 hover:text-blue-700"
                           >
                             Confirmar
                           </button>
                         )}
-                        {(r.status === 'pending' || r.status === 'confirmed') && (
+                        {(r.status === 'pendente' || r.status === 'confirmada') && (
                           <button
-                            onClick={() => updateStatus.mutate({ id: r.id, status: 'completed' })}
+                            onClick={() => updateStatus.mutate({ id: r.id, status: 'concluida' })}
                             className="text-xs font-medium text-emerald-600 hover:text-emerald-700"
                           >
                             Concluir
@@ -150,9 +152,7 @@ export default function ReservationsPage() {
         {/* Paginação */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-            <p className="text-xs text-gray-500">
-              {total} reservas no total
-            </p>
+            <p className="text-xs text-gray-500">{total} reservas no total</p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}

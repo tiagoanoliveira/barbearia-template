@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Scissors, Eye, EyeOff, LogIn } from 'lucide-react'
 import { api } from '@/api/client'
 import { barberShopConfig } from '@/config/theme'
@@ -48,7 +48,6 @@ export default function PublicLoginPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 pt-24">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center mb-4">
             <Scissors size={26} className="text-white" />
@@ -59,16 +58,13 @@ export default function PublicLoginPage() {
           </p>
         </div>
 
-        {/* Tabs */}
         <div className="flex bg-white/5 rounded-2xl p-1 mb-6">
           {(['login', 'register'] as Mode[]).map(m => (
             <button
               key={m}
               onClick={() => { setMode(m); setError(null) }}
               className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
-                mode === m
-                  ? 'bg-brand-500 text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-300'
+                mode === m ? 'bg-brand-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
               }`}
             >
               {m === 'login' ? 'Entrar' : 'Registar'}
@@ -110,17 +106,14 @@ export default function PublicLoginPage() {
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1.5">Password</label>
             <div className="relative">
-              <input
-                type={showPw ? 'text' : 'password'}
-                required value={form.password} onChange={field('password')}
-                placeholder="••••••••"
-                className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
-                           text-white placeholder:text-gray-600 text-sm pr-11
-                           focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
+              <input type={showPw ? 'text' : 'password'} required
+                     value={form.password} onChange={field('password')}
+                     placeholder="••••••••"
+                     className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
+                                text-white placeholder:text-gray-600 text-sm pr-11
+                                focus:outline-none focus:ring-2 focus:ring-brand-500" />
               <button type="button" onClick={() => setShowPw(!showPw)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2
-                                 text-gray-500 hover:text-gray-300">
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
                 {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
@@ -128,9 +121,7 @@ export default function PublicLoginPage() {
 
           {mode === 'register' && (
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                Confirmar password
-              </label>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Confirmar password</label>
               <input type="password" required value={form.confirm} onChange={field('confirm')}
                      placeholder="••••••••"
                      className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
@@ -140,22 +131,17 @@ export default function PublicLoginPage() {
           )}
 
           {error && (
-            <p className="text-sm text-red-400 bg-red-950 border border-red-800
-                          rounded-xl px-4 py-2.5">
+            <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-xl px-4 py-2.5">
               {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-brand-500
-                       text-white font-semibold rounded-xl hover:bg-brand-600
-                       transition-colors disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-brand-500
+                             text-white font-semibold rounded-xl hover:bg-brand-600
+                             transition-colors disabled:opacity-50">
             {loading ? (
-              <span className="animate-spin w-4 h-4 border-2 border-white/30
-                               border-t-white rounded-full" />
+              <span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
             ) : (
               <><LogIn size={18} />{mode === 'login' ? 'Entrar' : 'Criar conta'}</>
             )}

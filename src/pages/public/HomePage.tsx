@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { MapPin, Clock, Phone, Star, ChevronDown, ArrowRight } from 'lucide-react'
@@ -66,7 +66,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Scroll indicator */}
         <a
           href="#about"
           className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col
@@ -108,8 +107,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-3 text-sm text-gray-300">
                   <Phone size={16} className="text-brand-500 flex-shrink-0" />
-                  <a href={`tel:${barberShopConfig.phone}`}
-                     className="hover:text-white transition-colors">
+                  <a href={`tel:${barberShopConfig.phone}`} className="hover:text-white transition-colors">
                     {barberShopConfig.phone}
                   </a>
                 </div>
@@ -124,7 +122,6 @@ export default function HomePage() {
                   loading="lazy"
                 />
               </div>
-              {/* Badge flutuante */}
               <div className="absolute -bottom-6 -left-6 bg-brand-500 rounded-2xl p-4 shadow-xl">
                 <p className="text-white font-black text-3xl leading-none">+300</p>
                 <p className="text-brand-100 text-xs font-medium mt-0.5">avaliações Google</p>
@@ -138,14 +135,11 @@ export default function HomePage() {
       <section id="servicos" className="py-24 bg-black/20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-14">
-            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">
-              Preçario
-            </p>
+            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">Preçario</p>
             <h2 className="text-4xl font-black text-white">Os nossos serviços</h2>
           </div>
 
           {services.length === 0 ? (
-            // Skeleton loader
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="bg-white/5 rounded-2xl p-6 animate-pulse">
@@ -157,7 +151,7 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {services.filter(s => s.active).map(service => (
+              {services.map(service => (
                 <div
                   key={service.id}
                   className="group relative bg-white/5 hover:bg-white/10 border border-white/10
@@ -199,9 +193,7 @@ export default function HomePage() {
       <section id="equipa" className="py-24 bg-gray-950">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-14">
-            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">
-              Profissionais
-            </p>
+            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">Profissionais</p>
             <h2 className="text-4xl font-black text-white">A nossa equipa</h2>
           </div>
 
@@ -219,23 +211,18 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {barbers.filter(b => b.active).map(barber => (
+              {barbers.map(barber => (
                 <div key={barber.id}
                      className="group bg-white/5 rounded-3xl overflow-hidden
                                 hover:bg-white/10 transition-all duration-300 hover:-translate-y-2">
                   <div className="aspect-[3/4] bg-gray-800 overflow-hidden">
                     {barber.photo_url ? (
-                      <img
-                        src={barber.photo_url}
-                        alt={barber.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        loading="lazy"
-                      />
+                      <img src={barber.photo_url} alt={barber.name}
+                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                           loading="lazy" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-6xl font-black text-gray-700">
-                          {barber.name.charAt(0)}
-                        </span>
+                        <span className="text-6xl font-black text-gray-700">{barber.name.charAt(0)}</span>
                       </div>
                     )}
                   </div>
@@ -254,9 +241,7 @@ export default function HomePage() {
       <section id="galeria" className="py-24 bg-black/20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-14">
-            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">
-              Espaço
-            </p>
+            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">Espaço</p>
             <h2 className="text-4xl font-black text-white">O nosso espaço</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -283,34 +268,24 @@ export default function HomePage() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <div className="inline-flex items-center gap-4 bg-white/5 border border-white/10
                           rounded-2xl px-8 py-6 mb-8">
-            <img src="/images/google_favicon_2025.png" alt="Google"
-                 className="w-8 h-8" />
+            <img src="/images/google_favicon_2025.png" alt="Google" className="w-8 h-8" />
             <div className="text-left">
               <div className="flex items-center gap-2">
                 <span className="text-white font-black text-3xl">4.8</span>
                 <div className="flex items-center gap-0.5">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      size={18}
-                      className={i < 4 ? 'fill-brand-500 text-brand-500' : 'fill-brand-500/40 text-brand-500/40'}
-                    />
+                    <Star key={i} size={18}
+                          className={i < 4 ? 'fill-brand-500 text-brand-500' : 'fill-brand-500/40 text-brand-500/40'} />
                   ))}
                 </div>
               </div>
               <p className="text-gray-500 text-sm">Baseado em +300 avaliações Google</p>
             </div>
           </div>
-          <p className="text-gray-400 text-lg mb-8">
-            A satisfação dos clientes é a nossa maior recompensa.
-          </p>
-          <a
-            href="https://g.page/r/review"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-white/10
-                       text-white font-semibold rounded-2xl hover:bg-white/20 transition-all"
-          >
+          <p className="text-gray-400 text-lg mb-8">A satisfação dos clientes é a nossa maior recompensa.</p>
+          <a href="https://g.page/r/review" target="_blank" rel="noopener noreferrer"
+             className="inline-flex items-center gap-2 px-8 py-4 bg-white/10
+                        text-white font-semibold rounded-2xl hover:bg-white/20 transition-all">
             Deixar avaliação <ArrowRight size={18} />
           </a>
         </div>
@@ -319,12 +294,8 @@ export default function HomePage() {
       {/* ── CTA FINAL ───────────────────────────────────────── */}
       <section className="py-24 bg-brand-500">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <h2 className="text-4xl font-black text-white mb-4">
-            Pronto para o próximo corte?
-          </h2>
-          <p className="text-brand-100 text-lg mb-10">
-            Reserva online em menos de 2 minutos.
-          </p>
+          <h2 className="text-4xl font-black text-white mb-4">Pronto para o próximo corte?</h2>
+          <p className="text-brand-100 text-lg mb-10">Reserva online em menos de 2 minutos.</p>
           <Link
             to={ROUTES.BOOKING}
             className="inline-flex items-center gap-2 px-10 py-5 bg-white text-brand-600
@@ -335,7 +306,6 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
-
     </div>
   )
 }

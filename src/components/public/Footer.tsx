@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom'
-import { Scissors, Instagram, Facebook, Phone, MapPin, Clock } from 'lucide-react'
+import { Scissors, Instagram, Phone, MapPin, Clock } from 'lucide-react'
 import { barberShopConfig } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
 
@@ -45,10 +44,7 @@ export default function Footer() {
                 { to: '/perfil',       label: 'A minha conta' },
               ].map(({ to, label }) => (
                 <li key={to}>
-                  <a
-                    href={to}
-                    className="text-sm hover:text-white transition-colors"
-                  >
+                  <a href={to} className="text-sm hover:text-white transition-colors">
                     {label}
                   </a>
                 </li>
@@ -66,8 +62,7 @@ export default function Footer() {
               </li>
               <li className="flex items-center gap-2.5 text-sm">
                 <Phone size={15} className="text-brand-500 flex-shrink-0" />
-                <a href={`tel:${barberShopConfig.phone}`}
-                   className="hover:text-white transition-colors">
+                <a href={`tel:${barberShopConfig.phone}`} className="hover:text-white transition-colors">
                   {barberShopConfig.phone}
                 </a>
               </li>
@@ -84,7 +79,7 @@ export default function Footer() {
               {[
                 { days: 'Segunda a Sexta', hours: '10h – 20h' },
                 { days: 'Sábado',          hours: '9h – 18h' },
-                { days: 'Domingo',          hours: 'Encerrado' },
+                { days: 'Domingo',         hours: 'Encerrado' },
               ].map(({ days, hours }) => (
                 <li key={days} className="flex justify-between text-sm gap-4">
                   <span>{days}</span>

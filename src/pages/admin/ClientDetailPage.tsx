@@ -6,7 +6,7 @@ import { pt } from 'date-fns/locale'
 
 import { clientsApi } from '@/api/clients'
 import { reservationsApi } from '@/api/reservations'
-import { Card, CardHeader } from '@/components/ui/Card'
+import { Card } from '@/components/ui/Card'
 import { StatusBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
@@ -101,7 +101,7 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-medium text-gray-700">
-                    {format(parseISO(`${r.date}T${r.time}`), "d MMM yyyy, HH:mm", { locale: pt })}
+                    {format(parseISO(r.data_hora), "d MMM yyyy, HH:mm", { locale: pt })}
                   </p>
                   <StatusBadge status={r.status} />
                 </div>

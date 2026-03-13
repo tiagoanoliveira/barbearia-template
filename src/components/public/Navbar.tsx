@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Scissors, Menu, X, User } from 'lucide-react'
 import { barberShopConfig } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
@@ -23,7 +23,6 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handler)
   }, [])
 
-  // Fechar menu mobile ao navegar
   useEffect(() => setOpen(false), [location])
 
   const isHome = location.pathname === '/'
