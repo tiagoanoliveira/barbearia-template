@@ -1,18 +1,36 @@
 name = "barbearia-template"
-compatibility_date = "2024-10-01"
+compatibility_date = "2024-09-23"
 pages_build_output_dir = "dist"
 
+# ================================================
+# Cloudflare D1 Database
+# ================================================
 [[d1_databases]]
-binding = "DB"
-database_name = "barbearia_db"
-database_id = "SUBSTITUIR_PELO_ID_DA_BASE_DE_DADOS"
+binding     = "DB"
+database_name = "barbearia-template"
+database_id   = "YOUR_D1_DATABASE_ID"  # substituir após criar com: wrangler d1 create barbearia-template
 
-[[kv_namespaces]]
-binding = "KV_OAUTH"
-id = "SUBSTITUIR_PELO_ID_DO_KV"
+# ================================================
+# Environment Variables (secrets via wrangler secret)
+# ================================================
+# wrangler secret put JWT_SECRET
+# wrangler secret put JWT_ADMIN_SECRET
+# wrangler secret put RESEND_API_KEY
 
-# Secrets (configurar via: wrangler secret put NOME_DO_SECRET)
-# - GOOGLE_CLIENT_ID
-# - GOOGLE_CLIENT_SECRET
-# - JWT_SECRET
-# - BASE_URL  (ex: minhabarbearia.pt)
+# ================================================
+# Local dev overrides
+# ================================================
+[vars]
+ENV = "development"
+
+# ================================================
+# Routes (Cloudflare Pages Functions auto-routing)
+# ================================================
+# /functions/api/*  → auto-routed por Cloudflare Pages
+# /functions/api/auth/login.js     → GET/POST /api/auth/login
+# /functions/api/services.js       → GET /api/services
+# /functions/api/slots.js          → GET /api/slots
+# /functions/api/reservations.js   → POST /api/reservations
+# /functions/api/my-reservations.js → GET /api/my-reservations
+# /functions/api/me.js             → GET/PUT /api/me
+# /functions/api/admin/*           → admin routes
