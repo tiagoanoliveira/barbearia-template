@@ -8,7 +8,7 @@ import { api } from '@/api/client'
 import { StatusBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { ROUTES } from '@/config/routes'
-import type { Reservation } from '@/types'
+import type { Reservation, Service, Barber } from '@/types'
 
 export default function ReservationsPublicPage() {
   const qc = useQueryClient()
@@ -19,6 +19,8 @@ export default function ReservationsPublicPage() {
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
   const [editNotes, setEditNotes] = useState('')
+  const [editServiceId, setEditServiceId] = useState<number | null>(null)
+  const [editBarberId, setEditBarberId] = useState<number | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -27,17 +29,49 @@ export default function ReservationsPublicPage() {
     retry: false,
   })
 
+  const { data: servicesRes } = useQuery({
+    queryKey: ['public-services'],
+    queryFn: () => api.get<Service[]>('/api/services'),
+  })
+
+  const { data: barbersRes } = useQuery({
+    queryKey: ['public-barbers'],
+    queryFn: () => api.get<Barber[]>('/api/barbers'),
+  })
+
+  const { data: slotsRes } = useQuery({
+    queryKey: ['edit-slots', editBarberId, editDate, editServiceId],
+    queryFn: () =>
+      api.get<string[]>(
+        `/api/slots?barber_id=${editBarberId}&date=${editDate}&service_id=${editServiceId}`
+      ),
+    enabled: !!editing && !!editBarberId && !!editDate && !!editServiceId,
+  })
+
+  const services = servicesRes?.data ?? []
+  const barbers  = barbersRes?.data ?? []
+  const slots    = slotsRes?.data ?? []
+
   const cancel = useMutation({
     mutationFn: (id: number) => api.delete(`/api/reservations/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['my-reservations'] }),
   })
 
   const edit = useMutation({
-    mutationFn: async ({ id, date, time, notes }: { id: number; date: string; time: string; notes?: string }) => {
+    mutationFn: async ({ id, date, time, notes, service_id, barber_id }: {
+      id: number
+      date: string
+      time: string
+      notes?: string
+      service_id?: number
+      barber_id?: number
+    }) => {
       const res = await api.put(`/api/reservations/${id}`, {
         date,
         time,
         notes: notes || undefined,
+        service_id,
+        barber_id,
       })
       if (!res.success) {
         throw new Error(res.error ?? 'Erro ao atualizar reserva.')
@@ -60,17 +94,26 @@ export default function ReservationsPublicPage() {
     setEditDate(format(dt, 'yyyy-MM-dd'))
     setEditTime(format(dt, 'HH:mm'))
     setEditNotes(r.comentario ?? '')
+    setEditServiceId((r as any).service_id ?? null)
+    setEditBarberId((r as any).barber_id ?? null)
     setEditing(r)
     setEditError(null)
   }
 
   const handleSaveEdit = () => {
     if (!editing) return
-    if (!editDate || !editTime) {
-      setEditError('Data e hora são obrigatórias.')
+    if (!editDate || !editTime || !editServiceId || !editBarberId) {
+      setEditError('Serviço, barbeiro, data e hora são obrigatórios.')
       return
     }
-    edit.mutate({ id: editing.id, date: editDate, time: editTime, notes: editNotes })
+    edit.mutate({
+      id: editing.id,
+      date: editDate,
+      time: editTime,
+      notes: editNotes,
+      service_id: editServiceId,
+      barber_id: editBarberId,
+    })
   }
 
   if (isLoading) {
@@ -141,29 +184,85 @@ export default function ReservationsPublicPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
           <div className="bg-gray-900 rounded-2xl p-5 w-full max-w-md border border-white/10 space-y-4">
             <h2 className="text-lg font-semibold text-white">Editar reserva</h2>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-gray-400 mb-2">
               {editing.service_name} · {editing.barber_name}
             </p>
             <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Serviço</label>
+                <select
+                  value={editServiceId ?? ''}
+                  onChange={e => {
+                    setEditServiceId(Number(e.target.value) || null)
+                    setEditTime('')
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                             text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">Selecionar serviço</option>
+                  {services.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Barbeiro</label>
+                <select
+                  value={editBarberId ?? ''}
+                  onChange={e => {
+                    setEditBarberId(Number(e.target.value) || null)
+                    setEditTime('')
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                             text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">Selecionar barbeiro</option>
+                  {barbers.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Data</label>
                 <input
                   type="date"
                   value={editDate}
-                  onChange={e => setEditDate(e.target.value)}
+                  onChange={e => {
+                    setEditDate(e.target.value)
+                    setEditTime('')
+                  }}
                   className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Hora</label>
-                <input
-                  type="time"
-                  value={editTime}
-                  onChange={e => setEditTime(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
-                             text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
+                {(!editBarberId || !editServiceId || !editDate) ? (
+                  <p className="text-xs text-gray-500">Seleciona primeiro serviço, barbeiro e data.</p>
+                ) : slots.length === 0 ? (
+                  <p className="text-xs text-gray-500">Sem horários disponíveis para esta combinação.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+                    {slots.map(slot => (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => setEditTime(slot)}
+                        className={`py-2 rounded-xl text-xs font-medium transition-all ${
+                          editTime === slot
+                            ? 'bg-brand-500 text-white'
+                            : 'bg-white/5 text-gray-300 hover:bg-white/10'
+                        }`}
+                      >
+                        {slot}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Notas (opcional)</label>
@@ -210,6 +309,14 @@ function ReservationCard({ r, onCancel, onEdit }: { r: Reservation; onCancel?: (
   const canCancel = r.status === 'pendente' || r.status === 'confirmada'
   const canEdit   = canCancel
   const dt = parseISO(r.data_hora)
+
+  const handleCancelClick = () => {
+    if (!onCancel) return
+    if (window.confirm('Tens a certeza que queres cancelar esta reserva?')) {
+      onCancel()
+    }
+  }
+
   return (
     <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-4">
       <div className="flex-shrink-0 w-12 h-12 bg-brand-500/20 rounded-2xl flex flex-col
@@ -227,22 +334,26 @@ function ReservationCard({ r, onCancel, onEdit }: { r: Reservation; onCancel?: (
       </div>
       <div className="flex flex-col items-end gap-1">
         <StatusBadge status={r.status} />
-        {canEdit && onEdit && (
-          <button
-            onClick={onEdit}
-            className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
-          >
-            Editar
-          </button>
-        )}
-        {canCancel && onCancel && (
-          <button
-            onClick={onCancel}
-            className="text-xs text-red-400 hover:text-red-300 transition-colors"
-          >
-            Cancelar
-          </button>
-        )}
+        <div className="flex flex-col items-end gap-1 mt-1">
+          {canEdit && onEdit && (
+            <button
+              onClick={onEdit}
+              className="px-3 py-1 rounded-full text-xs font-medium bg-brand-500/20 text-brand-200
+                         hover:bg-brand-500/30 transition-colors"
+            >
+              Editar
+            </button>
+          )}
+          {canCancel && onCancel && (
+            <button
+              onClick={handleCancelClick}
+              className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-300
+                         hover:bg-red-500/20 transition-colors"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

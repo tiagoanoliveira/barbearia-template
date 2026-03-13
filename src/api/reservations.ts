@@ -17,6 +17,8 @@ export const reservationsApi = {
     if (filters.perPage) params.append('limit',  String(filters.perPage))
     if (filters.status)  params.append('status', filters.status)
     if (filters.date)    params.append('date',   filters.date)
+    if (filters.barberId) params.append('barber_id', String(filters.barberId))
+    if (filters.search)   params.append('search', filters.search)
     return api.get<PaginatedResponse<Reservation>>(`/api/admin/reservations?${params}`)
   },
 

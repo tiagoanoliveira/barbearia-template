@@ -9,7 +9,7 @@ import {
   serverError,
   corsOptions,
 } from '../../utils/response.js'
-import { isValidDate, isValidTime, sanitize } from '../../utils/validators.js'
+import { isValidDate, isValidTime, isValidId, sanitize } from '../../utils/validators.js'
 
 export async function onRequest(context) {
   const { request, env, params } = context
@@ -31,11 +31,14 @@ export async function onRequest(context) {
        r.status,
        r.comentario,
        r.historico_edicoes,
+       r.duracao_minutos,
        c.nome AS cliente_nome,
-       b.nome AS barbeiro_nome
+       b.nome AS barbeiro_nome,
+       s.nome AS servico_nome
      FROM reservas r
      JOIN clientes  c ON r.cliente_id  = c.id
      JOIN barbeiros b ON r.barbeiro_id = b.id
+     JOIN servicos  s ON r.servico_id  = s.id
     WHERE r.id = ?`
   ).bind(id).first()
 
@@ -85,6 +88,8 @@ export async function onRequest(context) {
       const date = body.date
       const time = body.time
       const notes = body.notes ?? body.comentario ?? ''
+      const newBarberId  = body.barber_id && isValidId(body.barber_id) ? body.barber_id : reservation.barbeiro_id
+      const newServiceId = body.service_id && isValidId(body.service_id) ? body.service_id : reservation.servico_id
 
       if (!isValidDate(date)) return badRequest('Data inválida')
       if (!isValidTime(time)) return badRequest('Hora inválida')
@@ -105,6 +110,24 @@ export async function onRequest(context) {
       const newDateObj  = new Date(newDataHora)
       if (newDateObj <= now) return badRequest('Não pode reagendar para datas passadas')
 
+      // Se o barbeiro mudou, garantir que existe
+      let newBarberName = reservation.barbeiro_nome
+      if (newBarberId !== reservation.barbeiro_id) {
+        const b = await env.DB.prepare('SELECT id, nome FROM barbeiros WHERE id = ?').bind(newBarberId).first()
+        if (!b) return badRequest('Barbeiro inválido')
+        newBarberName = b.nome
+      }
+
+      // Se o serviço mudou, garantir que existe e obter duração
+      let newServiceName = reservation.servico_nome
+      let newDuration    = reservation.duracao_minutos
+      if (newServiceId !== reservation.servico_id) {
+        const s = await env.DB.prepare('SELECT id, nome, duracao FROM servicos WHERE id = ?').bind(newServiceId).first()
+        if (!s) return badRequest('Serviço inválido')
+        newServiceName = s.nome
+        newDuration    = s.duracao ?? reservation.duracao_minutos
+      }
+
       // Verificar conflitos — barbeiro e cliente
       const [conflictBarber, conflictClient] = await Promise.all([
         env.DB.prepare(
@@ -113,7 +136,7 @@ export async function onRequest(context) {
               AND status IN ('confirmada','faltou','concluida')
               AND id != ?
             LIMIT 1`
-        ).bind(reservation.barbeiro_id, newDataHora, reservation.id).first(),
+        ).bind(newBarberId, newDataHora, reservation.id).first(),
         env.DB.prepare(
           `SELECT id FROM reservas
              WHERE cliente_id = ? AND data_hora = ?
@@ -139,6 +162,18 @@ export async function onRequest(context) {
       if ((reservation.comentario ?? '') !== sanitizedComment) {
         changes.comentario = true
       }
+      if (newBarberId !== reservation.barbeiro_id) {
+        changes.barbeiro = {
+          anterior: reservation.barbeiro_nome,
+          novo: newBarberName,
+        }
+      }
+      if (newServiceId !== reservation.servico_id) {
+        changes.servico = {
+          anterior: reservation.servico_nome,
+          novo: newServiceName,
+        }
+      }
 
       let history = []
       try {
@@ -156,11 +191,15 @@ export async function onRequest(context) {
 
       await env.DB.prepare(
         `UPDATE reservas
-           SET data_hora = ?, comentario = ?, historico_edicoes = ?, atualizado_em = CURRENT_TIMESTAMP
+           SET barbeiro_id = ?, servico_id = ?, data_hora = ?, comentario = ?, duracao_minutos = ?,
+               historico_edicoes = ?, atualizado_em = CURRENT_TIMESTAMP
          WHERE id = ?`
       ).bind(
+        newBarberId,
+        newServiceId,
         newDataHora,
         sanitizedComment,
+        newDuration,
         JSON.stringify(history),
         reservation.id,
       ).run()
@@ -173,7 +212,7 @@ export async function onRequest(context) {
           message,
           reservationId: reservation.id,
           clientName: reservation.cliente_nome,
-          barberId: reservation.barbeiro_id,
+          barberId: newBarberId,
         })
       } catch (e) {
         console.error('Erro ao criar notificação de edição:', e)

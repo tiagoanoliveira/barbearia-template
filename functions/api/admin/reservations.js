@@ -1,5 +1,5 @@
 import { authenticateAdmin } from '../../utils/auth.js'
-import { ok, created, badRequest, unauthorized, notFound, serverError, corsOptions } from '../../utils/response.js'
+import { ok, created, badRequest, unauthorized, serverError, corsOptions } from '../../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../../utils/validators.js'
 
 export async function onRequest(context) {
@@ -11,34 +11,71 @@ export async function onRequest(context) {
 
   if (request.method === 'GET') {
     try {
-      const url    = new URL(request.url)
-      const date   = url.searchParams.get('date')
-      const status = url.searchParams.get('status')
-      const limit  = Math.min(parseInt(url.searchParams.get('limit')  ?? '100'), 200)
-      const offset = parseInt(url.searchParams.get('offset') ?? '0')
+      const url      = new URL(request.url)
+      const date     = url.searchParams.get('date')
+      const status   = url.searchParams.get('status')
+      const search   = url.searchParams.get('search') ?? ''
+      const limitRaw = parseInt(url.searchParams.get('limit')  ?? '100')
+      const offset   = parseInt(url.searchParams.get('offset') ?? '0')
 
-      let where  = []
-      let params = []
+      const limit    = Math.min(Number.isNaN(limitRaw) || limitRaw < 1 ? 100 : limitRaw, 200)
+      const page     = Math.floor(offset / limit) + 1
+
+      const where  = []
+      const params = []
 
       if (date)   { where.push('date(data_hora) = ?'); params.push(date) }
       if (status) { where.push('status = ?');          params.push(status) }
 
+      if (search) {
+        where.push(
+          '(cliente_nome LIKE ? OR cliente_email LIKE ? OR cliente_telefone LIKE ? OR servico_nome LIKE ?)' ,
+        )
+        const like = `%${search}%`
+        params.push(like, like, like, like)
+      }
+
       const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
-      // Usar v_reservas_complete
-      const { results } = await env.DB.prepare(`
-        SELECT
-          id, data_hora, status, comentario, nota_privada, duracao_efetiva,
-          cliente_id,  cliente_nome,  cliente_email, cliente_telefone, cliente_nif,
-          barbeiro_id, barbeiro_nome, barbeiro_color,
-          servico_id,  servico_nome,  servico_preco
-        FROM v_reservas_complete
-        ${whereClause}
-        ORDER BY data_hora DESC
-        LIMIT ? OFFSET ?
-      `).bind(...params, limit, offset).all()
+      const totalRow = await env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM v_reservas_complete ${whereClause}`
+      ).bind(...params).first()
 
-      return ok(results)
+      const total      = totalRow?.count ?? 0
+      const totalPages = Math.max(1, Math.ceil(total / limit))
+
+      const { results } = await env.DB.prepare(
+        `SELECT
+           id,
+           data_hora,
+           status,
+           comentario,
+           nota_privada,
+           duracao_efetiva      AS service_duration,
+           cliente_id           AS client_id,
+           cliente_nome         AS client_name,
+           cliente_email        AS client_email,
+           cliente_telefone     AS client_phone,
+           cliente_nif          AS client_nif,
+           barbeiro_id          AS barber_id,
+           barbeiro_nome        AS barber_name,
+           barbeiro_color       AS barber_color,
+           servico_id           AS service_id,
+           servico_nome         AS service_name,
+           servico_preco        AS service_price
+         FROM v_reservas_complete
+         ${whereClause}
+         ORDER BY data_hora DESC
+         LIMIT ? OFFSET ?`
+      ).bind(...params, limit, offset).all()
+
+      return ok({
+        items: results,
+        total,
+        page,
+        perPage: limit,
+        totalPages,
+      })
     } catch (e) {
       return serverError('Erro ao listar reservas', e.message)
     }

@@ -13,6 +13,9 @@ export async function onRequest(context) {
     const { results } = await env.DB.prepare(`
       SELECT
         id,
+        cliente_id           AS client_id,
+        barbeiro_id          AS barber_id,
+        servico_id           AS service_id,
         data_hora,
         status,
         comentario,
