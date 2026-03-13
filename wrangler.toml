@@ -1,0 +1,18 @@
+name = "barbearia-template"
+compatibility_date = "2024-10-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "barbearia_db"
+database_id = "SUBSTITUIR_PELO_ID_DA_BASE_DE_DADOS"
+
+[[kv_namespaces]]
+binding = "KV_OAUTH"
+id = "SUBSTITUIR_PELO_ID_DO_KV"
+
+# Secrets (configurar via: wrangler secret put NOME_DO_SECRET)
+# - GOOGLE_CLIENT_ID
+# - GOOGLE_CLIENT_SECRET
+# - JWT_SECRET
+# - BASE_URL  (ex: minhabarbearia.pt)
