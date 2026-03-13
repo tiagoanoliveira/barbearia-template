@@ -20,6 +20,7 @@ import BookingPage from '@/pages/public/BookingPage'
 import ProfilePage from '@/pages/public/ProfilePage'
 import ReservationsPublicPage from '@/pages/public/ReservationsPublicPage'
 import PublicLoginPage from '@/pages/public/PublicLoginPage'
+import AuthCallbackPage from '@/pages/public/AuthCallbackPage'
 
 // Legal & support pages
 import FaqPage from '@/pages/public/FaqPage'
@@ -32,6 +33,9 @@ import SupportPage from '@/pages/public/SupportPage'
 export default function App() {
   return (
     <Routes>
+      {/* OAuth callback — fora do PublicLayout para não ter Navbar/Footer */}
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+
       {/* Público */}
       <Route element={<PublicLayout />}>
         <Route path={ROUTES.HOME}         element={<HomePage />} />
