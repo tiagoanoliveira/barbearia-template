@@ -8,7 +8,7 @@ import { ROUTES } from '@/config/routes'
 import type { Service, Barber } from '@/types'
 
 import heroVideo   from '@/media/video/presentation.mp4'
-import aboutImg    from '@/media/images/cliente-corte.png'
+import aboutImg    from '@/media/images/Resultado.png'
 import galleryImg1 from '@/media/images/brooklyn/Entrada.jpg'
 import galleryImg2 from '@/media/images/brooklyn/Cadeiras.jpg'
 import galleryImg3 from '@/media/images/brooklyn/Sinuca.jpg'
@@ -83,21 +83,21 @@ function ServiceCard({ service }: { service: Service }) {
   return (
     <div
       onClick={goBook}
-      className="group relative bg-gray-50 rounded-2xl p-6 border border-gray-100
+      className="group relative bg-gray-50 rounded-2xl p-4 border border-gray-100
                  hover:border-primary-300 hover:bg-primary-50/40 transition-all duration-300
                  hover:-translate-y-1 cursor-pointer overflow-hidden"
     >
       {/* Overlay "Reservar" ao hover */}
-      <div className="absolute inset-0 bg-primary-600/90 rounded-2xl flex items-center justify-center
+      <div className="absolute inset-0 bg-primary-600/90 rounded-2xl flex items-center justify-end
                       opacity-0 group-hover:opacity-100 transition-opacity duration-250">
-        <span className="flex items-center gap-2 text-white font-bold text-lg">
+        <span className="flex items-center gap-2 text-primary-600 font-bold text-lg px-4">
           Reservar <ArrowRight size={20} />
         </span>
       </div>
 
       <h3 className="text-gray-900 font-bold text-lg mb-1">{service.name}</h3>
       <p className="text-gray-500 text-sm mb-4">{service.duration} min</p>
-      <p className="font-black text-2xl" style={{ color }}>{service.price}€</p>
+      <p className="font-black text-2xl text-primary-800">{service.price}€</p>
     </div>
   )
 }
@@ -137,22 +137,18 @@ export default function HomePage() {
             autoPlay muted loop playsInline src={heroVideo} />
         </div>
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/75" />
-        <div className="relative z-10 text-center px-4 max-w-3xl mx-auto text-white">
-          <p className="text-secondary-400 text-sm font-semibold tracking-widest uppercase mb-4">Porto, desde 2018</p>
-          <h1 className="text-5xl sm:text-7xl font-black tracking-tight mb-6 leading-none">{barberShopConfig.name}</h1>
-          <p className="text-lg sm:text-xl text-gray-300 mb-40 max-w-xl mx-auto leading-relaxed">{barberShopConfig.tagline}</p>
+        <div className="absolute bottom-20 left-0 right-0 z-10 text-center px-4 max-w-3xl mx-auto text-white">
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to={ROUTES.BOOKING}
-              className="flex items-center gap-2 px-8 py-4 bg-primary-500 text-white font-bold rounded-2xl hover:bg-primary-600 transition-all hover:scale-105 text-base shadow-lg">
+              className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white font-bold rounded-2xl hover:bg-primary-600 transition-all hover:scale-105 text-base shadow-lg">
               Reservar agora <ArrowRight size={18} />
             </Link>
-            <a href="#servicos" className="flex items-center gap-2 px-8 py-4 bg-white/10 text-white font-semibold rounded-2xl hover:bg-white/20 transition-all backdrop-blur-sm text-base">
+            <a href="#servicos" className="flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-semibold rounded-2xl hover:bg-white/20 transition-all backdrop-blur-sm text-base">
               Ver serviços
             </a>
           </div>
         </div>
         <a href="#about" className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors z-10">
-          <span className="text-xs tracking-widest uppercase">Scroll</span>
           <ChevronDown size={20} className="animate-bounce" />
         </a>
       </section>
@@ -160,7 +156,7 @@ export default function HomePage() {
       {/* ── SOBRE ── bg-gray-50 ─────────────────────────────────────────── */}
       <section id="about" className={`py-12 ${barberShopConfig.theme.sectionMedium}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
             <div>
               <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">A nossa história</p>
               <h2 className="text-4xl font-black text-gray-900 mb-6 leading-tight">Bem-vindo à Brooklyn</h2>
@@ -186,10 +182,10 @@ export default function HomePage() {
             </div>
             <div className="relative flex justify-center">
               {/* Altura e largura máximas da foto do about */}
-              <div className="overflow-hidden rounded-3xl shadow-xl" style={{ maxWidth: 380, maxHeight: 460 }}>
+              <div className="overflow-hidden rounded-3xl shadow-xl" style={{ maxWidth: 400, maxHeight: 400 }}>
                 <img src={aboutImg} alt="Brooklyn Barbearia" className="w-full h-full object-cover" />
               </div>
-              <div className="absolute -bottom-4 -left-4 bg-secondary-500 rounded-2xl p-4 shadow-xl">
+              <div className="absolute -bottom-4 bg-secondary-500 rounded-2xl p-4 shadow-xl">
                 <p className="text-white font-bold text-sm">4,8 / 5,0</p>
                 <p className="text-secondary-200 text-xs">+ 300 avaliações</p>
               </div>
@@ -218,7 +214,7 @@ export default function HomePage() {
             <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">Os nossos profissionais</p>
             <h2 className="text-4xl font-black text-gray-900">A equipa</h2>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
             {barbers.map(b => (
               <div key={b.id} className="text-center">
                 <div className="w-24 h-24 mx-auto mb-3 rounded-full overflow-hidden border-2 border-white shadow"
@@ -239,7 +235,7 @@ export default function HomePage() {
       {/* ── GALERIA ── bg-white ──────────────────────────────────────────── */}
       <section id="galeria" className={`py-12 ${barberShopConfig.theme.sectionLight}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">O nosso espaço</p>
             <h2 className="text-4xl font-black text-gray-900">Galeria</h2>
           </div>

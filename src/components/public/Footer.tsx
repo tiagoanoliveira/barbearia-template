@@ -27,7 +27,6 @@ export default function Footer() {
                 <LogoMark />
                 <span className="text-white font-bold text-sm tracking-wide">{barberShopConfig.name}</span>
               </Link>
-              <span className="text-white font-bold text-sm">{barberShopConfig.name}</span>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed">
               {barberShopConfig.description}
@@ -116,9 +115,7 @@ export default function Footer() {
                         justify-between gap-3 text-xs text-gray-600">
           <span>© {year} {barberShopConfig.name}. Todos os direitos reservados.</span>
           <div className="flex items-center gap-4">
-            <Link to="/privacidade" className="hover:text-gray-400 transition-colors">Privacidade</Link>
-            <Link to="/termos" className="hover:text-gray-400 transition-colors">Termos</Link>
-            <Link to="/cookies" className="hover:text-gray-400 transition-colors">Cookies</Link>
+            <span></span>
           </div>
         </div>
       </div>
