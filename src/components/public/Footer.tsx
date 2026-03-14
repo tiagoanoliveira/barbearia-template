@@ -1,9 +1,19 @@
 import { Link } from 'react-router-dom'
 import { Scissors, Instagram, Phone, Mail, MapPin, Clock } from 'lucide-react'
-import { barberShopConfig } from '@/config/theme'
+import {barberShopConfig, LOGO_URL} from '@/config/theme'
+import {ROUTES} from "@/config/routes.ts";
 
 export default function Footer() {
   const year = new Date().getFullYear()
+
+  const LogoMark = () => (
+      LOGO_URL
+          ? <img src={LOGO_URL} alt={barberShopConfig.name}
+                 className="w-8 h-8 object-contain" />
+          : <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center">
+            <Scissors size={16} className="text-white" />
+          </div>
+  )
 
   return (
     <footer className="bg-gray-950 border-t border-white/5 pt-14 pb-8">
@@ -13,9 +23,10 @@ export default function Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center">
-                <Scissors size={17} className="text-white" />
-              </div>
+              <Link to={ROUTES.HOME} className="flex items-center gap-2.5 group">
+                <LogoMark />
+                <span className="text-white font-bold text-sm tracking-wide">{barberShopConfig.name}</span>
+              </Link>
               <span className="text-white font-bold text-sm">{barberShopConfig.name}</span>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed">
