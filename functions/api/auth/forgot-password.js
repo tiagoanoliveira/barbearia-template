@@ -1,32 +1,42 @@
-import { createResponse, createErrorResponse } from '../../utils/auth.js'
-import { getDB } from '../../utils/db.js'
+import { ok, badRequest, serverError, corsOptions } from '../../utils/response.js'
 import { sendEmail, buildPasswordResetEmail } from '../../utils/email.js'
 import { generateToken } from '../../utils/crypto.js'
 
-export async function onRequestPost(context) {
-  const { email } = await context.request.json()
-  if (!email) return createErrorResponse('Email obrigatório', 400)
+export async function onRequest(context) {
+  const { request, env } = context
+  if (request.method === 'OPTIONS') return corsOptions()
+  if (request.method !== 'POST') return badRequest('Método não permitido')
 
-  const db = getDB(context)
-  const client = await db.prepare('SELECT id, nome FROM clientes WHERE email = ?').bind(email).first()
+  try {
+    const { email } = await request.json()
+    if (!email) return badRequest('Email obrigatório')
 
-  // Responde sempre com sucesso para não revelar se o email existe
-  if (!client) return createResponse({ ok: true })
+    const client = await env.DB.prepare(
+      'SELECT id, nome FROM clientes WHERE email = ?'
+    ).bind(email).first()
 
-  const token   = await generateToken()
-  const expires = new Date(Date.now() + 3600000).toISOString() // 1h
+    // Responde sempre com sucesso para não revelar se o email existe
+    if (!client) return ok({ message: 'Se o email existir, irá receber um link.' })
 
-  await db.prepare(
-    'INSERT OR REPLACE INTO password_reset_tokens (cliente_id, token, expires_at) VALUES (?,?,?)'
-  ).bind(client.id, token, expires).run()
+    const token   = generateToken()
+    const expires = new Date(Date.now() + 3600000).toISOString() // 1h
 
-  const { html } = buildPasswordResetEmail({ clientName: client.nome, resetToken: token })
+    await env.DB.prepare(
+      `INSERT OR REPLACE INTO password_reset_tokens (cliente_id, token, expires_at)
+       VALUES (?, ?, ?)`
+    ).bind(client.id, token, expires).run()
 
-  await sendEmail(context, {
-    to:      email,
-    subject: 'Recuperação de Password – Brooklyn Barbearia',
-    html,
-  }).catch(() => {}) // não bloqueia em caso de falha de email
+    const { html } = buildPasswordResetEmail({ clientName: client.nome, resetToken: token })
 
-  return createResponse({ ok: true })
+    // Dispara email mas não bloqueia se falhar
+    sendEmail(context, {
+      to:      email,
+      subject: 'Recuperação de Password – Brooklyn Barbearia',
+      html,
+    }).catch(() => {})
+
+    return ok({ message: 'Se o email existir, irá receber um link.' })
+  } catch (e) {
+    return serverError('Erro ao processar pedido', e.message)
+  }
 }

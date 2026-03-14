@@ -1,59 +1,60 @@
 /**
- * Password hashing with PBKDF2 — Web Crypto API
- * Compatível com hashes antigos SHA-256 + salt do site anterior.
+ * Utilitários de criptografia
+ * - hashPassword / verifyPassword com PBKDF2 + fallback legacy SHA-256
+ * - generateToken: token hex aleatório (síncrono via crypto.getRandomValues)
  */
 
+// ─── PBKDF2 helpers ───────────────────────────────────────────────────────────
+function bufToHex(buf) {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function pbkdf2Hash(password, saltHex) {
+  const enc      = new TextEncoder()
+  const keyMat   = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits     = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: enc.encode(saltHex), iterations: 100000, hash: 'SHA-256' },
+    keyMat, 256
+  )
+  return bufToHex(bits)
+}
+
+// ─── Legacy SHA-256 (site antigo) ─────────────────────────────────────────────────
+async function legacySha256Hash(password, saltHex) {
+  const enc  = new TextEncoder()
+  const buf  = await crypto.subtle.digest('SHA-256', enc.encode(saltHex + password))
+  return bufToHex(buf)
+}
+
+// ─── Exports ─────────────────────────────────────────────────────────────────────
 export async function hashPassword(password) {
-  const salt    = crypto.getRandomValues(new Uint8Array(16))
-  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
-
-  const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(password),
-    { name: 'PBKDF2' }, false, ['deriveBits']
-  )
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-    key, 256
-  )
-  const hashHex = Array.from(new Uint8Array(bits))
-    .map(b => b.toString(16).padStart(2, '0')).join('')
-
-  return `${saltHex}:${hashHex}`
+  const saltBuf = new Uint8Array(16)
+  crypto.getRandomValues(saltBuf)
+  const saltHex = bufToHex(saltBuf.buffer)
+  const hash    = await pbkdf2Hash(password, saltHex)
+  return `${saltHex}:${hash}`
 }
 
 export async function verifyPassword(password, stored) {
-  const [saltHex, storedHash] = (stored ?? '').split(':')
+  if (!stored || !password) return false
+  const [saltHex, storedHash] = stored.split(':')
   if (!saltHex || !storedHash) return false
 
-  const saltBytes = Uint8Array.from((saltHex.match(/.{2}/g) ?? []).map(h => parseInt(h, 16)))
+  // Tentar PBKDF2 primeiro (novo esquema)
+  const pbkdf2 = await pbkdf2Hash(password, saltHex)
+  if (pbkdf2 === storedHash) return true
 
-  // 1) Tentativa PBKDF2 (novo esquema)
-  try {
-    const key = await crypto.subtle.importKey(
-      'raw', new TextEncoder().encode(password),
-      { name: 'PBKDF2' }, false, ['deriveBits']
-    )
-    const bits = await crypto.subtle.deriveBits(
-      { name: 'PBKDF2', salt: saltBytes, iterations: 100000, hash: 'SHA-256' },
-      key, 256
-    )
-    const hashHex = Array.from(new Uint8Array(bits))
-      .map(b => b.toString(16).padStart(2, '0')).join('')
+  // Fallback: esquema legacy SHA-256(saltHex + password)
+  const legacy = await legacySha256Hash(password, saltHex)
+  return legacy === storedHash
+}
 
-    if (hashHex === storedHash) return true
-  } catch {
-    // Ignorar e tentar modo legacy
-  }
-
-  // 2) Compatibilidade LEGACY: SHA-256(saltHex + password)
-  try {
-    const data   = new TextEncoder().encode(saltHex + password)
-    const digest = await crypto.subtle.digest('SHA-256', data)
-    const legacyHex = Array.from(new Uint8Array(digest))
-      .map(b => b.toString(16).padStart(2, '0')).join('')
-
-    return legacyHex === storedHash
-  } catch {
-    return false
-  }
+/**
+ * Gera um token hex aleatório de 32 bytes (64 caracteres).
+ * Síncrono — não precisa de await.
+ */
+export function generateToken() {
+  const buf = new Uint8Array(32)
+  crypto.getRandomValues(buf)
+  return bufToHex(buf.buffer)
 }
