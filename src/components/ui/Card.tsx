@@ -1,9 +1,10 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, type CSSProperties } from 'react'
 
-interface CardProps {
+export interface CardProps {
   children: ReactNode
   className?: string
   padding?: 'sm' | 'md' | 'lg' | 'none'
+  style?: CSSProperties
 }
 
 const paddingMap = {
@@ -13,9 +14,9 @@ const paddingMap = {
   lg: 'p-6',
 }
 
-export function Card({ children, className = '', padding = 'md' }: CardProps) {
+export function Card({ children, className = '', padding = 'md', style }: CardProps) {
   return (
-    <div className={`card ${paddingMap[padding]} ${className}`}>
+    <div className={`card ${paddingMap[padding]} ${className}`} style={style}>
       {children}
     </div>
   )

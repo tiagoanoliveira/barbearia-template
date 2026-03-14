@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import type { Unavailable, UnavailableTipo } from '@/types'
+import type { Unavailable, UnavailableTipo, RecurrenceType } from '@/types'
 
 const TYPE_LABELS: Record<UnavailableTipo, string> = {
   folga:    'Folga',
@@ -42,7 +42,7 @@ interface UnavailableForm {
   tipo: UnavailableTipo
   motivo: string
   is_all_day: number
-  recurrence_type: string
+  recurrence_type: RecurrenceType
   recurrence_end_date?: string
 }
 
@@ -67,7 +67,6 @@ export default function UnavailablePage() {
   const [editTarget, setEditTarget] = useState<Unavailable | null>(null)
   const [form, setForm]             = useState<UnavailableForm>(EMPTY_FORM)
   const [groupDetail, setGroupDetail] = useState<GroupDetailState>(null)
-  // track which group cards are expanded inline (not modal)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
 
   const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
@@ -77,7 +76,7 @@ export default function UnavailablePage() {
   })
 
   const create = useMutation({
-    mutationFn: (data: Partial<Unavailable> & { recurrence_type?: string; recurrence_end_date?: string }) =>
+    mutationFn: (data: Partial<Unavailable> & { recurrence_end_date?: string }) =>
       barbersApi.createUnavailable(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['unavailable'] }); setModal(false); setForm(EMPTY_FORM) },
   })
@@ -94,16 +93,10 @@ export default function UnavailablePage() {
     mutationFn: (groupId: string) => barbersApi.deleteGroup(groupId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['unavailable'] }); setGroupDetail(null) },
   })
-  const updateGroup = useMutation({
-    mutationFn: ({ groupId, data }: { groupId: string; data: { type?: string; reason?: string } }) =>
-      barbersApi.updateGroup(groupId, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unavailable'] }); setModal(false) },
-  })
 
   const barbers    = barbersRes?.data ?? []
   const allItems: Unavailable[] = (unavailRes?.data ?? []) as unknown as Unavailable[]
 
-  // Separar singles e grupos
   const singles = allItems.filter(u => !u.recurrence_group_id)
   const groupMap = new Map<string, Unavailable[]>()
   allItems.filter(u => u.recurrence_group_id).forEach(u => {
@@ -138,7 +131,7 @@ export default function UnavailablePage() {
     setModal(true)
   }
 
-  const upd = (field: keyof UnavailableForm, value: string | number) =>
+  const upd = <K extends keyof UnavailableForm>(field: K, value: UnavailableForm[K]) =>
     setForm(f => ({ ...f, [field]: value }))
 
   const fmtDate = (iso: string) => { try { return format(parseISO(iso), "d 'de' MMM", { locale: pt }) } catch { return iso } }
@@ -181,7 +174,6 @@ export default function UnavailablePage() {
                   const sorted  = [...items].sort((a,b) => a.data_hora_inicio.localeCompare(b.data_hora_inicio))
                   return (
                     <Card key={gid} padding="md" className="border-l-4" style={{ borderColor: '#d4a017' }}>
-                      {/* Cabeçalho do grupo */}
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-lg">{TYPE_ICONS[first.tipo]}</span>
@@ -205,7 +197,6 @@ export default function UnavailablePage() {
                       <p className="text-xs text-gray-600 font-medium">{items.length} ocorrências</p>
                       {first.motivo && <p className="text-xs text-gray-500 mt-1 italic">{first.motivo}</p>}
 
-                      {/* lista inline de ocorrências (expandível) */}
                       {isOpen && (
                         <div className="mt-3 space-y-1 border-t border-gray-100 pt-2">
                           {sorted.map(u => (
@@ -292,7 +283,7 @@ export default function UnavailablePage() {
         </div>
       )}
 
-      {/* Modal criar / editar individual */}
+      {/* Modal criar / editar */}
       <Modal
         open={modal}
         onClose={() => { setModal(false); setEditTarget(null); setForm(EMPTY_FORM) }}
@@ -322,11 +313,11 @@ export default function UnavailablePage() {
             <label className="label">Dia inteiro?</label>
             <div className="flex gap-4">
               <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="allday" value="1" checked={form.is_all_day === 1}
+                <input type="radio" name="allday" checked={form.is_all_day === 1}
                   onChange={() => upd('is_all_day', 1)} /> Sim
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="allday" value="0" checked={form.is_all_day === 0}
+                <input type="radio" name="allday" checked={form.is_all_day === 0}
                   onChange={() => upd('is_all_day', 0)} /> Não
               </label>
             </div>
@@ -377,7 +368,7 @@ export default function UnavailablePage() {
               <div>
                 <label className="label">Recorrência</label>
                 <select className="input" value={form.recurrence_type}
-                  onChange={e => upd('recurrence_type', e.target.value)}>
+                  onChange={e => upd('recurrence_type', e.target.value as RecurrenceType)}>
                   <option value="none">Sem recorrência</option>
                   <option value="daily">Diária</option>
                   <option value="weekly">Semanal</option>

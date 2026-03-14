@@ -1,19 +1,19 @@
 // ─── Barbeiro ─────────────────────────────────────────────────────────────────
 export interface Barber {
   id: number
-  name: string         // nome
-  photo_url?: string   // foto
+  name: string
+  photo_url?: string
   especialidades?: string
   color?: string
-  active: boolean      // ativo
+  active: boolean
 }
 
 // ─── Serviço ─────────────────────────────────────────────────────────────────
 export interface Service {
   id: number
-  name: string         // nome
-  duration: number     // duracao (minutos)
-  price: number        // preco (cêntimos)
+  name: string
+  duration: number
+  price: number
   svg?: string
   abreviacao?: string
   color?: string
@@ -22,45 +22,47 @@ export interface Service {
 // ─── Cliente ─────────────────────────────────────────────────────────────────
 export interface Client {
   id: number
-  name: string         // nome
+  name: string
   email?: string
-  phone?: string       // telefone
-  photo_url?: string   // foto_perfil
-  notes?: string       // notas
+  phone?: string
+  photo_url?: string
+  notes?: string
   nif?: number
-  created_at: string   // criado_em
+  created_at: string
   reservas_concluidas?: number
   next_appointment_date?: string
   last_appointment_date?: string
 }
 
 // ─── Reserva ─────────────────────────────────────────────────────────────────
-// status em PT para corresponder ao schema original
 export type ReservationStatus = 'pendente' | 'confirmada' | 'concluida' | 'cancelada' | 'faltou'
 
 export interface Reservation {
   id: number
   client_id: number
-  client_name: string       // cliente_nome (via v_reservas_complete)
-  client_phone?: string     // cliente_telefone
-  client_email?: string     // cliente_email
+  client_name: string
+  client_phone?: string
+  client_email?: string
   barber_id: number
-  barber_name: string       // barbeiro_nome
-  barber_color?: string     // barbeiro_color
+  barber_name: string
+  barber_color?: string
   service_id: number
-  service_name: string      // servico_nome
-  service_duration: number  // servico_duracao / duracao_efetiva
-  service_price: number     // servico_preco
-  data_hora: string         // ISO datetime — campo directo do schema
+  service_name: string
+  service_duration: number
+  service_price: number
+  data_hora: string
   status: ReservationStatus
-  comentario?: string       // notes públicas
-  nota_privada?: string     // notas admin
+  comentario?: string
+  nota_privada?: string
   created_by?: 'online' | 'admin' | 'barbeiro'
   criado_em?: string
+  /** Enviado apenas na criação: true = enviar email de confirmação ao cliente */
+  send_email?: boolean
 }
 
 // ─── Indisponibilidade ───────────────────────────────────────────────────────
 export type UnavailableTipo = 'folga' | 'almoco' | 'ferias' | 'ausencia' | 'outro'
+export type RecurrenceType  = 'none' | 'daily' | 'weekly'
 
 export interface Unavailable {
   id: number
@@ -71,7 +73,7 @@ export interface Unavailable {
   tipo: UnavailableTipo
   motivo?: string
   is_all_day: number
-  recurrence_type: 'none' | 'daily' | 'weekly'
+  recurrence_type: RecurrenceType
   recurrence_end_date?: string
   recurrence_group_id?: string
   created_at: string
