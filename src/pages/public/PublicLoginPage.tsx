@@ -53,10 +53,6 @@ export default function PublicLoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center mb-4">
-            <Scissors size={26} className="text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-white">{barberShopConfig.name}</h1>
           <p className="text-gray-500 text-sm mt-1">
             {mode === 'login' ? 'Bem-vindo de volta!' : 'Criar conta'}
           </p>

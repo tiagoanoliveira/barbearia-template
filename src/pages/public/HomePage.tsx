@@ -119,7 +119,7 @@ export default function HomePage() {
     <div>
 
       {/* ── HERO ────────────────────────────────────────────────────────── */}
-      <section className="relative h-100dvh flex items-center justify-center overflow-hidden bg-black">
+      <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-black">
         <div aria-hidden="true" className="hidden md:flex absolute inset-0 w-full h-full">
           <div className="flex-1 overflow-hidden">
             <video className="w-full h-full object-cover"
