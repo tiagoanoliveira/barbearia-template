@@ -34,7 +34,7 @@ export default function AdminLayout() {
       >
         <Header title={pageInfo.title} subtitle={pageInfo.subtitle} />
         <main
-          className="flex-1 p-6 overflow-auto"
+          className="flex-1 p-4 overflow-auto"
           style={{ marginTop: 'var(--header-height)' }}
         >
           <Outlet />
