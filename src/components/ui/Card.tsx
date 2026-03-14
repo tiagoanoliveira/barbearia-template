@@ -3,12 +3,13 @@ import { type ReactNode, type CSSProperties } from 'react'
 export interface CardProps {
   children: ReactNode
   className?: string
-  padding?: 'sm' | 'md' | 'lg' | 'none'
+  padding?: 'xs' | 'sm' | 'md' | 'lg' | 'none'
   style?: CSSProperties
 }
 
 const paddingMap = {
   none: '',
+  xs: 'p-2',
   sm: 'p-4',
   md: 'p-5',
   lg: 'p-6',

@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import {Link, NavLink, useNavigate} from 'react-router-dom'
 import {
   LayoutDashboard,
   CalendarDays,
@@ -11,7 +11,7 @@ import {
   Settings,
 } from 'lucide-react'
 import { ROUTES } from '@/config/routes'
-import { barberShopConfig } from '@/config/theme'
+import {barberShopConfig, LOGO_URL} from '@/config/theme'
 import { authApi } from '@/api/auth'
 
 const navItems = [
@@ -22,6 +22,15 @@ const navItems = [
   { to: ROUTES.ADMIN_UNAVAILABLE,  label: 'Indisponibilidades', icon: CalendarOff },
   { to: ROUTES.ADMIN_SETTINGS,     label: 'Configuração',       icon: Settings },
 ]
+
+const LogoMark = () => (
+    LOGO_URL
+        ? <img src={LOGO_URL} alt={barberShopConfig.name}
+               className="w-8 h-8 object-contain" />
+        : <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center">
+          <Scissors size={16} className="text-white" />
+        </div>
+)
 
 export default function Sidebar() {
   const navigate = useNavigate()
@@ -42,9 +51,9 @@ export default function Sidebar() {
 
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-800">
-        <div className="flex-shrink-0 w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center">
-          <Scissors size={18} className="text-white" />
-        </div>
+        <Link to={ROUTES.HOME} className="flex items-center gap-2.5 group">
+          <LogoMark />
+        </Link>
         <div className="min-w-0">
           <p className="text-white font-semibold text-sm truncate leading-tight">
             {barberShopConfig.name}
