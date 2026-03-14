@@ -8,6 +8,7 @@ import {
   Scissors,
   LogOut,
   ChevronRight,
+  Settings,
 } from 'lucide-react'
 import { ROUTES } from '@/config/routes'
 import { barberShopConfig } from '@/config/theme'
@@ -19,6 +20,7 @@ const navItems = [
   { to: ROUTES.ADMIN_RESERVATIONS, label: 'Reservas',           icon: ClipboardList },
   { to: ROUTES.ADMIN_CLIENTS,      label: 'Clientes',           icon: Users },
   { to: ROUTES.ADMIN_UNAVAILABLE,  label: 'Indisponibilidades', icon: CalendarOff },
+  { to: ROUTES.ADMIN_SETTINGS,     label: 'Configuração',       icon: Settings },
 ]
 
 export default function Sidebar() {

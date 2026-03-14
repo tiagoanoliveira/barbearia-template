@@ -9,6 +9,7 @@ const pageTitles: Record<string, { title: string; subtitle?: string }> = {
   '/admin/reservas':           { title: 'Reservas',           subtitle: 'Todas as marcações' },
   '/admin/clientes':           { title: 'Clientes',           subtitle: 'Base de clientes' },
   '/admin/indisponibilidades': { title: 'Indisponibilidades', subtitle: 'Gestão de folgas e ausências' },
+  '/admin/configuracao':       { title: 'Configuração',       subtitle: 'Serviços, barbeiros, utilizadores e site' },
 }
 
 export default function AdminLayout() {
@@ -25,7 +26,6 @@ export default function AdminLayout() {
       : { title: 'Admin' })
 
   return (
-    // admin-root força variáveis CSS light mesmo em dispositivos com dark mode
     <div className="admin-root min-h-screen bg-[var(--surface-subtle)]">
       <Sidebar />
       <div

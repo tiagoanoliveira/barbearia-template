@@ -1,0 +1,603 @@
+import { useState, useRef, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Lock, Shield, Settings, Scissors, Sparkles, Users, Globe, Plus, Pencil, Trash2, Eye, EyeOff, ChevronDown, ChevronUp, Check, X } from 'lucide-react'
+import { api } from '@/api/client'
+import { Card } from '@/components/ui/Card'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import type { Barber, Service } from '@/types'
+
+// ─── Tipos locais ─────────────────────────────────────────────────────────────
+interface AdminUser {
+  id: number
+  username: string
+  nome: string
+  role: 'admin' | 'barbeiro'
+  ativo: number
+  barbeiro_id: number | null
+  barbeiro_nome: string | null
+  criado_em: string
+  ultimo_login: string | null
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
+const SESSION_KEY = 'admin_settings_unlocked'
+
+export default function ConfiguracaoPage() {
+  const [unlocked, setUnlocked] = useState(() =>
+    sessionStorage.getItem(SESSION_KEY) === 'true'
+  )
+
+  if (!unlocked) return <MasterCodeGate onUnlock={() => { sessionStorage.setItem(SESSION_KEY, 'true'); setUnlocked(true) }} />
+
+  return (
+    <div className="space-y-8">
+      <ServicosSection />
+      <BarbeirosSection />
+      <AdminUsersSection />
+      <SiteConfigSection />
+    </div>
+  )
+}
+
+// ─── Gate: código de 8 dígitos ────────────────────────────────────────────────
+function MasterCodeGate({ onUnlock }: { onUnlock: () => void }) {
+  const [digits, setDigits] = useState(Array(8).fill(''))
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const refs = useRef<(HTMLInputElement | null)[]>([])
+
+  const handleChange = (i: number, v: string) => {
+    if (!/^\d?$/.test(v)) return
+    const next = [...digits]
+    next[i] = v
+    setDigits(next)
+    if (v && i < 7) refs.current[i + 1]?.focus()
+  }
+
+  const handleKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !digits[i] && i > 0) refs.current[i - 1]?.focus()
+    if (e.key === 'ArrowLeft'  && i > 0) refs.current[i - 1]?.focus()
+    if (e.key === 'ArrowRight' && i < 7) refs.current[i + 1]?.focus()
+  }
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const txt = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 8)
+    if (txt.length === 8) {
+      setDigits(txt.split(''))
+      refs.current[7]?.focus()
+    }
+  }
+
+  const submit = async () => {
+    const code = digits.join('')
+    if (code.length < 8) { setError('Introduz os 8 dígitos'); return }
+    setLoading(true); setError(null)
+    try {
+      await api.post('/api/admin/master-code/verify', { code })
+      onUnlock()
+    } catch {
+      setError('Código incorrecto. Tenta novamente.')
+      setDigits(Array(8).fill(''))
+      refs.current[0]?.focus()
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Card className="max-w-sm w-full">
+        <div className="text-center space-y-4 p-4">
+          <div className="w-16 h-16 mx-auto bg-brand-50 rounded-2xl flex items-center justify-center">
+            <Shield size={32} className="text-brand-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Área protegida</h2>
+            <p className="text-sm text-gray-500 mt-1">Introduz o código de 8 dígitos para aceder às configurações</p>
+          </div>
+          <div className="flex justify-center gap-2" onPaste={handlePaste}>
+            {digits.map((d, i) => (
+              <input
+                key={i}
+                ref={el => { refs.current[i] = el }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={d}
+                onChange={e => handleChange(i, e.target.value)}
+                onKeyDown={e => handleKeyDown(i, e)}
+                onFocus={e => e.target.select()}
+                className={`w-10 h-12 text-center text-lg font-bold border-2 rounded-lg outline-none transition-colors
+                  ${ d ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 bg-white text-gray-700' }
+                  focus:border-brand-500 focus:ring-2 focus:ring-brand-200`}
+              />
+            ))}
+          </div>
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <button
+            onClick={submit}
+            disabled={loading || digits.join('').length < 8}
+            className="btn-primary w-full disabled:opacity-50"
+          >
+            {loading ? <span className="flex items-center justify-center gap-2"><LoadingSpinner size="sm" /> A verificar...</span> : 'Entrar'}
+          </button>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function SectionHeader({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle?: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-5">
+      <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center">
+        <Icon size={20} className="text-brand-600" />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+        {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+      </div>
+    </div>
+  )
+}
+
+function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-xs text-red-600 font-medium">Confirmar?</span>
+      <button onClick={onConfirm} className="p-1 rounded hover:bg-red-50 text-red-600"><Check size={14} /></button>
+      <button onClick={onCancel}  className="p-1 rounded hover:bg-gray-100 text-gray-500"><X size={14} /></button>
+    </span>
+  )
+}
+
+// ─── SERVIÇOS ─────────────────────────────────────────────────────────────────
+interface ServiceForm { id?: number; name: string; duration: string; price: string; abreviacao: string; color: string }
+const emptyService = (): ServiceForm => ({ name: '', duration: '30', price: '0', abreviacao: '', color: '#0f7e44' })
+
+function ServicosSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-services'],
+    queryFn: () => api.get<Service[]>('/api/admin/services'),
+  })
+  const services: Service[] = (data?.data as unknown as Service[]) ?? []
+
+  const [form, setForm] = useState<ServiceForm | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const openNew = () => { setForm(emptyService()); setErr(null) }
+  const openEdit = (s: Service) => {
+    setForm({ id: s.id, name: s.name, duration: String(s.duration), price: String(s.price), abreviacao: (s as unknown as { abreviacao?: string }).abreviacao ?? '', color: (s as unknown as { color?: string }).color ?? '#0f7e44' })
+    setErr(null)
+  }
+
+  const save = async () => {
+    if (!form) return
+    if (!form.name || !form.duration || form.price === '') { setErr('Nome, duração e preço são obrigatórios'); return }
+    setSaving(true); setErr(null)
+    try {
+      const body = { name: form.name, duration: parseInt(form.duration), price: parseInt(form.price), abreviacao: form.abreviacao, color: form.color }
+      if (form.id) await api.put(`/api/admin/services/${form.id}`, body)
+      else         await api.post('/api/admin/services', body)
+      qc.invalidateQueries({ queryKey: ['admin-services'] })
+      qc.invalidateQueries({ queryKey: ['services'] })
+      setForm(null)
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
+    finally { setSaving(false) }
+  }
+
+  const del = async (id: number) => {
+    try {
+      await api.delete(`/api/admin/services/${id}`)
+      qc.invalidateQueries({ queryKey: ['admin-services'] })
+      qc.invalidateQueries({ queryKey: ['services'] })
+    } catch {}
+    setDeleteId(null)
+  }
+
+  return (
+    <Card>
+      <SectionHeader icon={Sparkles} title="Serviços" subtitle="Gerir os serviços disponíveis para reserva" />
+      {isLoading ? <LoadingSpinner size="sm" /> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs text-gray-500">
+                <th className="text-left py-2 pr-3 font-medium">Nome</th>
+                <th className="text-left py-2 pr-3 font-medium">Dur.</th>
+                <th className="text-left py-2 pr-3 font-medium">Preço</th>
+                <th className="text-left py-2 pr-3 font-medium">Abrev.</th>
+                <th className="text-left py-2 font-medium">Cor</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {services.map(s => (
+                <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="py-2.5 pr-3 font-medium">{s.name}</td>
+                  <td className="py-2.5 pr-3 text-gray-600">{s.duration} min</td>
+                  <td className="py-2.5 pr-3 text-gray-600">{s.price}€</td>
+                  <td className="py-2.5 pr-3 text-gray-500">{(s as unknown as { abreviacao?: string }).abreviacao ?? '—'}</td>
+                  <td className="py-2.5">
+                    <span className="inline-block w-5 h-5 rounded border border-gray-200" style={{ background: (s as unknown as { color?: string }).color ?? '#0f7e44' }} />
+                  </td>
+                  <td className="py-2.5 pl-3 whitespace-nowrap">
+                    {deleteId === s.id
+                      ? <ConfirmDelete onConfirm={() => del(s.id)} onCancel={() => setDeleteId(null)} />
+                      : (
+                        <span className="flex items-center gap-1">
+                          <button onClick={() => openEdit(s)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil size={14} /></button>
+                          <button onClick={() => setDeleteId(s.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                        </span>
+                      )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button onClick={openNew} className="mt-4 flex items-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium">
+            <Plus size={16} /> Novo serviço
+          </button>
+        </div>
+      )}
+
+      {/* Formulário inline */}
+      {form && (
+        <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar serviço' : 'Novo serviço'}</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-gray-500 mb-1">Nome *</label>
+              <input className="input text-sm w-full" value={form.name} onChange={e => setForm(f => f && ({ ...f, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Duração (min) *</label>
+              <input type="number" min={5} step={5} className="input text-sm w-full" value={form.duration} onChange={e => setForm(f => f && ({ ...f, duration: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Preço (€) *</label>
+              <input type="number" min={0} className="input text-sm w-full" value={form.price} onChange={e => setForm(f => f && ({ ...f, price: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Abreviação</label>
+              <input maxLength={6} className="input text-sm w-full" value={form.abreviacao} onChange={e => setForm(f => f && ({ ...f, abreviacao: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Cor</label>
+              <input type="color" className="h-9 w-full rounded border border-gray-200 cursor-pointer" value={form.color} onChange={e => setForm(f => f && ({ ...f, color: e.target.value }))} />
+            </div>
+          </div>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => setForm(null)} className="btn-secondary text-xs">Cancelar</button>
+            <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">{saving ? 'A guardar...' : 'Guardar'}</button>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ─── BARBEIROS ────────────────────────────────────────────────────────────────
+interface BarberForm { id?: number; name: string; especialidades: string; color: string; photo_url: string; active: number }
+const emptyBarber = (): BarberForm => ({ name: '', especialidades: '', color: '#d4a017', photo_url: '', active: 1 })
+
+function BarbeirosSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-barbers-cfg'],
+    queryFn: () => api.get<Barber[]>('/api/admin/barbers'),
+  })
+  const barbers: Barber[] = (data?.data as unknown as Barber[]) ?? []
+
+  const [form, setForm] = useState<BarberForm | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const openNew = () => { setForm(emptyBarber()); setErr(null) }
+  const openEdit = (b: Barber) => {
+    setForm({ id: b.id, name: b.name, especialidades: (b as unknown as { especialidades?: string }).especialidades ?? '', color: b.color ?? '#d4a017', photo_url: b.photo_url ?? '', active: (b as unknown as { active?: number }).active ?? 1 })
+    setErr(null)
+  }
+
+  const save = async () => {
+    if (!form) return
+    if (!form.name) { setErr('Nome é obrigatório'); return }
+    setSaving(true); setErr(null)
+    try {
+      const body = { name: form.name, especialidades: form.especialidades, color: form.color, photo_url: form.photo_url || null, active: form.active }
+      if (form.id) await api.put(`/api/admin/barbers/${form.id}`, body)
+      else         await api.post('/api/admin/barbers', body)
+      qc.invalidateQueries({ queryKey: ['admin-barbers-cfg'] })
+      qc.invalidateQueries({ queryKey: ['barbers'] })
+      setForm(null)
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
+    finally { setSaving(false) }
+  }
+
+  const del = async (id: number) => {
+    try {
+      await api.delete(`/api/admin/barbers/${id}`)
+      qc.invalidateQueries({ queryKey: ['admin-barbers-cfg'] })
+      qc.invalidateQueries({ queryKey: ['barbers'] })
+    } catch {}
+    setDeleteId(null)
+  }
+
+  return (
+    <Card>
+      <SectionHeader icon={Scissors} title="Barbeiros" subtitle="Gerir os barbeiros disponíveis" />
+      {isLoading ? <LoadingSpinner size="sm" /> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs text-gray-500">
+                <th className="text-left py-2 pr-3 font-medium">Nome</th>
+                <th className="text-left py-2 pr-3 font-medium">Especialidades</th>
+                <th className="text-left py-2 pr-3 font-medium">Cor</th>
+                <th className="text-left py-2 font-medium">Estado</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {barbers.map(b => (
+                <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="py-2.5 pr-3 font-medium flex items-center gap-2">
+                    {b.photo_url
+                      ? <img src={b.photo_url} alt={b.name} className="w-7 h-7 rounded-full object-cover" />
+                      : <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: b.color ?? '#888' }}>{b.name[0]}</div>
+                    }
+                    {b.name}
+                  </td>
+                  <td className="py-2.5 pr-3 text-gray-600 max-w-[160px] truncate">{(b as unknown as { especialidades?: string }).especialidades || '—'}</td>
+                  <td className="py-2.5 pr-3">
+                    <span className="inline-block w-5 h-5 rounded border border-gray-200" style={{ background: b.color ?? '#888' }} />
+                  </td>
+                  <td className="py-2.5">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ (b as unknown as { active?: number }).active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500' }`}>
+                      {(b as unknown as { active?: number }).active ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 pl-3 whitespace-nowrap">
+                    {deleteId === b.id
+                      ? <ConfirmDelete onConfirm={() => del(b.id)} onCancel={() => setDeleteId(null)} />
+                      : (
+                        <span className="flex items-center gap-1">
+                          <button onClick={() => openEdit(b)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil size={14} /></button>
+                          <button onClick={() => setDeleteId(b.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                        </span>
+                      )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button onClick={openNew} className="mt-4 flex items-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium">
+            <Plus size={16} /> Novo barbeiro
+          </button>
+        </div>
+      )}
+
+      {form && (
+        <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar barbeiro' : 'Novo barbeiro'}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">Nome *</label>
+              <input className="input text-sm w-full" value={form.name} onChange={e => setForm(f => f && ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">Especialidades</label>
+              <input className="input text-sm w-full" placeholder="Ex.: Corte, Barba, Degradê" value={form.especialidades} onChange={e => setForm(f => f && ({ ...f, especialidades: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Cor no calendário</label>
+              <input type="color" className="h-9 w-full rounded border border-gray-200 cursor-pointer" value={form.color} onChange={e => setForm(f => f && ({ ...f, color: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Estado</label>
+              <select className="input text-sm w-full" value={form.active} onChange={e => setForm(f => f && ({ ...f, active: parseInt(e.target.value) }))}>
+                <option value={1}>Ativo</option>
+                <option value={0}>Inativo</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">URL da foto (opcional)</label>
+              <input type="url" className="input text-sm w-full" placeholder="https://..." value={form.photo_url} onChange={e => setForm(f => f && ({ ...f, photo_url: e.target.value }))} />
+            </div>
+          </div>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => setForm(null)} className="btn-secondary text-xs">Cancelar</button>
+            <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">{saving ? 'A guardar...' : 'Guardar'}</button>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ─── ADMIN USERS ──────────────────────────────────────────────────────────────
+interface AdminUserForm { id?: number; username: string; password: string; nome: string; role: 'admin' | 'barbeiro'; barbeiro_id: string; ativo: number }
+const emptyAdminUser = (): AdminUserForm => ({ username: '', password: '', nome: '', role: 'barbeiro', barbeiro_id: '', ativo: 1 })
+
+function AdminUsersSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-users-list'],
+    queryFn: () => api.get<AdminUser[]>('/api/admin/admin-users'),
+  })
+  const users: AdminUser[] = (data?.data as unknown as AdminUser[]) ?? []
+
+  const { data: barbersData } = useQuery({
+    queryKey: ['admin-barbers-cfg'],
+    queryFn: () => api.get<Barber[]>('/api/admin/barbers'),
+  })
+  const barbers: Barber[] = (barbersData?.data as unknown as Barber[]) ?? []
+
+  const [form, setForm] = useState<AdminUserForm | null>(null)
+  const [showPw, setShowPw] = useState(false)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const openNew = () => { setForm(emptyAdminUser()); setErr(null) }
+  const openEdit = (u: AdminUser) => {
+    setForm({ id: u.id, username: u.username, password: '', nome: u.nome, role: u.role, barbeiro_id: u.barbeiro_id ? String(u.barbeiro_id) : '', ativo: u.ativo })
+    setErr(null)
+  }
+
+  const save = async () => {
+    if (!form) return
+    if (!form.username || !form.nome || !form.role) { setErr('Username, nome e role são obrigatórios'); return }
+    if (!form.id && !form.password) { setErr('Password obrigatória para novo utilizador'); return }
+    setSaving(true); setErr(null)
+    try {
+      const body: Record<string, unknown> = { username: form.username, nome: form.nome, role: form.role, ativo: form.ativo, barbeiro_id: form.barbeiro_id || null }
+      if (form.password) body.password = form.password
+      if (form.id) await api.put(`/api/admin/admin-users/${form.id}`, body)
+      else         await api.post('/api/admin/admin-users', body)
+      qc.invalidateQueries({ queryKey: ['admin-users-list'] })
+      setForm(null)
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
+    finally { setSaving(false) }
+  }
+
+  const del = async (id: number) => {
+    try {
+      await api.delete(`/api/admin/admin-users/${id}`)
+      qc.invalidateQueries({ queryKey: ['admin-users-list'] })
+    } catch {}
+    setDeleteId(null)
+  }
+
+  return (
+    <Card>
+      <SectionHeader icon={Users} title="Utilizadores Admin" subtitle="Gerir contas de acesso ao painel" />
+      {isLoading ? <LoadingSpinner size="sm" /> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs text-gray-500">
+                <th className="text-left py-2 pr-3 font-medium">Username</th>
+                <th className="text-left py-2 pr-3 font-medium">Nome</th>
+                <th className="text-left py-2 pr-3 font-medium">Role</th>
+                <th className="text-left py-2 pr-3 font-medium">Barbeiro</th>
+                <th className="text-left py-2 font-medium">Estado</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="py-2.5 pr-3 font-mono text-xs text-gray-700">{u.username}</td>
+                  <td className="py-2.5 pr-3 font-medium">{u.nome}</td>
+                  <td className="py-2.5 pr-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ u.role === 'admin' ? 'bg-brand-50 text-brand-700' : 'bg-blue-50 text-blue-700' }`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="py-2.5 pr-3 text-gray-500 text-xs">{u.barbeiro_nome ?? '—'}</td>
+                  <td className="py-2.5">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ u.ativo ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500' }`}>
+                      {u.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 pl-3 whitespace-nowrap">
+                    {deleteId === u.id
+                      ? <ConfirmDelete onConfirm={() => del(u.id)} onCancel={() => setDeleteId(null)} />
+                      : (
+                        <span className="flex items-center gap-1">
+                          <button onClick={() => openEdit(u)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil size={14} /></button>
+                          <button onClick={() => setDeleteId(u.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                        </span>
+                      )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button onClick={openNew} className="mt-4 flex items-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium">
+            <Plus size={16} /> Novo utilizador
+          </button>
+        </div>
+      )}
+
+      {form && (
+        <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar utilizador' : 'Novo utilizador'}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Username *</label>
+              <input className="input text-sm w-full" value={form.username} onChange={e => setForm(f => f && ({ ...f, username: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Nome *</label>
+              <input className="input text-sm w-full" value={form.nome} onChange={e => setForm(f => f && ({ ...f, nome: e.target.value }))} />
+            </div>
+            <div className="relative">
+              <label className="block text-xs text-gray-500 mb-1">{form.id ? 'Nova password (deixar em branco para manter)' : 'Password *'}</label>
+              <input type={showPw ? 'text' : 'password'} className="input text-sm w-full pr-9" value={form.password} onChange={e => setForm(f => f && ({ ...f, password: e.target.value }))} />
+              <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-2.5 top-[26px] text-gray-400 hover:text-gray-600">
+                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Role *</label>
+              <select className="input text-sm w-full" value={form.role} onChange={e => setForm(f => f && ({ ...f, role: e.target.value as 'admin' | 'barbeiro' }))}>
+                <option value="admin">admin</option>
+                <option value="barbeiro">barbeiro</option>
+              </select>
+            </div>
+            {form.role === 'barbeiro' && (
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-500 mb-1">Barbeiro associado</label>
+                <select className="input text-sm w-full" value={form.barbeiro_id} onChange={e => setForm(f => f && ({ ...f, barbeiro_id: e.target.value }))}>
+                  <option value="">— Nenhum —</option>
+                  {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Estado</label>
+              <select className="input text-sm w-full" value={form.ativo} onChange={e => setForm(f => f && ({ ...f, ativo: parseInt(e.target.value) }))}>
+                <option value={1}>Ativo</option>
+                <option value={0}>Inativo</option>
+              </select>
+            </div>
+          </div>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => setForm(null)} className="btn-secondary text-xs">Cancelar</button>
+            <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">{saving ? 'A guardar...' : 'Guardar'}</button>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ─── CONFIGURAÇÃO DO SITE ─────────────────────────────────────────────────────
+function SiteConfigSection() {
+  return (
+    <Card>
+      <SectionHeader icon={Globe} title="Configuração do site" subtitle="Edita src/config/theme.ts para alterar nome, horários, cores e mais" />
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 space-y-2">
+        <p className="font-semibold">📝 Ficheiro de configuração</p>
+        <p>As definições do site (nome, tagline, horários, cores, logótipo) estão centralizadas em:</p>
+        <code className="block bg-amber-100 rounded px-3 py-2 text-xs font-mono">src/config/theme.ts</code>
+        <p>Edita esse ficheiro diretamente no repositório ou IDE. As alterações ficam activas após o próximo deploy.</p>
+        <p className="font-semibold mt-2">🔑 Variáveis de ambiente Cloudflare (Workers &amp; Pages)</p>
+        <ul className="list-disc list-inside space-y-1 text-xs">
+          <li><code className="font-mono bg-amber-100 px-1 rounded">ADMIN_PANEL_CODE</code> — código de 8 dígitos para aceder a esta página</li>
+          <li><code className="font-mono bg-amber-100 px-1 rounded">JWT_SECRET</code> — chave de assinatura dos tokens de cliente</li>
+          <li><code className="font-mono bg-amber-100 px-1 rounded">JWT_ADMIN_SECRET</code> — chave de assinatura dos tokens de admin</li>
+          <li><code className="font-mono bg-amber-100 px-1 rounded">GOOGLE_CLIENT_ID</code> / <code className="font-mono bg-amber-100 px-1 rounded">GOOGLE_CLIENT_SECRET</code> — OAuth Google</li>
+        </ul>
+      </div>
+    </Card>
+  )
+}
