@@ -8,7 +8,7 @@ import { ROUTES } from '@/config/routes'
 import type { Service, Barber } from '@/types'
 
 import heroVideo   from '@/media/video/presentation.mp4'
-import aboutImg    from '@/media/images/Resultado.png'
+import aboutImg    from '@/media/images/corte-cabelo-detalhe.png'
 import galleryImg1 from '@/media/images/brooklyn/Entrada.jpg'
 import galleryImg2 from '@/media/images/brooklyn/Cadeiras.jpg'
 import galleryImg3 from '@/media/images/brooklyn/Sinuca.jpg'

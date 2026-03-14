@@ -115,7 +115,7 @@ export default function Footer() {
                         justify-between gap-3 text-xs text-gray-600">
           <span>© {year} {barberShopConfig.name}. Todos os direitos reservados.</span>
           <div className="flex items-center gap-4">
-            <span></span>
+            <span>Website feito com 🤍 por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</span>
           </div>
         </div>
       </div>
