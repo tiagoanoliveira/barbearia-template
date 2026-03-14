@@ -2,6 +2,16 @@
  * CONFIGURAÇÃO DA BARBEARIA
  * Para cada nova barbearia, editar apenas este ficheiro.
  */
+
+// ─ Logos / Favicon (servidos do repositório via BASE_URL) ─────────────────
+// Estes paths são relativos a src/media/images/logos/
+// Em emails usa-se: `${BASE_URL}/src/media/images/logos/logo-192px.png`
+import logoSrc     from '@/media/images/logos/logo-512px.png'
+import faviconSrc  from '@/media/images/logos/logo-96px.png'
+
+export const LOGO_URL    = logoSrc
+export const FAVICON_URL = faviconSrc
+
 export const barberShopConfig = {
   // Identidade
   name:        'Brooklyn Barbearia',
@@ -12,9 +22,10 @@ export const barberShopConfig = {
   address:     'Rua Exemplo, 123, Porto',
   instagram:   'https://instagram.com/brooklynbarbearia',
 
-  // ─ Branding visual ─────────────────────────────────────────────
-  logoUrl:     'https://pub-394b18eed1e94fcd86f2d647e456f996.r2.dev/logo.png',
-  faviconUrl:  'https://pub-394b18eed1e94fcd86f2d647e456f996.r2.dev/favicon.png',
+  // Logo e favicon (importados de src/media/images/logos/)
+  // Usar LOGO_URL e FAVICON_URL onde necessário em vez de URLs do R2
+  logoUrl:    logoSrc,
+  faviconUrl: faviconSrc,
 
   // Título e descrição para <title> e meta description
   siteTitle:       'Brooklyn Barbearia — Reservas Online',
@@ -31,51 +42,74 @@ export const barberShopConfig = {
     sunday:    { open: '00:00', close: '00:00', closed: true  },
   },
 
-  // Duração padrão dos slots (minutos) — usado no agendamento
+  // Duração padrão dos slots (minutos)
   slotDuration: 30,
+
+  // ─ Personalização visual do site público ────────────────────────────────
+  // Estes valores são usados em toda a homepage, reservas e perfil.
+  // Mudar aqui muda o aspecto em todo o lado.
+  theme: {
+    // Navbar: fundo quando se faz scroll (e no menu mobile)
+    navbarBg:      'bg-gray-950/95 backdrop-blur-md',
+    navbarBorder:  'border-white/5',
+    // Secções da homepage (alternância claro/médio)
+    sectionLight:  'bg-white',
+    sectionMedium: 'bg-gray-50',
+    sectionDark:   'bg-gray-100',
+    // Fundo do processo de reservas (overlay sobre vídeo)
+    bookingOverlay: 'bg-black/70',
+    bookingCard:    'bg-gray-900/95 border-white/10',
+    // Fundo do painel admin
+    adminBg:        'bg-gray-50',
+    adminSidebar:   'bg-gray-950',
+  },
 } as const
 
 /**
  * TEMA DE CORES
  *
- * primary  → verde escuro (cor de acção/botões)
- * secondary → champanhe/dourado (destaques, badges, preços)
- *
- * Ambas as paletas são usadas nas variáveis CSS em globals.css.
- * Para mudar a identidade visual da barbearia basta alterar estes valores.
+ * primary   → verde escuro (botões, links, CTAs)
+ * secondary → champanhe/dourado (preços, badges, destaques)
  */
 export const themeConfig = {
-  /** Cor primária — tons de verde */
   primary: {
     50:  '#f0fdf4',
     100: '#dcfce7',
     200: '#bbf7d0',
     300: '#86efac',
     400: '#4ade80',
-    500: '#16a34a',  // botões, links activos
+    500: '#16a34a',
     600: '#15803d',
     700: '#166534',
     800: '#14532d',
     900: '#052e16',
   },
-  /** Cor secundária — tons de champanhe/dourado */
   secondary: {
     50:  '#fefdf7',
     100: '#fdf9e7',
     200: '#faf0c2',
     300: '#f5e08a',
     400: '#ecc94b',
-    500: '#d4a017',  // preços, badges, destaques
+    500: '#d4a017',
     600: '#b8860b',
     700: '#956c09',
     800: '#6b4d07',
     900: '#3d2c04',
   },
   sidebar: {
-    bg:         '#111827',
-    text:       '#9ca3af',
+    bg:         '#0f172a',
+    text:       '#94a3b8',
     textActive: '#ffffff',
-    accent:     '#d4a017',
+    accent:     '#16a34a',
   },
-  adminBg: '#f9fafb',
+  adminBg: '#f8fafc',
 } as const
+
+/**
+ * IDs de serviços com restrições de dias da semana
+ * 0 = domingo, 1 = segunda, ..., 6 = sábado
+ */
+export const serviceRestrictions: Record<number, { allowedDays: number[]; message: string }> = {
+  3: { allowedDays: [1, 2, 3, 4], message: 'Disponível apenas de Segunda a Quinta' },
+  4: { allowedDays: [1, 2, 3, 4], message: 'Disponível apenas de Segunda a Quinta' },
+}
