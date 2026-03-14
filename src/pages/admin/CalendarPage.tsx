@@ -384,7 +384,7 @@ export default function CalendarPage() {
                       const isFirst = blocked.data_hora_inicio === slotToISO(selectedDate, slot)
                         || (slot === 0 && new Date(blocked.data_hora_inicio) <= new Date(slotToISO(selectedDate, 0)))
                       return (
-                        <div key={key} className="relative border-b border-l border-gray-100 cursor-pointer"
+                        <div key={key} className="relative border-b border-l border-gray-300 cursor-pointer"
                           style={{ height: SLOT_H, backgroundImage: `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.18)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.18)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 12px)` }}
                           onClick={e => openCtx(e, { kind: 'unavailable', unavailable: blocked })}>
                           {isFirst && (
@@ -402,14 +402,14 @@ export default function CalendarPage() {
 
                     if (rList.length === 0) {
                       return (
-                        <div key={key} className="border-b border-l border-gray-100 hover:brightness-95 transition-all cursor-pointer"
+                        <div key={key} className="border-b border-l border-gray-300 hover:brightness-95 transition-all cursor-pointer"
                           style={{ height: SLOT_H, background: colBg }}
                           onClick={e => openCtx(e, { kind: 'slot', barberId: b.id, slot })} />
                       )
                     }
 
                     return (
-                      <div key={key} className="relative border-b border-l border-gray-100" style={{ height: SLOT_H, background: colBg }}>
+                      <div key={key} className="relative border-b border-l border-gray-300" style={{ height: SLOT_H, background: colBg }}>
                         {rList.map(r => {
                           const barColor  = b.color ?? '#888'
                           const dur       = r.service_duration ?? 60
