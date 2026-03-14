@@ -153,13 +153,12 @@ export default function HomePage() {
         </a>
       </section>
 
-      {/* ── SOBRE ── bg-gray-50 ─────────────────────────────────────────── */}
-      <section id="about" className={`py-12 ${barberShopConfig.theme.sectionMedium}`}>
+      {/* ── SOBRE ───────────────────────────────────────────── */}
+      <section id="about" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <div>
-              <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">A nossa história</p>
-              <h2 className="text-4xl font-black text-gray-900 mb-6 leading-tight">Bem-vindo à Brooklyn</h2>
+              <h2 className="text-3xl font-black text-primary-700 mb-6 leading-tight">Bem-vindo à Brooklyn</h2>
               <p className="text-gray-600 leading-relaxed mb-4">
                 Desde 2018 no coração do Porto, a <strong className="text-gray-900">{barberShopConfig.name}</strong> oferece
                 uma experiência única de cuidado masculino. Combinamos técnicas clássicas com as tendências mais modernas.
@@ -182,7 +181,7 @@ export default function HomePage() {
             </div>
             <div className="relative flex justify-center">
               {/* Altura e largura máximas da foto do about */}
-              <div className="overflow-hidden rounded-3xl shadow-xl" style={{ maxWidth: 400, maxHeight: 400 }}>
+              <div className="overflow-hidden rounded-3xl shadow-xl" style={{ maxWidth: 350, maxHeight: 350 }}>
                 <img src={aboutImg} alt="Brooklyn Barbearia" className="w-full h-full object-cover" />
               </div>
               <div className="absolute -bottom-4 bg-secondary-500 rounded-2xl p-4 shadow-xl">
@@ -194,12 +193,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── SERVIÇOS ── bg-white ─────────────────────────────────────────── */}
+      {/* ── SERVIÇOS ────────────────────────────────────── */}
       <section id="servicos" className={`py-12 ${barberShopConfig.theme.sectionLight}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-16">
-            <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">O que fazemos</p>
-            <h2 className="text-4xl font-black text-gray-900">Serviços</h2>
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-black text-primary-700">Serviços</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {services.map(s => <ServiceCard key={s.id} service={s} />)}
@@ -207,12 +205,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── EQUIPA ── bg-gray-100 ────────────────────────────────────────── */}
+      {/* ── EQUIPA ─────────────────────────────────────────── */}
       <section id="equipa" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-16">
-            <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">Os nossos profissionais</p>
-            <h2 className="text-4xl font-black text-gray-900">A equipa</h2>
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-black text-primary-700">A equipa</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
             {barbers.map(b => (
@@ -232,7 +229,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── GALERIA ── bg-white ──────────────────────────────────────────── */}
+      {/* ── GALERIA ────────────────────────────────────── */}
       <section id="galeria" className={`py-12 ${barberShopConfig.theme.sectionLight}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-8">
@@ -243,10 +240,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── CONTACTO ── bg-gray-50 ───────────────────────────────────────── */}
-      <section id="contacto" className={`py-12 ${barberShopConfig.theme.sectionMedium}`}>
+      {/* ── CONTACTO ─────────────────────────────────────── */}
+      <section id="contacto" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
             <div>
               <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">Onde estamos</p>
               <h2 className="text-4xl font-black text-gray-900 mb-6">Contacto</h2>
