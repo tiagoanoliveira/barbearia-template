@@ -8,7 +8,7 @@ import { ROUTES } from '@/config/routes'
 import type { Service, Barber } from '@/types'
 
 // Importa os assets estáticos directamente do repo — Vite trata do hash/bundle
-import heroVideo   from '@/media/video/presentation.mp4'
+import heroVideo   from '@/media/video/apresentation.mp4'
 import aboutImg    from '@/media/images/cliente-corte.png'
 import galleryImg1 from '@/media/images/brooklyn/Entrada.jpg'
 import galleryImg2 from '@/media/images/brooklyn/Cadeiras.jpg'
