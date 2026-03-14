@@ -2,23 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Brand colours ──────────────────────────────────────────────────────── */
+/* ─── Variáveis CSS ──────────────────────────────────────────────────────────── */
 :root {
-  --color-brand-50:  #fefdf7;
-  --color-brand-100: #fdf9e7;
-  --color-brand-200: #faf0c2;
-  --color-brand-300: #f5e08a;
-  --color-brand-400: #ecc94b;
-  --color-brand-500: #d4a017;
-  --color-brand-600: #b8860b;
-  --color-brand-700: #956c09;
-  --color-brand-800: #6b4d07;
-  --color-brand-900: #3d2c04;
+  /* Cor primária: verde */
+  --color-primary-50:  #f0fdf4;
+  --color-primary-100: #dcfce7;
+  --color-primary-200: #bbf7d0;
+  --color-primary-300: #86efac;
+  --color-primary-400: #4ade80;
+  --color-primary-500: #16a34a;
+  --color-primary-600: #15803d;
+  --color-primary-700: #166534;
+  --color-primary-800: #14532d;
+  --color-primary-900: #052e16;
+
+  /* Cor secundária: champanhe/dourado */
+  --color-secondary-50:  #fefdf7;
+  --color-secondary-100: #fdf9e7;
+  --color-secondary-200: #faf0c2;
+  --color-secondary-300: #f5e08a;
+  --color-secondary-400: #ecc94b;
+  --color-secondary-500: #d4a017;
+  --color-secondary-600: #b8860b;
+  --color-secondary-700: #956c09;
+  --color-secondary-800: #6b4d07;
+  --color-secondary-900: #3d2c04;
+
+  /* Alias brand → primary (mantém compatibilidade com classes Tailwind brand-*) */
+  --color-brand-50:  var(--color-primary-50);
+  --color-brand-100: var(--color-primary-100);
+  --color-brand-200: var(--color-primary-200);
+  --color-brand-300: var(--color-primary-300);
+  --color-brand-400: var(--color-primary-400);
+  --color-brand-500: var(--color-primary-500);
+  --color-brand-600: var(--color-primary-600);
+  --color-brand-700: var(--color-primary-700);
+  --color-brand-800: var(--color-primary-800);
+  --color-brand-900: var(--color-primary-900);
 
   --sidebar-width:  260px;
   --header-height:  64px;
 
-  /* Superfícies — SEMPRE claras, dark mode removido */
+  /* Superfícies — SEMPRE claras */
   --surface:        #ffffff;
   --surface-subtle: #f9fafb;
   --surface-raised: #f3f4f6;
@@ -26,18 +51,17 @@
   --text:           #111827;
   --text-muted:     #6b7280;
   --text-subtle:    #9ca3af;
-
   --border:         #e5e7eb;
 }
 
-/* ─── Base ───────────────────────────────────────────────────────────────── */
+/* ─── Base ───────────────────────────────────────────────────────────────────── */
 @layer base {
   * { box-sizing: border-box; }
 
   html {
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
-    color-scheme: light; /* força light mesmo em SO em modo escuro */
+    color-scheme: light;
   }
 
   body {
@@ -56,7 +80,7 @@
   }
 }
 
-/* ─── Componentes partilhados ────────────────────────────────────────────── */
+/* ─── Componentes partilhados ────────────────────────────────────────────────── */
 @layer components {
 
   .card {
@@ -72,7 +96,7 @@
     @apply w-full px-3 py-2 rounded-xl text-sm
            placeholder:text-gray-400
            focus:outline-none focus:ring-2
-           focus:ring-brand-500 focus:border-transparent
+           focus:ring-primary-500 focus:border-transparent
            transition-shadow border;
   }
 
@@ -81,12 +105,17 @@
     @apply block text-sm font-medium mb-1;
   }
 
+  /* Botão primário: verde */
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white
-           font-medium rounded-xl hover:bg-brand-600 active:bg-brand-700
-           transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2 px-4 py-2
+           bg-primary-500 text-white
+           font-medium rounded-xl
+           hover:bg-primary-600 active:bg-primary-700
+           transition-colors duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  /* Botão secundário: neutro claro */
   .btn-secondary {
     background-color: #f3f4f6;
     color: #6b7280;

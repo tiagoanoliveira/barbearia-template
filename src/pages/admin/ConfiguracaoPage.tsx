@@ -6,29 +6,17 @@ import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { Barber, Service } from '@/types'
 
-// ─── Tipos locais ─────────────────────────────────────────────────────────────
 interface AdminUser {
-  id: number
-  username: string
-  nome: string
-  role: 'admin' | 'barbeiro'
-  ativo: number
-  barbeiro_id: number | null
-  barbeiro_nome: string | null
-  criado_em: string
-  ultimo_login: string | null
+  id: number; username: string; nome: string; role: 'admin' | 'barbeiro'
+  ativo: number; barbeiro_id: number | null; barbeiro_nome: string | null
+  criado_em: string; ultimo_login: string | null
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────────
 const SESSION_KEY = 'admin_settings_unlocked'
 
 export default function ConfiguracaoPage() {
-  const [unlocked, setUnlocked] = useState(() =>
-    sessionStorage.getItem(SESSION_KEY) === 'true'
-  )
-
+  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(SESSION_KEY) === 'true')
   if (!unlocked) return <MasterCodeGate onUnlock={() => { sessionStorage.setItem(SESSION_KEY, 'true'); setUnlocked(true) }} />
-
   return (
     <div className="space-y-8">
       <ServicosSection />
@@ -38,7 +26,6 @@ export default function ConfiguracaoPage() {
   )
 }
 
-// ─── Gate: código de 8 dígitos ────────────────────────────────────────────────
 function MasterCodeGate({ onUnlock }: { onUnlock: () => void }) {
   const [digits, setDigits] = useState(Array(8).fill(''))
   const [error, setError]   = useState<string | null>(null)
@@ -63,16 +50,10 @@ function MasterCodeGate({ onUnlock }: { onUnlock: () => void }) {
     const code = digits.join('')
     if (code.length < 8) { setError('Introduz os 8 dígitos'); return }
     setLoading(true); setError(null)
-    try {
-      await api.post('/api/admin/master-code/verify', { code })
-      onUnlock()
-    } catch {
-      setError('Código incorrecto. Tenta novamente.')
-      setDigits(Array(8).fill(''))
-      refs.current[0]?.focus()
-    } finally { setLoading(false) }
+    try { await api.post('/api/admin/master-code/verify', { code }); onUnlock() }
+    catch { setError('Código incorrecto. Tenta novamente.'); setDigits(Array(8).fill('')); refs.current[0]?.focus() }
+    finally { setLoading(false) }
   }
-
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <Card className="max-w-sm w-full">
@@ -107,7 +88,6 @@ function MasterCodeGate({ onUnlock }: { onUnlock: () => void }) {
   )
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 function SectionHeader({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle?: string }) {
   return (
     <div className="flex items-center gap-3 mb-5">
@@ -132,24 +112,37 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   )
 }
 
-// ─── Upload helper: pede signed URL ao backend e faz PUT para o R2 ────────────
+// ─── Upload de foto via proxy R2 ──────────────────────────────────────────────
 async function uploadToR2(file: File, folder: string): Promise<string> {
-  const ext  = file.name.split('.').pop() ?? 'jpg'
-  const key  = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-  // 1. Pede signed URL
-  const res  = await api.post<{ uploadUrl: string; publicUrl: string }>('/api/admin/upload-url', { key, contentType: file.type })
-  const { uploadUrl, publicUrl } = (res.data as unknown as { uploadUrl: string; publicUrl: string })
-  // 2. Faz PUT directo para o R2
-  await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+  const ext = file.name.split('.').pop() ?? 'jpg'
+  const key = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('key', key)
+
+  // Chama o proxy com o token de admin no header Authorization
+  const token = localStorage.getItem('admin_token') ?? ''
+  const res = await fetch('/api/admin/upload-proxy', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error((err as { error?: string }).error ?? 'Erro no upload')
+  }
+  const json = await res.json() as { data?: { publicUrl?: string }; publicUrl?: string }
+  const publicUrl = json?.data?.publicUrl ?? json?.publicUrl
+  if (!publicUrl) throw new Error('publicUrl não devolvida pelo servidor')
   return publicUrl
 }
 
-// ─── Componente de upload de foto com preview ─────────────────────────────────
 function PhotoUploader({ value, onChange, folder }: { value: string; onChange: (url: string) => void; folder: string }) {
   const fileRef  = useRef<HTMLInputElement>(null)
-  const [mode, setMode]       = useState<'url' | 'upload'>('url')
-  const [uploading, setUploading] = useState(false)
-  const [uploadErr, setUploadErr] = useState<string | null>(null)
+  const [mode, setMode]             = useState<'url' | 'upload'>('url')
+  const [uploading, setUploading]   = useState(false)
+  const [uploadErr, setUploadErr]   = useState<string | null>(null)
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -157,10 +150,8 @@ function PhotoUploader({ value, onChange, folder }: { value: string; onChange: (
     if (!file.type.startsWith('image/')) { setUploadErr('Apenas imagens são permitidas'); return }
     if (file.size > 5 * 1024 * 1024) { setUploadErr('Máximo 5 MB'); return }
     setUploading(true); setUploadErr(null)
-    try {
-      const url = await uploadToR2(file, folder)
-      onChange(url)
-    } catch { setUploadErr('Erro ao fazer upload. Tenta novamente.') }
+    try { onChange(await uploadToR2(file, folder)) }
+    catch (e: unknown) { setUploadErr(e instanceof Error ? e.message : 'Erro ao fazer upload') }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = '' }
   }
 
@@ -176,7 +167,6 @@ function PhotoUploader({ value, onChange, folder }: { value: string; onChange: (
           <Upload size={12} className="inline mr-1" />Upload
         </button>
       </div>
-
       {mode === 'url' ? (
         <input type="url" className="input text-sm w-full" placeholder="https://..." value={value}
           onChange={e => onChange(e.target.value)} />
@@ -192,64 +182,41 @@ function PhotoUploader({ value, onChange, folder }: { value: string; onChange: (
           {uploadErr && <p className="text-xs text-red-500 mt-1">{uploadErr}</p>}
         </div>
       )}
-
       {value && (
         <div className="flex items-center gap-2">
           <img src={value} alt="preview" className="w-12 h-12 rounded-lg object-cover border border-gray-200" />
-          <button type="button" onClick={() => onChange('')} className="text-xs text-red-400 hover:text-red-600">
-            Remover foto
-          </button>
+          <button type="button" onClick={() => onChange('')} className="text-xs text-red-400 hover:text-red-600">Remover foto</button>
         </div>
       )}
     </div>
   )
 }
 
-// ─── SERVIÇOS ─────────────────────────────────────────────────────────────────
+// ─── SERVIÇOS (preços guardados e exibidos directamente em euros) ─────────────
 interface ServiceForm { id?: number; name: string; duration: string; price: string; abreviacao: string; color: string }
 const emptyService = (): ServiceForm => ({ name: '', duration: '30', price: '0', abreviacao: '', color: '#0f7e44' })
 
 function ServicosSection() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-services'],
-    queryFn: () => api.get<Service[]>('/api/admin/services'),
-  })
+  const { data, isLoading } = useQuery({ queryKey: ['admin-services'], queryFn: () => api.get<Service[]>('/api/admin/services') })
   const services: Service[] = (data?.data as unknown as Service[]) ?? []
 
-  const [form, setForm]     = useState<ServiceForm | null>(null)
+  const [form, setForm]         = useState<ServiceForm | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [err, setErr]       = useState<string | null>(null)
-
-  // Preço guardado em cêntimos na BD; exibido e introduzido em euros
-  const centsToEuros = (cents: number) => (cents / 100).toFixed(2).replace('.00', '')
-  const eurosToCents = (euros: string) => Math.round(parseFloat(euros) * 100)
+  const [saving, setSaving]     = useState(false)
+  const [err, setErr]           = useState<string | null>(null)
 
   const openNew  = () => { setForm(emptyService()); setErr(null) }
   const openEdit = (s: Service) => {
-    setForm({
-      id: s.id, name: s.name,
-      duration: String(s.duration),
-      price: centsToEuros(s.price),   // converte cêntimos → euros para o campo
-      abreviacao: (s as unknown as { abreviacao?: string }).abreviacao ?? '',
-      color: (s as unknown as { color?: string }).color ?? '#0f7e44',
-    })
+    setForm({ id: s.id, name: s.name, duration: String(s.duration), price: String(s.price), abreviacao: (s as unknown as { abreviacao?: string }).abreviacao ?? '', color: (s as unknown as { color?: string }).color ?? '#0f7e44' })
     setErr(null)
   }
-
   const save = async () => {
     if (!form) return
     if (!form.name || !form.duration || form.price === '') { setErr('Nome, duração e preço são obrigatórios'); return }
     setSaving(true); setErr(null)
     try {
-      const body = {
-        name: form.name,
-        duration: parseInt(form.duration),
-        price: eurosToCents(form.price),   // guarda em cêntimos
-        abreviacao: form.abreviacao,
-        color: form.color,
-      }
+      const body = { name: form.name, duration: parseInt(form.duration), price: parseInt(form.price), abreviacao: form.abreviacao, color: form.color }
       if (form.id) await api.put(`/api/admin/services/${form.id}`, body)
       else         await api.post('/api/admin/services', body)
       qc.invalidateQueries({ queryKey: ['admin-services'] })
@@ -258,7 +225,6 @@ function ServicosSection() {
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setSaving(false) }
   }
-
   const del = async (id: number) => {
     try { await api.delete(`/api/admin/services/${id}`); qc.invalidateQueries({ queryKey: ['admin-services'] }); qc.invalidateQueries({ queryKey: ['services'] }) } catch {}
     setDeleteId(null)
@@ -266,7 +232,7 @@ function ServicosSection() {
 
   return (
     <Card>
-      <SectionHeader icon={Sparkles} title="Serviços" subtitle="Preços em euros (ex: 20 = 20€)" />
+      <SectionHeader icon={Sparkles} title="Serviços" subtitle="Preços em euros sem multiplicação — o valor inserido é o exibido" />
       {isLoading ? <LoadingSpinner size="sm" /> : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -285,7 +251,7 @@ function ServicosSection() {
                 <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                   <td className="py-2.5 pr-3 font-medium">{s.name}</td>
                   <td className="py-2.5 pr-3 text-gray-600">{s.duration} min</td>
-                  <td className="py-2.5 pr-3 text-gray-600">{centsToEuros(s.price)}€</td>
+                  <td className="py-2.5 pr-3 text-gray-600">{s.price}€</td>
                   <td className="py-2.5 pr-3 text-gray-500">{(s as unknown as { abreviacao?: string }).abreviacao ?? '—'}</td>
                   <td className="py-2.5"><span className="inline-block w-5 h-5 rounded border border-gray-200" style={{ background: (s as unknown as { color?: string }).color ?? '#0f7e44' }} /></td>
                   <td className="py-2.5 pl-3 whitespace-nowrap">
@@ -319,9 +285,8 @@ function ServicosSection() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Preço (€) *</label>
-              <input type="number" min={0} step={0.5} className="input text-sm w-full"
-                placeholder="Ex: 20"
-                value={form.price}
+              <input type="number" min={0} step={1} className="input text-sm w-full"
+                placeholder="Ex: 20" value={form.price}
                 onChange={e => setForm(f => f && ({ ...f, price: e.target.value }))} />
             </div>
             <div>
@@ -350,23 +315,19 @@ const emptyBarber = (): BarberForm => ({ name: '', especialidades: '', color: '#
 
 function BarbeirosSection() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-barbers-cfg'],
-    queryFn: () => api.get<Barber[]>('/api/admin/barbers'),
-  })
+  const { data, isLoading } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => api.get<Barber[]>('/api/admin/barbers') })
   const barbers: Barber[] = (data?.data as unknown as Barber[]) ?? []
 
-  const [form, setForm]     = useState<BarberForm | null>(null)
+  const [form, setForm]         = useState<BarberForm | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [err, setErr]       = useState<string | null>(null)
+  const [saving, setSaving]     = useState(false)
+  const [err, setErr]           = useState<string | null>(null)
 
   const openNew  = () => { setForm(emptyBarber()); setErr(null) }
   const openEdit = (b: Barber) => {
     setForm({ id: b.id, name: b.name, especialidades: (b as unknown as { especialidades?: string }).especialidades ?? '', color: b.color ?? '#d4a017', photo_url: b.photo_url ?? '', active: (b as unknown as { active?: number }).active ?? 1 })
     setErr(null)
   }
-
   const save = async () => {
     if (!form) return
     if (!form.name) { setErr('Nome é obrigatório'); return }
@@ -381,7 +342,6 @@ function BarbeirosSection() {
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setSaving(false) }
   }
-
   const del = async (id: number) => {
     try { await api.delete(`/api/admin/barbers/${id}`); qc.invalidateQueries({ queryKey: ['admin-barbers-cfg'] }); qc.invalidateQueries({ queryKey: ['barbers'] }) } catch {}
     setDeleteId(null)
@@ -389,7 +349,7 @@ function BarbeirosSection() {
 
   return (
     <Card>
-      <SectionHeader icon={Scissors} title="Barbeiros" subtitle="Clica em ✏️ para editar — podes fazer upload da foto ou colar um URL" />
+      <SectionHeader icon={Scissors} title="Barbeiros" subtitle="Podes fazer upload de foto ou colar um URL" />
       {isLoading ? <LoadingSpinner size="sm" /> : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -463,11 +423,7 @@ function BarbeirosSection() {
             </div>
             <div className="col-span-2">
               <label className="block text-xs text-gray-500 mb-1">Foto do barbeiro</label>
-              <PhotoUploader
-                value={form.photo_url}
-                onChange={url => setForm(f => f && ({ ...f, photo_url: url }))}
-                folder="barbeiros"
-              />
+              <PhotoUploader value={form.photo_url} onChange={url => setForm(f => f && ({ ...f, photo_url: url }))} folder="barbeiros" />
             </div>
           </div>
           {err && <p className="text-xs text-red-500">{err}</p>}
@@ -487,30 +443,22 @@ const emptyAdminUser = (): AdminUserForm => ({ username: '', password: '', nome:
 
 function AdminUsersSection() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-users-list'],
-    queryFn: () => api.get<AdminUser[]>('/api/admin/admin-users'),
-  })
+  const { data, isLoading } = useQuery({ queryKey: ['admin-users-list'], queryFn: () => api.get<AdminUser[]>('/api/admin/admin-users') })
   const users: AdminUser[] = (data?.data as unknown as AdminUser[]) ?? []
-
-  const { data: barbersData } = useQuery({
-    queryKey: ['admin-barbers-cfg'],
-    queryFn: () => api.get<Barber[]>('/api/admin/barbers'),
-  })
+  const { data: barbersData } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => api.get<Barber[]>('/api/admin/barbers') })
   const barbers: Barber[] = (barbersData?.data as unknown as Barber[]) ?? []
 
-  const [form, setForm]     = useState<AdminUserForm | null>(null)
-  const [showPw, setShowPw] = useState(false)
+  const [form, setForm]         = useState<AdminUserForm | null>(null)
+  const [showPw, setShowPw]     = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [err, setErr]       = useState<string | null>(null)
+  const [saving, setSaving]     = useState(false)
+  const [err, setErr]           = useState<string | null>(null)
 
   const openNew  = () => { setForm(emptyAdminUser()); setErr(null) }
   const openEdit = (u: AdminUser) => {
     setForm({ id: u.id, username: u.username, password: '', nome: u.nome, role: u.role, barbeiro_id: u.barbeiro_id ? String(u.barbeiro_id) : '', ativo: u.ativo })
     setErr(null)
   }
-
   const save = async () => {
     if (!form) return
     if (!form.username || !form.nome || !form.role) { setErr('Username, nome e role são obrigatórios'); return }
@@ -526,7 +474,6 @@ function AdminUsersSection() {
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setSaving(false) }
   }
-
   const del = async (id: number) => {
     try { await api.delete(`/api/admin/admin-users/${id}`); qc.invalidateQueries({ queryKey: ['admin-users-list'] }) } catch {}
     setDeleteId(null)
@@ -558,9 +505,7 @@ function AdminUsersSection() {
                   </td>
                   <td className="py-2.5 pr-3 text-gray-500 text-xs">{u.barbeiro_nome ?? '—'}</td>
                   <td className="py-2.5">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ u.ativo ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500' }`}>
-                      {u.ativo ? 'Ativo' : 'Inativo'}
-                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ u.ativo ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500' }`}>{u.ativo ? 'Ativo' : 'Inativo'}</span>
                   </td>
                   <td className="py-2.5 pl-3 whitespace-nowrap">
                     {deleteId === u.id

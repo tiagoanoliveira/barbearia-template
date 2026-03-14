@@ -4,9 +4,6 @@ import { ok, badRequest, unauthorized, serverError, corsOptions } from '../../ut
 /**
  * POST /api/admin/upload-proxy
  * multipart/form-data com campos: file (Blob), key (string)
- *
- * O backend recebe o ficheiro e faz PUT directo no R2 via Workers binding.
- * Devolve { publicUrl }.
  */
 export async function onRequest(context) {
   const { request, env } = context
@@ -17,7 +14,7 @@ export async function onRequest(context) {
 
   if (request.method !== 'POST') return badRequest('Método não suportado')
 
-  const formData    = await request.formData().catch(() => null)
+  const formData = await request.formData().catch(() => null)
   if (!formData) return badRequest('Corpo inválido — esperado multipart/form-data')
 
   const file = formData.get('file')
@@ -31,13 +28,13 @@ export async function onRequest(context) {
   if (file.size > 5 * 1024 * 1024) return badRequest('Ficheiro demasiado grande (máx. 5 MB)')
 
   const bucket     = env.BUCKET
-  const publicBase = env.R2_PUBLIC_URL?.replace(/\/$/, '')
+  const publicBase = (env.R2_PUBLIC_URL ?? '').replace(/\/$/, '')
 
   if (!bucket)     return badRequest('R2 bucket binding (BUCKET) não configurado')
   if (!publicBase) return badRequest('R2_PUBLIC_URL não configurado')
 
   try {
-    await bucket.put(key, file.stream(), {
+    await bucket.put(key, await file.arrayBuffer(), {
       httpMetadata: { contentType: file.type },
     })
   } catch (e) {

@@ -1,15 +1,38 @@
 import type { Config } from 'tailwindcss'
 
-const config: Config = {
-  content: [
-    './index.html',
-    './src/**/*.{ts,tsx}',
-  ],
-  // Segue a preferência do sistema operativo
-  darkMode: 'media',
+export default {
+  content: ['./src/**/*.{ts,tsx}', './index.html'],
+  darkMode: false,  // dark mode desligado globalmente
   theme: {
     extend: {
       colors: {
+        // Cor primária (verde) — usada em btn-primary, links activos
+        primary: {
+          50:  'var(--color-primary-50)',
+          100: 'var(--color-primary-100)',
+          200: 'var(--color-primary-200)',
+          300: 'var(--color-primary-300)',
+          400: 'var(--color-primary-400)',
+          500: 'var(--color-primary-500)',
+          600: 'var(--color-primary-600)',
+          700: 'var(--color-primary-700)',
+          800: 'var(--color-primary-800)',
+          900: 'var(--color-primary-900)',
+        },
+        // Cor secundária (champanhe/dourado) — preços, badges, destaques
+        secondary: {
+          50:  'var(--color-secondary-50)',
+          100: 'var(--color-secondary-100)',
+          200: 'var(--color-secondary-200)',
+          300: 'var(--color-secondary-300)',
+          400: 'var(--color-secondary-400)',
+          500: 'var(--color-secondary-500)',
+          600: 'var(--color-secondary-600)',
+          700: 'var(--color-secondary-700)',
+          800: 'var(--color-secondary-800)',
+          900: 'var(--color-secondary-900)',
+        },
+        // Alias brand → primary (mantém compatibilidade)
         brand: {
           50:  'var(--color-brand-50)',
           100: 'var(--color-brand-100)',
@@ -22,37 +45,11 @@ const config: Config = {
           800: 'var(--color-brand-800)',
           900: 'var(--color-brand-900)',
         },
-        // Superfícies semânticas usadas nos componentes partilhados
-        surface: {
-          DEFAULT: 'var(--surface)',
-          subtle:  'var(--surface-subtle)',
-          raised:  'var(--surface-raised)',
-        },
-        content: {
-          DEFAULT:  'var(--text)',
-          muted:    'var(--text-muted)',
-          subtle:   'var(--text-subtle)',
-        },
-        border: {
-          DEFAULT: 'var(--border)',
-        },
-      },
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-      },
-      borderRadius: {
-        'xl':  '0.875rem',
-        '2xl': '1rem',
-        '3xl': '1.5rem',
       },
       boxShadow: {
-        'card':       '0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)',
-        'card-hover': '0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.08)',
-        'modal':      '0 20px 60px -10px rgb(0 0 0 / 0.25)',
+        card: '0 1px 3px 0 rgb(0 0 0 / .07), 0 1px 2px -1px rgb(0 0 0 / .07)',
       },
     },
   },
   plugins: [],
-}
-
-export default config
+} satisfies Config

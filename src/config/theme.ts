@@ -13,8 +13,6 @@ export const barberShopConfig = {
   instagram:   'https://instagram.com/brooklynbarbearia',
 
   // ─ Branding visual ─────────────────────────────────────────────
-  // Coloca a URL do R2 (ou /public/...) quando tiveres os ficheiros.
-  // null = usa o icóne de tesoura como fallback.
   logoUrl:     'https://pub-394b18eed1e94fcd86f2d647e456f996.r2.dev/logo.png',
   faviconUrl:  'https://pub-394b18eed1e94fcd86f2d647e456f996.r2.dev/favicon.png',
 
@@ -33,31 +31,51 @@ export const barberShopConfig = {
     sunday:    { open: '00:00', close: '00:00', closed: true  },
   },
 
-  // Duração padrão dos slots (minutos)
+  // Duração padrão dos slots (minutos) — usado no agendamento
   slotDuration: 30,
 } as const
 
 /**
  * TEMA DE CORES
+ *
+ * primary  → verde escuro (cor de acção/botões)
+ * secondary → champanhe/dourado (destaques, badges, preços)
+ *
+ * Ambas as paletas são usadas nas variáveis CSS em globals.css.
+ * Para mudar a identidade visual da barbearia basta alterar estes valores.
  */
 export const themeConfig = {
-  brand: {
+  /** Cor primária — tons de verde */
+  primary: {
+    50:  '#f0fdf4',
+    100: '#dcfce7',
+    200: '#bbf7d0',
+    300: '#86efac',
+    400: '#4ade80',
+    500: '#16a34a',  // botões, links activos
+    600: '#15803d',
+    700: '#166534',
+    800: '#14532d',
+    900: '#052e16',
+  },
+  /** Cor secundária — tons de champanhe/dourado */
+  secondary: {
     50:  '#fefdf7',
     100: '#fdf9e7',
     200: '#faf0c2',
     300: '#f5e08a',
     400: '#ecc94b',
-    500: '#d4a017',
+    500: '#d4a017',  // preços, badges, destaques
     600: '#b8860b',
     700: '#956c09',
     800: '#6b4d07',
     900: '#3d2c04',
   },
   sidebar: {
-    bg:          '#111827',
-    text:        '#9ca3af',
-    textActive:  '#ffffff',
-    accent:      '#d4a017',
+    bg:         '#111827',
+    text:       '#9ca3af',
+    textActive: '#ffffff',
+    accent:     '#d4a017',
   },
   adminBg: '#f9fafb',
 } as const
