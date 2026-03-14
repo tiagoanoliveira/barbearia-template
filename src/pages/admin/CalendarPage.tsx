@@ -13,9 +13,9 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Modal from '@/components/ui/Modal'
 import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from '@/types'
 
-const SLOT_H  = 48
-const START_H = 8
-const END_H   = 21
+const SLOT_H  = 40
+const START_H = 9
+const END_H   = 20
 const TOTAL_SLOTS = (END_H - START_H) * 2
 
 const TIPO_ICON: Record<UnavailableTipo, string> = {
