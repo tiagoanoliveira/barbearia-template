@@ -17,9 +17,9 @@ export const barberShopConfig = {
   name:        'Brooklyn Barbearia',
   tagline:     'Tradição e estilo em cada corte',
   description: 'Barbearia premium no coração da cidade. Cortes clássicos e modernos.',
-  phone:       '+351 912 345 678',
-  email:       'info@brooklynbarbearia.pt',
-  address:     'Rua Exemplo, 123, Porto',
+  phone:       '+351 224 938 542',
+  email:       'geral@brooklynbarbearia.pt',
+  address:     'Rua do Campo Alegre, 450, Porto',
   instagram:   'https://instagram.com/brooklynbarbearia',
 
   // Logo e favicon (importados de src/media/images/logos/)
@@ -28,7 +28,7 @@ export const barberShopConfig = {
   faviconUrl: faviconSrc,
 
   // Título e descrição para <title> e meta description
-  siteTitle:       'Brooklyn Barbearia — Reservas Online',
+  siteTitle:       'Brooklyn Barbearia',
   siteDescription: 'Barbearia premium no Porto. Reserva online rápida e fácil.',
 
   // Horário
@@ -50,7 +50,7 @@ export const barberShopConfig = {
   // Mudar aqui muda o aspecto em todo o lado.
   theme: {
     // Navbar: fundo quando se faz scroll (e no menu mobile)
-    navbarBg:      'bg-gray-950/95 backdrop-blur-md',
+    navbarBg:      'bg-primary-900 backdrop-blur-md',
     navbarBorder:  'border-white/5',
     // Secções da homepage (alternância claro/médio)
     sectionLight:  'bg-white',
@@ -110,6 +110,6 @@ export const themeConfig = {
  * 0 = domingo, 1 = segunda, ..., 6 = sábado
  */
 export const serviceRestrictions: Record<number, { allowedDays: number[]; message: string }> = {
-  3: { allowedDays: [1, 2, 3, 4], message: 'Disponível apenas de Segunda a Quinta' },
-  4: { allowedDays: [1, 2, 3, 4], message: 'Disponível apenas de Segunda a Quinta' },
+  3: { allowedDays: [1, 2, 3, 4], message: 'Desconto estudante disponível de Segunda a Quinta' },
+  4: { allowedDays: [1, 2, 3, 4], message: 'Desconto estudante disponível de Segunda a Quinta' },
 }

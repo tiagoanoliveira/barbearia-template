@@ -47,8 +47,8 @@ export async function onRequest(context) {
 
   if (request.method === 'DELETE') {
     try {
-      if (!['confirmada', 'pendente'].includes(reservation.status)) {
-        return badRequest('Apenas reservas pendentes ou confirmadas podem ser canceladas')
+      if (!['confirmada'].includes(reservation.status)) {
+        return badRequest('Apenas reservas por concluir podem ser canceladas')
       }
 
       await env.DB.prepare(
@@ -102,8 +102,8 @@ export async function onRequest(context) {
         return badRequest('Só é possível editar reservas com pelo menos 5 horas de antecedência')
       }
 
-      if (!['pendente', 'confirmada'].includes(reservation.status)) {
-        return badRequest('Apenas reservas pendentes ou confirmadas podem ser editadas')
+      if (!['confirmada'].includes(reservation.status)) {
+        return badRequest('Apenas reservas por concluir podem ser editadas')
       }
 
       const newDataHora = `${date}T${time}:00`

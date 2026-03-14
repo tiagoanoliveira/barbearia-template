@@ -9,7 +9,6 @@ const navLinks = [
   { to: '/#servicos', label: 'Serviços' },
   { to: '/#equipa',   label: 'Equipa'   },
   { to: '/#galeria',  label: 'Galeria'  },
-  { to: '/#contacto', label: 'Contacto' },
 ]
 
 function getProfilePicture(): string | null {

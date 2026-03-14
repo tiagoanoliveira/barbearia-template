@@ -1,7 +1,6 @@
 import type { ReservationStatus } from '@/types'
 
 const statusConfig: Record<ReservationStatus, { label: string; className: string }> = {
-  pendente:   { label: 'Pendente',   className: 'badge-pending' },
   confirmada: { label: 'Confirmada', className: 'badge-confirmed' },
   concluida:  { label: 'Concluída',  className: 'badge-completed' },
   cancelada:  { label: 'Cancelada',  className: 'badge-cancelled' },
@@ -13,6 +12,6 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  const { label, className } = statusConfig[status] ?? statusConfig.pendente
+  const { label, className } = statusConfig[status]
   return <span className={className}>{label}</span>
 }

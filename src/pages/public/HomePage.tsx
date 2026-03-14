@@ -140,7 +140,7 @@ export default function HomePage() {
         <div className="relative z-10 text-center px-4 max-w-3xl mx-auto text-white">
           <p className="text-secondary-400 text-sm font-semibold tracking-widest uppercase mb-4">Porto, desde 2018</p>
           <h1 className="text-5xl sm:text-7xl font-black tracking-tight mb-6 leading-none">{barberShopConfig.name}</h1>
-          <p className="text-lg sm:text-xl text-gray-300 mb-10 max-w-xl mx-auto leading-relaxed">{barberShopConfig.tagline}</p>
+          <p className="text-lg sm:text-xl text-gray-300 mb-40 max-w-xl mx-auto leading-relaxed">{barberShopConfig.tagline}</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to={ROUTES.BOOKING}
               className="flex items-center gap-2 px-8 py-4 bg-primary-500 text-white font-bold rounded-2xl hover:bg-primary-600 transition-all hover:scale-105 text-base shadow-lg">
@@ -158,7 +158,7 @@ export default function HomePage() {
       </section>
 
       {/* ── SOBRE ── bg-gray-50 ─────────────────────────────────────────── */}
-      <section id="about" className={`py-24 ${barberShopConfig.theme.sectionMedium}`}>
+      <section id="about" className={`py-12 ${barberShopConfig.theme.sectionMedium}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
@@ -190,8 +190,8 @@ export default function HomePage() {
                 <img src={aboutImg} alt="Brooklyn Barbearia" className="w-full h-full object-cover" />
               </div>
               <div className="absolute -bottom-4 -left-4 bg-secondary-500 rounded-2xl p-4 shadow-xl">
-                <p className="text-white font-bold text-sm">Desde 2018</p>
-                <p className="text-secondary-200 text-xs">no coração do Porto</p>
+                <p className="text-white font-bold text-sm">4,8 / 5,0</p>
+                <p className="text-secondary-200 text-xs">+ 300 avaliações</p>
               </div>
             </div>
           </div>
@@ -199,20 +199,20 @@ export default function HomePage() {
       </section>
 
       {/* ── SERVIÇOS ── bg-white ─────────────────────────────────────────── */}
-      <section id="servicos" className={`py-24 ${barberShopConfig.theme.sectionLight}`}>
+      <section id="servicos" className={`py-12 ${barberShopConfig.theme.sectionLight}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-16">
             <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">O que fazemos</p>
             <h2 className="text-4xl font-black text-gray-900">Serviços</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {services.map(s => <ServiceCard key={s.id} service={s} />)}
           </div>
         </div>
       </section>
 
       {/* ── EQUIPA ── bg-gray-100 ────────────────────────────────────────── */}
-      <section id="equipa" className={`py-24 ${barberShopConfig.theme.sectionDark}`}>
+      <section id="equipa" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-16">
             <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">Os nossos profissionais</p>
@@ -237,7 +237,7 @@ export default function HomePage() {
       </section>
 
       {/* ── GALERIA ── bg-white ──────────────────────────────────────────── */}
-      <section id="galeria" className={`py-24 ${barberShopConfig.theme.sectionLight}`}>
+      <section id="galeria" className={`py-12 ${barberShopConfig.theme.sectionLight}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-12">
             <p className="text-primary-600 text-sm font-semibold tracking-widest uppercase mb-3">O nosso espaço</p>
@@ -248,7 +248,7 @@ export default function HomePage() {
       </section>
 
       {/* ── CONTACTO ── bg-gray-50 ───────────────────────────────────────── */}
-      <section id="contacto" className={`py-24 ${barberShopConfig.theme.sectionMedium}`}>
+      <section id="contacto" className={`py-12 ${barberShopConfig.theme.sectionMedium}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
             <div>

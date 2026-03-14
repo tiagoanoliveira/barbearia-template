@@ -35,7 +35,7 @@ export interface Client {
 }
 
 // ─── Reserva ─────────────────────────────────────────────────────────────────
-export type ReservationStatus = 'pendente' | 'confirmada' | 'concluida' | 'cancelada' | 'faltou'
+export type ReservationStatus = 'confirmada' | 'concluida' | 'cancelada' | 'faltou'
 
 export interface Reservation {
   id: number

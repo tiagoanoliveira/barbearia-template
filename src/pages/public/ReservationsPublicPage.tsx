@@ -306,7 +306,7 @@ export default function ReservationsPublicPage() {
 }
 
 function ReservationCard({ r, onCancel, onEdit }: { r: Reservation; onCancel?: () => void; onEdit?: () => void }) {
-  const canCancel = r.status === 'pendente' || r.status === 'confirmada'
+  const canCancel = r.status === 'confirmada'
   const canEdit   = canCancel
   const dt = parseISO(r.data_hora)
 

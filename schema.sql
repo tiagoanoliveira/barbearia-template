@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS reservas (
   comentario             TEXT,
   nota_privada           TEXT,
   status                 TEXT DEFAULT 'confirmada'
-                           CHECK(status IN ('pendente','confirmada','concluida','cancelada','faltou')),
+                           CHECK(status IN ('confirmada','concluida','cancelada','faltou')),
   criado_em              DATETIME DEFAULT CURRENT_TIMESTAMP,
   atualizado_em          DATETIME DEFAULT CURRENT_TIMESTAMP,
   historico_edicoes      TEXT DEFAULT '[]',

@@ -4,42 +4,6 @@
 
 /* ─── Variáveis CSS ──────────────────────────────────────────────────────────── */
 :root {
-  /* Cor primária: verde */
-  --color-primary-50:  #f0fdf4;
-  --color-primary-100: #dcfce7;
-  --color-primary-200: #bbf7d0;
-  --color-primary-300: #86efac;
-  --color-primary-400: #4ade80;
-  --color-primary-500: #16a34a;
-  --color-primary-600: #15803d;
-  --color-primary-700: #166534;
-  --color-primary-800: #14532d;
-  --color-primary-900: #052e16;
-
-  /* Cor secundária: champanhe/dourado */
-  --color-secondary-50:  #fefdf7;
-  --color-secondary-100: #fdf9e7;
-  --color-secondary-200: #faf0c2;
-  --color-secondary-300: #f5e08a;
-  --color-secondary-400: #ecc94b;
-  --color-secondary-500: #d4a017;
-  --color-secondary-600: #b8860b;
-  --color-secondary-700: #956c09;
-  --color-secondary-800: #6b4d07;
-  --color-secondary-900: #3d2c04;
-
-  /* Alias brand → primary (mantém compatibilidade com classes Tailwind brand-*) */
-  --color-brand-50:  var(--color-primary-50);
-  --color-brand-100: var(--color-primary-100);
-  --color-brand-200: var(--color-primary-200);
-  --color-brand-300: var(--color-primary-300);
-  --color-brand-400: var(--color-primary-400);
-  --color-brand-500: var(--color-primary-500);
-  --color-brand-600: var(--color-primary-600);
-  --color-brand-700: var(--color-primary-700);
-  --color-brand-800: var(--color-primary-800);
-  --color-brand-900: var(--color-primary-900);
-
   --sidebar-width:  260px;
   --header-height:  64px;
 
@@ -134,7 +98,6 @@
   }
 
   .badge           { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
-  .badge-pending   { @apply badge bg-yellow-100  text-yellow-800; }
   .badge-confirmed { @apply badge bg-blue-100    text-blue-800; }
   .badge-completed { @apply badge bg-green-100   text-green-800; }
   .badge-cancelled { @apply badge bg-red-100     text-red-800; }

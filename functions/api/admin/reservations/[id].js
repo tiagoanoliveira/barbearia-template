@@ -2,7 +2,7 @@ import { authenticateAdmin } from '../../../utils/auth.js'
 import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from '../../../utils/response.js'
 import { sanitize } from '../../../utils/validators.js'
 
-const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou', 'pendente']
+const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou']
 
 export async function onRequest(context) {
   const { request, env, params } = context

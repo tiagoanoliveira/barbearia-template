@@ -17,7 +17,6 @@ import type { Reservation, ReservationStatus, Service } from '@/types'
 
 const STATUS_OPTIONS = [
   { value: '',           label: 'Todos os estados' },
-  { value: 'pendente',   label: 'Pendentes' },
   { value: 'confirmada', label: 'Confirmadas' },
   { value: 'concluida',  label: 'Concluídas' },
   { value: 'cancelada',  label: 'Canceladas' },
@@ -25,9 +24,9 @@ const STATUS_OPTIONS = [
 ]
 const STATUS_LABEL: Record<string, string> = {
   confirmada: 'Confirmada', concluida: 'Concluída', cancelada: 'Cancelada',
-  faltou: 'Não compareceu', pendente: 'Pendente',
+  faltou: 'Não compareceu',
 }
-const VALID_STATUSES = ['pendente', 'confirmada', 'concluida', 'cancelada', 'faltou'] as const
+const VALID_STATUSES = ['confirmada', 'concluida', 'cancelada', 'faltou'] as const
 
 function EditReservationModal({
   reservation, onClose,
@@ -231,11 +230,7 @@ export default function ReservationsPage() {
                     <td className="px-5 py-3"><StatusBadge status={r.status} /></td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        {r.status === 'pendente' && (
-                          <button onClick={() => updateStatus.mutate({ id: r.id, status: 'confirmada' })}
-                            className="text-xs font-medium text-blue-600 hover:text-blue-700">Confirmar</button>
-                        )}
-                        {(r.status === 'pendente' || r.status === 'confirmada') && (
+                        {(r.status === 'confirmada') && (
                           <button onClick={() => updateStatus.mutate({ id: r.id, status: 'concluida' })}
                             className="text-xs font-medium text-emerald-600 hover:text-emerald-700">Concluir</button>
                         )}

@@ -10,10 +10,10 @@ faz o hash e bundling automático.
 src/media/
   images/
     background-email.png   → fundo dos emails transacionais
-    cliente-corte.png      → foto da secção About na homepage
+    cliente-corte.png      
     corte-barba-detalhe.jpg
     corte-cabelo-detalhe.png
-    Resultado.jpg          → usada na galeria
+    Resultado.jpg          → foto da secção About na homepage
     brooklyn/
       Cadeiras.jpg         → galeria
       Entrada.jpg          → galeria (destaque)
