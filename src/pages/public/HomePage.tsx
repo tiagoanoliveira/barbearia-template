@@ -7,6 +7,25 @@ import { barberShopConfig } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
 import type { Service, Barber } from '@/types'
 
+// Importa os assets estáticos directamente do repo — Vite trata do hash/bundle
+import heroVideo   from '@/media/video/presentation.mp4'
+import aboutImg    from '@/media/images/cliente-corte.png'
+import galleryImg1 from '@/media/images/brooklyn/Entrada.jpg'
+import galleryImg2 from '@/media/images/brooklyn/Cadeiras.jpg'
+import galleryImg3 from '@/media/images/brooklyn/Sinuca.jpg'
+import galleryImg4 from '@/media/images/corte-barba-detalhe.jpg'
+import galleryImg5 from '@/media/images/corte-cabelo-detalhe.png'
+import galleryImg6 from '@/media/images/Resultado.jpg'
+
+const galleryImages = [
+  { src: galleryImg1, alt: 'Entrada da barbearia' },
+  { src: galleryImg2, alt: 'Cadeiras' },
+  { src: galleryImg3, alt: 'Mesa de sinuca' },
+  { src: galleryImg4, alt: 'Detalhe de corte de barba' },
+  { src: galleryImg5, alt: 'Detalhe de corte de cabelo' },
+  { src: galleryImg6, alt: 'Resultado final' },
+]
+
 export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -27,15 +46,52 @@ export default function HomePage() {
     <div className="text-white">
 
       {/* ── HERO ─────────────────────────────────────────────── */}
-      <section className="relative h-screen flex items-center justify-center overflow-hidden">
-        <video
-          ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover"
-          autoPlay muted loop playsInline
-          src="/video/video_background_barbeariabrooklyn.mp4"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80" />
+      <section className="relative h-screen flex items-center justify-center overflow-hidden bg-black">
 
+        {/*
+          Técnica de mirror para vídeo vertical em desktop:
+          - Layer 0 (fundo): dois clones espelhados e desfocados nas laterais
+          - Layer 1 (frente): o vídeo principal centrado
+          Nos mobile (< md) apenas o vídeo principal é visível a full-width.
+        */}
+
+        {/* Espelhos laterais — visíveis apenas em desktop */}
+        <div aria-hidden="true" className="hidden md:flex absolute inset-0 w-full h-full">
+          {/* Esquerdo: flip horizontal + blur */}
+          <div className="flex-1 overflow-hidden">
+            <video
+              className="w-full h-full object-cover scale-x-[-1] blur-xl brightness-50"
+              style={{ transform: 'scaleX(-1)', filter: 'blur(20px) brightness(0.45)' }}
+              autoPlay muted loop playsInline
+              src={heroVideo}
+            />
+          </div>
+          {/* Direito: normal + blur */}
+          <div className="flex-1 overflow-hidden">
+            <video
+              className="w-full h-full object-cover blur-xl brightness-50"
+              style={{ filter: 'blur(20px) brightness(0.45)' }}
+              autoPlay muted loop playsInline
+              src={heroVideo}
+            />
+          </div>
+        </div>
+
+        {/* Vídeo principal — centrado, contido em portrait */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <video
+            ref={videoRef}
+            className="h-full w-auto max-w-none md:h-full md:w-auto object-cover"
+            style={{ maxWidth: '100%' }}
+            autoPlay muted loop playsInline
+            src={heroVideo}
+          />
+        </div>
+
+        {/* Gradiente de sobreposição */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/75" />
+
+        {/* Conteúdo */}
         <div className="relative z-10 text-center px-4 max-w-3xl mx-auto">
           <p className="text-brand-400 text-sm font-semibold tracking-widest uppercase mb-4">
             Porto, desde 2018
@@ -69,7 +125,7 @@ export default function HomePage() {
         <a
           href="#about"
           className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col
-                     items-center gap-2 text-gray-400 hover:text-white transition-colors"
+                     items-center gap-2 text-gray-400 hover:text-white transition-colors z-10"
         >
           <span className="text-xs tracking-widest uppercase">Scroll</span>
           <ChevronDown size={20} className="animate-bounce" />
@@ -99,32 +155,38 @@ export default function HomePage() {
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm text-gray-300">
                   <MapPin size={16} className="text-brand-500 flex-shrink-0" />
-                  {barberShopConfig.address}
-                </div>
-                <div className="flex items-center gap-3 text-sm text-gray-300">
-                  <Clock size={16} className="text-brand-500 flex-shrink-0" />
-                  Seg–Sex: 10h–20h &nbsp;·&nbsp; Sáb: 9h–18h
+                  <span>{barberShopConfig.address}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-gray-300">
                   <Phone size={16} className="text-brand-500 flex-shrink-0" />
-                  <a href={`tel:${barberShopConfig.phone}`} className="hover:text-white transition-colors">
+                  <a href={`tel:${barberShopConfig.phone}`} className="hover:text-brand-400 transition-colors">
                     {barberShopConfig.phone}
                   </a>
                 </div>
+                <div className="flex items-center gap-3 text-sm text-gray-300">
+                  <Clock size={16} className="text-brand-500 flex-shrink-0" />
+                  <span>Seg–Sex 10h–20h &nbsp;|&nbsp; Sáb 9h–18h</span>
+                </div>
               </div>
             </div>
+
+            {/* Foto da secção About */}
             <div className="relative">
-              <div className="aspect-[4/5] rounded-3xl overflow-hidden bg-gray-800">
+              <div className="aspect-[4/5] rounded-3xl overflow-hidden">
                 <img
-                  src="/images/Resultado.jpg"
-                  alt="Resultado Brooklyn"
+                  src={aboutImg}
+                  alt="Brooklyn Barbearia — ambiente"
                   className="w-full h-full object-cover"
-                  loading="lazy"
                 />
               </div>
-              <div className="absolute -bottom-6 -left-6 bg-brand-500 rounded-2xl p-4 shadow-xl">
-                <p className="text-white font-black text-3xl leading-none">+300</p>
-                <p className="text-brand-100 text-xs font-medium mt-0.5">avaliações Google</p>
+              <div className="absolute -bottom-4 -left-4 bg-brand-500 rounded-2xl p-4 shadow-xl">
+                <div className="flex items-center gap-2">
+                  <Star size={18} className="text-white fill-white" />
+                  <div>
+                    <p className="text-white font-bold text-sm">4.9 / 5</p>
+                    <p className="text-brand-200 text-xs">+200 avaliações</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -132,180 +194,135 @@ export default function HomePage() {
       </section>
 
       {/* ── SERVIÇOS ─────────────────────────────────────────── */}
-      <section id="servicos" className="py-24 bg-black/20">
+      <section id="servicos" className="py-24 bg-black">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">Preçario</p>
+          <div className="text-center mb-16">
+            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">O que fazemos</p>
             <h2 className="text-4xl font-black text-white">Os nossos serviços</h2>
           </div>
-
-          {services.length === 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="bg-white/5 rounded-2xl p-6 animate-pulse">
-                  <div className="h-5 bg-white/10 rounded mb-3 w-2/3" />
-                  <div className="h-4 bg-white/10 rounded mb-2 w-full" />
-                  <div className="h-4 bg-white/10 rounded w-1/2" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {services.map((s) => (
+              <div key={s.id} className="group relative bg-gray-900 rounded-2xl p-6 border border-gray-800 hover:border-brand-500/50 transition-all duration-300 hover:-translate-y-1">
+                <div className="w-12 h-12 rounded-xl mb-4 flex items-center justify-center"
+                     style={{ backgroundColor: `${(s as unknown as {color?:string}).color ?? '#d4a017'}22` }}>
+                  <span className="text-xl font-black" style={{ color: (s as unknown as {color?:string}).color ?? '#d4a017' }}>
+                    {(s as unknown as {abreviacao?:string}).abreviacao ?? s.name.slice(0,2).toUpperCase()}
+                  </span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {services.map(service => (
-                <div
-                  key={service.id}
-                  className="group relative bg-white/5 hover:bg-white/10 border border-white/10
-                             hover:border-brand-500/40 rounded-2xl p-6 transition-all duration-300
-                             hover:-translate-y-1 cursor-pointer"
-                  onClick={() => window.location.href = ROUTES.BOOKING}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-white font-semibold text-base">{service.name}</h3>
-                    <span className="flex-shrink-0 text-brand-400 font-bold text-lg">
-                      {(service.price / 100).toFixed(0)}€
-                    </span>
-                  </div>
-                  <p className="text-gray-500 text-sm mt-2">
-                    <Clock size={12} className="inline mr-1" />{service.duration} min
-                  </p>
-                  <div className="mt-4 flex items-center gap-1 text-brand-500 text-sm
-                                  font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                    Reservar <ArrowRight size={14} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="text-center mt-10">
-            <Link
-              to={ROUTES.BOOKING}
-              className="inline-flex items-center gap-2 px-8 py-4 bg-brand-500
-                         text-white font-bold rounded-2xl hover:bg-brand-600 transition-all"
-            >
-              Agendar serviço <ArrowRight size={18} />
+                <h3 className="text-white font-bold text-lg mb-2">{s.name}</h3>
+                <p className="text-gray-400 text-sm mb-4">{s.duration} min</p>
+                <p className="text-brand-400 font-black text-2xl">{s.price}€</p>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-12">
+            <Link to={ROUTES.BOOKING}
+              className="inline-flex items-center gap-2 px-8 py-4 bg-brand-500 text-white font-bold rounded-2xl hover:bg-brand-600 transition-all hover:scale-105">
+              Reservar agora <ArrowRight size={18} />
             </Link>
           </div>
         </div>
       </section>
 
-      {/* ── EQUIPA ──────────────────────────────────────────── */}
-      <section id="equipa" className="py-24 bg-gray-950">
+      {/* ── EQUIPA ───────────────────────────────────────────── */}
+      <section className="py-24 bg-gray-950">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">Profissionais</p>
+          <div className="text-center mb-16">
+            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">Os nossos profissionais</p>
             <h2 className="text-4xl font-black text-white">A nossa equipa</h2>
           </div>
-
-          {barbers.length === 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="bg-white/5 rounded-3xl overflow-hidden animate-pulse">
-                  <div className="aspect-[3/4] bg-white/10" />
-                  <div className="p-5">
-                    <div className="h-5 bg-white/10 rounded w-2/3 mb-2" />
-                    <div className="h-4 bg-white/10 rounded w-1/2" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {barbers.map(barber => (
-                <div key={barber.id}
-                     className="group bg-white/5 rounded-3xl overflow-hidden
-                                hover:bg-white/10 transition-all duration-300 hover:-translate-y-2">
-                  <div className="aspect-[3/4] bg-gray-800 overflow-hidden">
-                    {barber.photo_url ? (
-                      <img src={barber.photo_url} alt={barber.name}
-                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                           loading="lazy" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-6xl font-black text-gray-700">{barber.name.charAt(0)}</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {barbers.map((b) => (
+              <div key={b.id} className="text-center group">
+                <div className="relative w-48 h-48 mx-auto mb-6">
+                  <div className="absolute inset-0 rounded-full" style={{ background: `${b.color ?? '#d4a017'}33` }} />
+                  {b.photo_url
+                    ? <img src={b.photo_url} alt={b.name}
+                           className="relative w-full h-full rounded-full object-cover border-4 border-gray-800 group-hover:border-brand-500 transition-colors" />
+                    : <div className="relative w-full h-full rounded-full border-4 border-gray-800 group-hover:border-brand-500 transition-colors flex items-center justify-center text-5xl font-black"
+                           style={{ color: b.color ?? '#d4a017' }}>
+                        {b.name[0]}
                       </div>
-                    )}
-                  </div>
-                  <div className="p-5">
-                    <h3 className="text-white font-bold text-lg">{barber.name}</h3>
-                    <p className="text-gray-500 text-sm">Barbeiro</p>
-                  </div>
+                  }
                 </div>
-              ))}
-            </div>
-          )}
+                <h3 className="text-white font-bold text-xl">{b.name}</h3>
+                <p className="text-brand-500 text-sm mt-1">{(b as unknown as {especialidades?:string}).especialidades ?? 'Barbeiro'}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ── GALERIA ─────────────────────────────────────────── */}
-      <section id="galeria" className="py-24 bg-black/20">
+      {/* ── GALERIA ──────────────────────────────────────────── */}
+      <section className="py-24 bg-black">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">Espaço</p>
-            <h2 className="text-4xl font-black text-white">O nosso espaço</h2>
+          <div className="text-center mb-16">
+            <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">O nosso espaço</p>
+            <h2 className="text-4xl font-black text-white">Galeria</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className="col-span-2 md:col-span-1 row-span-2">
-              <div className="h-full rounded-3xl overflow-hidden bg-gray-800 min-h-[300px]">
-                <img src="/images/brooklyn/Cadeiras.jpg" alt="Cadeiras"
-                     className="w-full h-full object-cover" loading="lazy" />
+            {galleryImages.map((img, i) => (
+              <div key={i} className={`overflow-hidden rounded-2xl ${ i === 0 ? 'col-span-2 md:col-span-1 md:row-span-2' : '' }`}>
+                <img
+                  src={img.src}
+                  alt={img.alt}
+                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                  style={{ minHeight: i === 0 ? '320px' : '200px' }}
+                />
               </div>
-            </div>
-            <div className="aspect-square rounded-3xl overflow-hidden bg-gray-800">
-              <img src="/images/brooklyn/Entrada.jpg" alt="Entrada"
-                   className="w-full h-full object-cover" loading="lazy" />
-            </div>
-            <div className="aspect-square rounded-3xl overflow-hidden bg-gray-800">
-              <img src="/images/brooklyn/Sinuca.jpg" alt="Interior"
-                   className="w-full h-full object-cover" loading="lazy" />
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── REVIEWS ─────────────────────────────────────────── */}
+      {/* ── LOCALIZAÇÃO ──────────────────────────────────────── */}
       <section className="py-24 bg-gray-950">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <div className="inline-flex items-center gap-4 bg-white/5 border border-white/10
-                          rounded-2xl px-8 py-6 mb-8">
-            <img src="/images/google_favicon_2025.png" alt="Google" className="w-8 h-8" />
-            <div className="text-left">
-              <div className="flex items-center gap-2">
-                <span className="text-white font-black text-3xl">4.8</span>
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} size={18}
-                          className={i < 4 ? 'fill-brand-500 text-brand-500' : 'fill-brand-500/40 text-brand-500/40'} />
-                  ))}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <p className="text-brand-500 text-sm font-semibold tracking-widest uppercase mb-3">Onde estamos</p>
+              <h2 className="text-4xl font-black text-white mb-6">Encontra-nos</h2>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <MapPin size={18} className="text-brand-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-white font-medium">Morada</p>
+                    <p className="text-gray-400 text-sm">{barberShopConfig.address}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Clock size={18} className="text-brand-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-white font-medium">Horário</p>
+                    <p className="text-gray-400 text-sm">Segunda a Sexta: 10h–20h</p>
+                    <p className="text-gray-400 text-sm">Sábado: 9h–18h</p>
+                    <p className="text-gray-400 text-sm">Domingo: Fechado</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Phone size={18} className="text-brand-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-white font-medium">Telefone</p>
+                    <a href={`tel:${barberShopConfig.phone}`} className="text-brand-400 hover:text-brand-300 transition-colors text-sm">
+                      {barberShopConfig.phone}
+                    </a>
+                  </div>
                 </div>
               </div>
-              <p className="text-gray-500 text-sm">Baseado em +300 avaliações Google</p>
+            </div>
+            <div className="rounded-3xl overflow-hidden h-80 bg-gray-800">
+              <iframe
+                title="Localização"
+                src={`https://maps.google.com/maps?q=${encodeURIComponent(barberShopConfig.address)}&output=embed`}
+                width="100%" height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+              />
             </div>
           </div>
-          <p className="text-gray-400 text-lg mb-8">A satisfação dos clientes é a nossa maior recompensa.</p>
-          <a href="https://g.page/r/review" target="_blank" rel="noopener noreferrer"
-             className="inline-flex items-center gap-2 px-8 py-4 bg-white/10
-                        text-white font-semibold rounded-2xl hover:bg-white/20 transition-all">
-            Deixar avaliação <ArrowRight size={18} />
-          </a>
         </div>
       </section>
 
-      {/* ── CTA FINAL ───────────────────────────────────────── */}
-      <section className="py-24 bg-brand-500">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <h2 className="text-4xl font-black text-white mb-4">Pronto para o próximo corte?</h2>
-          <p className="text-brand-100 text-lg mb-10">Reserva online em menos de 2 minutos.</p>
-          <Link
-            to={ROUTES.BOOKING}
-            className="inline-flex items-center gap-2 px-10 py-5 bg-white text-brand-600
-                       font-black rounded-2xl hover:bg-brand-50 transition-all text-lg
-                       shadow-2xl shadow-black/20"
-          >
-            Fazer reserva <ArrowRight size={22} />
-          </Link>
-        </div>
-      </section>
     </div>
   )
 }

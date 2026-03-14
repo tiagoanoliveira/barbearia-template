@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Brand colours (injectadas pelo ThemeProvider) ─────────────────────── */
+/* ─── Brand colours ──────────────────────────────────────────────────────── */
 :root {
   --color-brand-50:  #fefdf7;
   --color-brand-100: #fdf9e7;
@@ -17,10 +17,8 @@
 
   --sidebar-width:  260px;
   --header-height:  64px;
-}
 
-/* ─── Superfícies semânticas — LIGHT (default) ───────────────────────────── */
-:root {
+  /* Superfícies — SEMPRE claras, dark mode removido */
   --surface:        #ffffff;
   --surface-subtle: #f9fafb;
   --surface-raised: #f3f4f6;
@@ -32,46 +30,14 @@
   --border:         #e5e7eb;
 }
 
-/* ─── Superfícies semânticas — DARK ─────────────────────────────────────── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface:        #1f2937;
-    --surface-subtle: #111827;
-    --surface-raised: #374151;
-
-    --text:           #f9fafb;
-    --text-muted:     #9ca3af;
-    --text-subtle:    #6b7280;
-
-    --border:         #374151;
-  }
-}
-
-/* ─── O painel admin é SEMPRE claro ─────────────────────────────────────── */
-/* A classe .admin-root é colocada no AdminLayout wrapper */
-@media (prefers-color-scheme: dark) {
-  .admin-root {
-    --surface:        #ffffff;
-    --surface-subtle: #f9fafb;
-    --surface-raised: #f3f4f6;
-
-    --text:           #111827;
-    --text-muted:     #6b7280;
-    --text-subtle:    #9ca3af;
-
-    --border:         #e5e7eb;
-  }
-}
-
 /* ─── Base ───────────────────────────────────────────────────────────────── */
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
 
   html {
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    color-scheme: light; /* força light mesmo em SO em modo escuro */
   }
 
   body {
@@ -79,7 +45,6 @@
     color: var(--text);
   }
 
-  /* Scrollbar — adapta ao tema */
   ::-webkit-scrollbar       { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
@@ -91,23 +56,21 @@
   }
 }
 
-/* ─── Componentes partilhados (usados em admin + public) ─────────────────── */
+/* ─── Componentes partilhados ────────────────────────────────────────────── */
 @layer components {
 
-  /* Card — light/dark automático via variáveis */
   .card {
     background-color: var(--surface);
     border-color: var(--border);
     @apply rounded-2xl shadow-card border;
   }
 
-  /* Inputs */
   .input {
-    background-color: var(--surface);
+    background-color: #ffffff;
     border-color: var(--border);
-    color: var(--text);
+    color: #111827;
     @apply w-full px-3 py-2 rounded-xl text-sm
-           placeholder:text-[var(--text-subtle)]
+           placeholder:text-gray-400
            focus:outline-none focus:ring-2
            focus:ring-brand-500 focus:border-transparent
            transition-shadow border;
@@ -118,7 +81,6 @@
     @apply block text-sm font-medium mb-1;
   }
 
-  /* Botões */
   .btn-primary {
     @apply inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white
            font-medium rounded-xl hover:bg-brand-600 active:bg-brand-700
@@ -126,14 +88,14 @@
   }
 
   .btn-secondary {
-    background-color: var(--surface-raised);
-    color: var(--text-muted);
+    background-color: #f3f4f6;
+    color: #6b7280;
     @apply inline-flex items-center gap-2 px-4 py-2
            font-medium rounded-xl
            transition-colors duration-150;
   }
   .btn-secondary:hover {
-    background-color: var(--border);
+    background-color: #e5e7eb;
   }
 
   .btn-danger {
@@ -142,7 +104,6 @@
            transition-colors duration-150;
   }
 
-  /* Badges */
   .badge           { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
   .badge-pending   { @apply badge bg-yellow-100  text-yellow-800; }
   .badge-confirmed { @apply badge bg-blue-100    text-blue-800; }

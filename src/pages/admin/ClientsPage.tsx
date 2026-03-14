@@ -11,6 +11,33 @@ import EmptyState from '@/components/ui/EmptyState'
 import Modal from '@/components/ui/Modal'
 import type { Client } from '@/types'
 
+function ClientAvatar({ client, size = 8 }: { client: Client; size?: number }) {
+  const sizeClass = `w-${size} h-${size}`
+  if ((client as unknown as { foto_perfil?: string }).foto_perfil) {
+    return (
+      <img
+        src={(client as unknown as { foto_perfil: string }).foto_perfil}
+        alt={client.name}
+        className={`${sizeClass} rounded-xl object-cover flex-shrink-0`}
+        onError={e => {
+          // fallback para inicial se a imagem falhar
+          const target = e.currentTarget
+          target.style.display = 'none'
+          const parent = target.parentElement
+          if (parent) {
+            parent.innerHTML = `<div class="${sizeClass} bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0"><span class="text-brand-700 font-semibold text-xs">${client.name.charAt(0).toUpperCase()}</span></div>`
+          }
+        }}
+      />
+    )
+  }
+  return (
+    <div className={`${sizeClass} bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0`}>
+      <span className="text-brand-700 font-semibold text-xs">{client.name.charAt(0).toUpperCase()}</span>
+    </div>
+  )
+}
+
 function FidelityStamps({ count }: { count: number }) {
   const stamps = (count ?? 0) % 10
   const full   = Math.floor((count ?? 0) / 10)
@@ -113,6 +140,15 @@ function ClientDetailModal({ client, onClose }: { client: Client; onClose: () =>
         </div>
       ) : (
         <div className="space-y-4 text-sm">
+          {/* Avatar grande no topo do modal */}
+          <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
+            <ClientAvatar client={client} size={16} />
+            <div>
+              <p className="font-semibold text-gray-900 text-base">{client.name}</p>
+              {client.email && <p className="text-xs text-gray-500">{client.email}</p>}
+            </div>
+          </div>
+
           <section>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contactos</p>
             <div className="space-y-1.5">
@@ -238,9 +274,7 @@ export default function ClientsPage() {
                   <tr key={c.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelected(c)}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 bg-brand-100 rounded-xl flex items-center justify-center">
-                          <span className="text-brand-700 font-semibold text-xs">{c.name.charAt(0).toUpperCase()}</span>
-                        </div>
+                        <ClientAvatar client={c} size={8} />
                         <div>
                           <p className="font-medium text-gray-900">{c.name}</p>
                           {c.email && <p className="text-xs text-gray-400 md:hidden">{c.email}</p>}
