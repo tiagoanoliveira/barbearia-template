@@ -2,7 +2,6 @@ import type { Config } from 'tailwindcss'
 
 export default {
   content: ['./src/**/*.{ts,tsx}', './index.html'],
-  darkMode: false,  // dark mode desligado globalmente
   theme: {
     extend: {
       colors: {
@@ -48,6 +47,9 @@ export default {
       },
       boxShadow: {
         card: '0 1px 3px 0 rgb(0 0 0 / .07), 0 1px 2px -1px rgb(0 0 0 / .07)',
+      },
+      screens: {
+        'xs': '30rem',
       },
     },
   },

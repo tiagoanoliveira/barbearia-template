@@ -97,7 +97,7 @@ function ServiceCard({ service }: { service: Service }) {
 
       <h3 className="text-gray-900 font-bold text-lg mb-1">{service.name}</h3>
       <p className="text-gray-500 text-sm mb-4">{service.duration} min</p>
-      <p className="font-black text-2xl text-primary-800">{service.price}€</p>
+      <p className="font-black text-2xl text-primary-700">{service.price}€</p>
     </div>
   )
 }
@@ -119,7 +119,7 @@ export default function HomePage() {
     <div>
 
       {/* ── HERO ────────────────────────────────────────────────────────── */}
-      <section className="relative h-screen flex items-center justify-center overflow-hidden bg-black">
+      <section className="relative h-100dvh flex items-center justify-center overflow-hidden bg-black">
         <div aria-hidden="true" className="hidden md:flex absolute inset-0 w-full h-full">
           <div className="flex-1 overflow-hidden">
             <video className="w-full h-full object-cover"
@@ -138,14 +138,14 @@ export default function HomePage() {
         </div>
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/75" />
         <div className="absolute bottom-20 left-0 right-0 z-10 text-center px-4 max-w-3xl mx-auto text-white">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col xs:flex-row items-center justify-center gap-4">
+            <a href="#servicos" className="flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-semibold rounded-2xl hover:bg-white/20 transition-all backdrop-blur-sm text-base">
+              Ver serviços
+            </a>
             <Link to={ROUTES.BOOKING}
               className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white font-bold rounded-2xl hover:bg-primary-600 transition-all hover:scale-105 text-base shadow-lg">
               Reservar agora <ArrowRight size={18} />
             </Link>
-            <a href="#servicos" className="flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-semibold rounded-2xl hover:bg-white/20 transition-all backdrop-blur-sm text-base">
-              Ver serviços
-            </a>
           </div>
         </div>
         <a href="#about" className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors z-10">
