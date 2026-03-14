@@ -11,11 +11,10 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Modal from '@/components/ui/Modal'
 import type { Reservation, Barber, Unavailable, UnavailableTipo } from '@/types'
 
-// ── constantes ───────────────────────────────────────────────────────────────
-const SLOT_H  = 48           // px por slot (30 min)
-const START_H = 8            // hora de início visível
-const END_H   = 21           // hora de fim visível
-const TOTAL_SLOTS = (END_H - START_H) * 2  // slots de 30 min
+const SLOT_H  = 48
+const START_H = 8
+const END_H   = 21
+const TOTAL_SLOTS = (END_H - START_H) * 2
 
 const TIPO_ICON: Record<UnavailableTipo, string> = {
   folga:    '✈️',
@@ -48,12 +47,9 @@ const STATUS_LABEL: Record<string, string> = {
   faltou:     'Não compareceu',
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
 function timeToSlot(iso: string): number {
   const d = new Date(iso)
-  const h = d.getHours()
-  const m = d.getMinutes()
-  return (h - START_H) * 2 + (m >= 30 ? 1 : 0)
+  return (d.getHours() - START_H) * 2 + (d.getMinutes() >= 30 ? 1 : 0)
 }
 
 function slotToLabel(slot: number): string {
@@ -77,7 +73,6 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r},${g},${b},${alpha})`
 }
 
-// ── tipos locais ─────────────────────────────────────────────────────────────
 type ContextTarget =
   | { kind: 'slot';         barberId: number; slot: number }
   | { kind: 'reservation';  reservation: Reservation }
@@ -93,7 +88,6 @@ type ModalState =
 const TIPO_OPTIONS: UnavailableTipo[] = ['folga', 'ferias', 'almoco', 'ausencia', 'outro']
 const VALID_STATUSES = ['pendente', 'confirmada', 'concluida', 'cancelada', 'faltou']
 
-// ─────────────────────────────────────────────────────────────────────────────
 export default function CalendarPage() {
   const qc = useQueryClient()
 
@@ -108,18 +102,13 @@ export default function CalendarPage() {
   const barberFilter = isBarber && adminUser.barbeiro_id ? adminUser.barbeiro_id : null
 
   const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'))
-
-  // menu de contexto
-  const [ctx, setCtx]   = useState<ContextTarget | null>(null)
+  const [ctx, setCtx]       = useState<ContextTarget | null>(null)
   const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 })
-  // modal activo
-  const [modal, setModal] = useState<ModalState>(null)
-  // form do modal de indisponibilidade
-  const [uForm, setUForm] = useState<Partial<Unavailable> & { recurrence_end_date?: string }>({})
+  const [modal, setModal]   = useState<ModalState>(null)
+  const [uForm, setUForm]   = useState<Partial<Unavailable> & { recurrence_end_date?: string }>({})
   const [uError, setUError] = useState<string | null>(null)
-  const [uSaving, setUSaving] = useState(false)
-  // form de status
-  const [newStatus, setNewStatus] = useState('')
+  const [uSaving, setUSaving]         = useState(false)
+  const [newStatus, setNewStatus]     = useState('')
   const [statusSaving, setStatusSaving] = useState(false)
 
   const gridRef = useRef<HTMLDivElement>(null)
@@ -134,14 +123,12 @@ export default function CalendarPage() {
     queryFn:  () => barbersApi.listUnavailable({ date: selectedDate }),
   })
 
-  const allBarbers: Barber[]      = barbersRes?.data ?? []
-  const barbers: Barber[]         = barberFilter ? allBarbers.filter(b => b.id === barberFilter) : allBarbers
-  const reservations: Reservation[] = resRes?.data?.items ?? []
-  const unavailable: Unavailable[]  = (uRes?.data as unknown as Unavailable[]) ?? []
-
+  const allBarbers: Barber[]         = barbersRes?.data ?? []
+  const barbers: Barber[]            = barberFilter ? allBarbers.filter(b => b.id === barberFilter) : allBarbers
+  const reservations: Reservation[]  = resRes?.data?.items ?? []
+  const unavailable: Unavailable[]   = (uRes?.data as unknown as Unavailable[]) ?? []
   const isLoading = loadingRes || loadingU
 
-  // ── navegação ──────────────────────────────────────────────────────────────
   const changeDate = useCallback((delta: number) => {
     setSelectedDate(d => {
       const dt = new Date(d + 'T12:00:00')
@@ -150,61 +137,43 @@ export default function CalendarPage() {
     })
   }, [])
 
-  // ── context menu ──────────────────────────────────────────────────────────
   const openCtx = (e: React.MouseEvent, target: ContextTarget) => {
-    e.preventDefault()
-    e.stopPropagation()
+    e.preventDefault(); e.stopPropagation()
     setCtx(target)
     setCtxPos({ x: e.clientX, y: e.clientY })
   }
   const closeCtx = () => setCtx(null)
 
-  // ── ações do context menu ─────────────────────────────────────────────────
   const openNewReservation = (barberId: number, slot: number) => {
-    // Redireciona para a página de nova reserva (ou abre modal — por ora abre detalhe como placeholder)
     const iso = slotToISO(selectedDate, slot)
     alert(`TODO: abrir modal nova reserva para barbeiro ${barberId} às ${iso.substring(11, 16)}`)
     closeCtx()
   }
 
   const openReservationDetail = (r: Reservation) => {
-    setModal({ type: 'reservation_detail', reservation: r })
-    closeCtx()
+    setModal({ type: 'reservation_detail', reservation: r }); closeCtx()
   }
 
   const openStatusChange = (r: Reservation) => {
     setNewStatus(r.status)
-    setModal({ type: 'reservation_status', reservation: r })
-    closeCtx()
+    setModal({ type: 'reservation_status', reservation: r }); closeCtx()
   }
 
   const openNewUnavailable = (barberId: number, slot: number) => {
     const startISO = slotToISO(selectedDate, slot)
-    const endISO   = slotToISO(selectedDate, slot + 2)  // +1h (2 slots de 30min)
-    setUForm({
-      barbeiro_id:      barberId,
-      data_hora_inicio: startISO,
-      data_hora_fim:    endISO,
-      is_all_day:       0,
-      tipo:             'folga',
-      motivo:           '',
-      recurrence_type:  'none',
-    })
+    const endISO   = slotToISO(selectedDate, slot + 2)
+    setUForm({ barbeiro_id: barberId, data_hora_inicio: startISO, data_hora_fim: endISO,
+               is_all_day: 0, tipo: 'folga', motivo: '', recurrence_type: 'none' })
     setUError(null)
-    setModal({ type: 'unavailable_form', data: {}, isNew: true })
-    closeCtx()
+    setModal({ type: 'unavailable_form', data: {}, isNew: true }); closeCtx()
   }
 
   const openEditUnavailable = (u: Unavailable) => {
-    setUForm({ ...u })
-    setUError(null)
-    // Se pertence a grupo, perguntar se edita individual ou grupo
-    if (u.recurrence_group_id) {
-      setModal({ type: 'unavailable_group', unavailable: u })
-    } else {
-      setModal({ type: 'unavailable_form', data: u, isNew: false })
-    }
-    closeCtx()
+    setUForm({ ...u }); setUError(null)
+    setModal(u.recurrence_group_id
+      ? { type: 'unavailable_group', unavailable: u }
+      : { type: 'unavailable_form',  data: u, isNew: false }
+    ); closeCtx()
   }
 
   const handleDeleteUnavailable = async (u: Unavailable, deleteGroup = false) => {
@@ -220,45 +189,28 @@ export default function CalendarPage() {
   }
 
   const handleSaveUnavailable = async () => {
-    if (!uForm.barbeiro_id) { setUError('Barbeiro obrigatório'); return }
-    if (!uForm.data_hora_inicio) { setUError('Data de início obrigatória'); return }
-    if (!uForm.data_hora_fim)    { setUError('Data de fim obrigatória'); return }
+    if (!uForm.barbeiro_id)       { setUError('Barbeiro obrigatório'); return }
+    if (!uForm.data_hora_inicio)  { setUError('Data de início obrigatória'); return }
+    if (!uForm.data_hora_fim)     { setUError('Data de fim obrigatória'); return }
     if (uForm.data_hora_fim <= uForm.data_hora_inicio) { setUError('Data de fim deve ser posterior ao início'); return }
-
-    setUSaving(true)
-    setUError(null)
+    setUSaving(true); setUError(null)
     try {
       const isNew = modal && 'isNew' in modal ? modal.isNew : false
-      if (isNew || !uForm.id) {
-        await barbersApi.createUnavailable(uForm as Unavailable)
-      } else {
-        await barbersApi.updateUnavailable(uForm.id, uForm as Unavailable)
-      }
-      qc.invalidateQueries({ queryKey: ['cal-unavail'] })
-      setModal(null)
-    } catch (e: any) {
-      setUError(e.message ?? 'Erro ao guardar')
-    } finally {
-      setUSaving(false)
-    }
+      if (isNew || !uForm.id) await barbersApi.createUnavailable(uForm as Unavailable)
+      else                    await barbersApi.updateUnavailable(uForm.id, uForm as Unavailable)
+      qc.invalidateQueries({ queryKey: ['cal-unavail'] }); setModal(null)
+    } catch (e: any) { setUError(e.message ?? 'Erro ao guardar') }
+    finally { setUSaving(false) }
   }
 
   const handleSaveGroupUnavailable = async () => {
     if (!uForm.recurrence_group_id) return
-    setUSaving(true)
-    setUError(null)
+    setUSaving(true); setUError(null)
     try {
-      await barbersApi.updateGroup(uForm.recurrence_group_id, {
-        type:   uForm.tipo,
-        reason: uForm.motivo,
-      })
-      qc.invalidateQueries({ queryKey: ['cal-unavail'] })
-      setModal(null)
-    } catch (e: any) {
-      setUError(e.message ?? 'Erro ao guardar grupo')
-    } finally {
-      setUSaving(false)
-    }
+      await barbersApi.updateGroup(uForm.recurrence_group_id, { type: uForm.tipo, reason: uForm.motivo })
+      qc.invalidateQueries({ queryKey: ['cal-unavail'] }); setModal(null)
+    } catch (e: any) { setUError(e.message ?? 'Erro ao guardar grupo') }
+    finally { setUSaving(false) }
   }
 
   const handleSaveStatus = async () => {
@@ -266,14 +218,10 @@ export default function CalendarPage() {
     setStatusSaving(true)
     try {
       await reservationsApi.updateStatus(modal.reservation.id, newStatus as Reservation['status'])
-      qc.invalidateQueries({ queryKey: ['cal-reservations'] })
-      setModal(null)
-    } catch {} finally {
-      setStatusSaving(false)
-    }
+      qc.invalidateQueries({ queryKey: ['cal-reservations'] }); setModal(null)
+    } catch {} finally { setStatusSaving(false) }
   }
 
-  // ── render de slots ────────────────────────────────────────────────────────
   const timeSlots = Array.from({ length: TOTAL_SLOTS }, (_, i) => i)
 
   const dateLabel = useMemo(() => {
@@ -281,7 +229,6 @@ export default function CalendarPage() {
     catch { return selectedDate }
   }, [selectedDate])
 
-  // Índices rápidos
   const resByBarberSlot = useMemo(() => {
     const map = new Map<string, Reservation[]>()
     reservations.forEach(r => {
@@ -310,13 +257,11 @@ export default function CalendarPage() {
     return barberU.find(u => u.data_hora_inicio < slotEnd && u.data_hora_fim > slotISO) ?? null
   }
 
-  if (isLoading) {
-    return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
-  }
+  if (isLoading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
 
   return (
     <div className="space-y-3" onClick={closeCtx}>
-      {/* ── cabeçalho ─────────────────────────────────────────────────────── */}
+      {/* cabeçalho */}
       <Card padding="sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -333,14 +278,11 @@ export default function CalendarPage() {
             <button
               onClick={() => setSelectedDate(format(new Date(), 'yyyy-MM-dd'))}
               className="text-xs px-2 py-1 bg-brand-50 text-brand-700 rounded-lg hover:bg-brand-100 transition-colors"
-            >
-              Hoje
-            </button>
+            >Hoje</button>
           </div>
           <div className="flex items-center gap-3">
             <input
-              type="date"
-              value={selectedDate}
+              type="date" value={selectedDate}
               onChange={e => setSelectedDate(e.target.value)}
               className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white
                          focus:outline-none focus:ring-2 focus:ring-brand-400"
@@ -357,7 +299,7 @@ export default function CalendarPage() {
         </div>
       </Card>
 
-      {/* ── grid ─────────────────────────────────────────────────────────── */}
+      {/* grid */}
       <Card padding="none">
         <div className="overflow-x-auto">
           <div
@@ -368,7 +310,6 @@ export default function CalendarPage() {
               minWidth: 3 * 16 + barbers.length * 140,
             }}
           >
-            {/* ── cabeçalho colunas ── */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-100 h-10" />
             {barbers.map(b => (
               <div
@@ -380,31 +321,24 @@ export default function CalendarPage() {
               </div>
             ))}
 
-            {/* ── slots ── */}
             {timeSlots.map(slot => (
               <>
-                {/* rótulo de hora */}
                 <div
                   key={`t_${slot}`}
                   className="border-b border-gray-50 flex items-center justify-end pr-2"
                   style={{ height: SLOT_H }}
                 >
-                  {slot % 2 === 0 && (
-                    <span className="text-[10px] text-gray-400">{slotToLabel(slot)}</span>
-                  )}
+                  {slot % 2 === 0 && <span className="text-[10px] text-gray-400">{slotToLabel(slot)}</span>}
                 </div>
 
-                {/* colunas por barbeiro */}
                 {barbers.map(b => {
                   const blocked = isSlotBlocked(b.id, slot)
                   const key     = `${b.id}_${slot}`
                   const rList   = resByBarberSlot.get(key) ?? []
 
-                  // slot bloqueado por indisponibilidade
                   if (blocked) {
                     const isFirst = blocked.data_hora_inicio === slotToISO(selectedDate, slot)
                       || (slot === 0 && new Date(blocked.data_hora_inicio) <= new Date(slotToISO(selectedDate, 0)))
-
                     return (
                       <div
                         key={key}
@@ -412,12 +346,10 @@ export default function CalendarPage() {
                         style={{
                           height: SLOT_H,
                           background: hexToRgba(b.color ?? '#d4a017', 0.08),
-                          backgroundImage: `repeating-linear-gradient(
-                            135deg,
+                          backgroundImage: `repeating-linear-gradient(135deg,
                             ${hexToRgba(b.color ?? '#d4a017', 0.12)} 0px,
                             ${hexToRgba(b.color ?? '#d4a017', 0.12)} 4px,
-                            transparent 4px,
-                            transparent 12px)`,
+                            transparent 4px, transparent 12px)`,
                         }}
                         onClick={e => openCtx(e, { kind: 'unavailable', unavailable: blocked })}
                       >
@@ -433,7 +365,6 @@ export default function CalendarPage() {
                     )
                   }
 
-                  // slot livre
                   if (rList.length === 0) {
                     return (
                       <div
@@ -445,27 +376,18 @@ export default function CalendarPage() {
                     )
                   }
 
-                  // slot com reserva(s)
                   return (
-                    <div
-                      key={key}
-                      className="relative border-b border-l border-gray-100"
-                      style={{ height: SLOT_H }}
-                    >
+                    <div key={key} className="relative border-b border-l border-gray-100" style={{ height: SLOT_H }}>
                       {rList.map(r => {
-                        const color = b.color ?? STATUS_COLORS[r.status] ?? '#888'
-                        const dur   = r.service_duration ?? 60
+                        const color    = b.color ?? STATUS_COLORS[r.status] ?? '#888'
+                        const dur      = r.service_duration ?? 60
                         const heightPx = Math.max(SLOT_H, Math.round((dur / 30) * SLOT_H))
                         return (
                           <div
                             key={r.id}
                             className="absolute inset-x-0.5 top-0 rounded overflow-hidden cursor-pointer text-white
                                        flex flex-col justify-start px-1 py-0.5 z-20"
-                            style={{
-                              background: color,
-                              height: heightPx,
-                              minHeight: SLOT_H,
-                            }}
+                            style={{ background: color, height: heightPx, minHeight: SLOT_H }}
                             onClick={e => openCtx(e, { kind: 'reservation', reservation: r })}
                           >
                             <p className="text-[10px] font-semibold leading-tight truncate">{r.client_name}</p>
@@ -488,7 +410,7 @@ export default function CalendarPage() {
         </div>
       </Card>
 
-      {/* ── context menu ──────────────────────────────────────────────────── */}
+      {/* context menu */}
       {ctx && (
         <div
           className="fixed z-50 bg-white rounded-xl shadow-xl border border-gray-100 py-1 min-w-[180px] text-sm"
@@ -497,14 +419,14 @@ export default function CalendarPage() {
         >
           {ctx.kind === 'slot' && (
             <>
-              <CtxItem label="📅 Nova reserva"         onClick={() => openNewReservation(ctx.barberId, ctx.slot)} />
-              <CtxItem label="🚫 Marcar indisponível"  onClick={() => openNewUnavailable(ctx.barberId, ctx.slot)} />
+              <CtxItem label="📅 Nova reserva"        onClick={() => openNewReservation(ctx.barberId, ctx.slot)} />
+              <CtxItem label="🚫 Marcar indisponível" onClick={() => openNewUnavailable(ctx.barberId, ctx.slot)} />
             </>
           )}
           {ctx.kind === 'reservation' && (
             <>
-              <CtxItem label="👁️ Ver detalhes"         onClick={() => openReservationDetail(ctx.reservation)} />
-              <CtxItem label="🔄 Alterar estado"       onClick={() => openStatusChange(ctx.reservation)} />
+              <CtxItem label="👁️ Ver detalhes"   onClick={() => openReservationDetail(ctx.reservation)} />
+              <CtxItem label="🔄 Alterar estado" onClick={() => openStatusChange(ctx.reservation)} />
             </>
           )}
           {ctx.kind === 'unavailable' && (
@@ -519,51 +441,59 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ── modal detalhe reserva ──────────────────────────────────────────── */}
-      {modal?.type === 'reservation_detail' && (
-        <Modal onClose={() => setModal(null)} title="Detalhe da reserva">
+      {/* modal detalhe reserva */}
+      <Modal
+        open={modal?.type === 'reservation_detail'}
+        onClose={() => setModal(null)}
+        title="Detalhe da reserva"
+      >
+        {modal?.type === 'reservation_detail' ? (
           <ReservationDetail r={modal.reservation} onStatusClick={() => openStatusChange(modal.reservation)} />
-        </Modal>
-      )}
+        ) : <></>}
+      </Modal>
 
-      {/* ── modal alterar estado ───────────────────────────────────────────── */}
-      {modal?.type === 'reservation_status' && (
-        <Modal onClose={() => setModal(null)} title="Alterar estado">
-          <p className="text-sm text-gray-500 mb-4">
-            {modal.reservation.client_name} · {modal.reservation.service_name}
-          </p>
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            {VALID_STATUSES.map(s => (
+      {/* modal alterar estado */}
+      <Modal
+        open={modal?.type === 'reservation_status'}
+        onClose={() => setModal(null)}
+        title="Alterar estado"
+      >
+        {modal?.type === 'reservation_status' ? (
+          <>
+            <p className="text-sm text-gray-500 mb-4">
+              {modal.reservation.client_name} · {modal.reservation.service_name}
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {VALID_STATUSES.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setNewStatus(s)}
+                  className={`py-2 rounded-xl text-xs font-medium border transition-all ${
+                    newStatus === s ? 'border-transparent text-white' : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                  }`}
+                  style={newStatus === s ? { background: STATUS_COLORS[s] } : {}}
+                >{STATUS_LABEL[s]}</button>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setModal(null)} className="btn-secondary text-xs">Cancelar</button>
               <button
-                key={s}
-                onClick={() => setNewStatus(s)}
-                className={`py-2 rounded-xl text-xs font-medium border transition-all ${
-                  newStatus === s
-                    ? 'border-transparent text-white'
-                    : 'border-gray-200 text-gray-700 hover:border-gray-300'
-                }`}
-                style={newStatus === s ? { background: STATUS_COLORS[s] } : {}}
-              >
-                {STATUS_LABEL[s]}
-              </button>
-            ))}
-          </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setModal(null)} className="btn-secondary text-xs">Cancelar</button>
-            <button
-              onClick={handleSaveStatus}
-              disabled={statusSaving || newStatus === modal.reservation.status}
-              className="btn-primary text-xs disabled:opacity-50"
-            >
-              {statusSaving ? 'A guardar...' : 'Guardar'}
-            </button>
-          </div>
-        </Modal>
-      )}
+                onClick={handleSaveStatus}
+                disabled={statusSaving || newStatus === modal.reservation.status}
+                className="btn-primary text-xs disabled:opacity-50"
+              >{statusSaving ? 'A guardar...' : 'Guardar'}</button>
+            </div>
+          </>
+        ) : <></>}
+      </Modal>
 
-      {/* ── modal indisponibilidade (criar / editar singular) ──────────────── */}
-      {modal?.type === 'unavailable_form' && (
-        <Modal onClose={() => setModal(null)} title={modal.isNew ? 'Nova indisponibilidade' : 'Editar indisponibilidade'}>
+      {/* modal indisponibilidade (criar / editar singular) */}
+      <Modal
+        open={modal?.type === 'unavailable_form'}
+        onClose={() => setModal(null)}
+        title={modal?.type === 'unavailable_form' && modal.isNew ? 'Nova indisponibilidade' : 'Editar indisponibilidade'}
+      >
+        {modal?.type === 'unavailable_form' ? (
           <UnavailableForm
             form={uForm}
             barbers={barbers}
@@ -574,102 +504,109 @@ export default function CalendarPage() {
             onSave={handleSaveUnavailable}
             onCancel={() => setModal(null)}
           />
-        </Modal>
-      )}
+        ) : <></>}
+      </Modal>
 
-      {/* ── modal indisponibilidade grupo ──────────────────────────────────── */}
-      {modal?.type === 'unavailable_group' && (
-        <Modal onClose={() => setModal(null)} title="Editar grupo de indisponibilidades">
-          <p className="text-sm text-gray-500 mb-4">
-            Faz parte de uma recorrência ({uForm.recurrence_type}).
-            Escolhe o que pretendes editar.
-          </p>
-          <div className="flex flex-col gap-2 mb-4">
-            <button
-              className="btn-secondary text-sm"
-              onClick={() => setModal({ type: 'unavailable_form', data: uForm as Unavailable, isNew: false })}
-            >
-              ✏️ Editar apenas esta ocorrência
-            </button>
-            <button
-              className="btn-primary text-sm"
-              onClick={() => {
-                setModal(null)
-                setTimeout(() => setModal({ type: 'unavailable_form', data: { ...uForm as Unavailable, id: undefined }, isNew: false }), 10)
-              }}
-            >
-              🔁 Editar tipo/motivo de todo o grupo
-            </button>
-          </div>
-          {uError && <p className="text-xs text-red-500">{uError}</p>}
-          <div className="flex justify-end">
-            <button onClick={() => setModal(null)} className="btn-secondary text-xs">Fechar</button>
-          </div>
-        </Modal>
-      )}
+      {/* modal grupo indisponibilidade */}
+      <Modal
+        open={modal?.type === 'unavailable_group'}
+        onClose={() => setModal(null)}
+        title="Editar grupo de indisponibilidades"
+      >
+        {modal?.type === 'unavailable_group' ? (
+          <>
+            <p className="text-sm text-gray-500 mb-4">
+              Faz parte de uma recorrência ({uForm.recurrence_type}). Escolhe o que pretendes editar.
+            </p>
+            <div className="flex flex-col gap-2 mb-4">
+              <button
+                className="btn-secondary text-sm"
+                onClick={() => setModal({ type: 'unavailable_form', data: uForm as Unavailable, isNew: false })}
+              >✏️ Editar apenas esta ocorrência</button>
+              <button
+                className="btn-primary text-sm"
+                onClick={handleSaveGroupUnavailable}
+              >🔁 Aplicar tipo/motivo a todo o grupo</button>
+            </div>
+            {uForm.tipo !== undefined && (
+              <div className="space-y-3 border-t border-gray-100 pt-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Tipo</label>
+                  <select
+                    value={uForm.tipo ?? 'folga'}
+                    onChange={e => setUForm(f => ({ ...f, tipo: e.target.value as UnavailableTipo }))}
+                    className="input text-sm w-full"
+                  >
+                    {TIPO_OPTIONS.map(t => <option key={t} value={t}>{TIPO_ICON[t]} {TIPO_LABEL[t]}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Motivo</label>
+                  <input
+                    type="text"
+                    value={uForm.motivo ?? ''}
+                    onChange={e => setUForm(f => ({ ...f, motivo: e.target.value }))}
+                    className="input text-sm w-full"
+                  />
+                </div>
+              </div>
+            )}
+            {uError && <p className="text-xs text-red-500 mt-2">{uError}</p>}
+            <div className="flex justify-end mt-3">
+              <button onClick={() => setModal(null)} className="btn-secondary text-xs">Fechar</button>
+            </div>
+          </>
+        ) : <></>}
+      </Modal>
     </div>
   )
 }
 
-// ── sub-componentes ───────────────────────────────────────────────────────────
 function CtxItem({ label, onClick, className = '' }: { label: string; onClick: () => void; className?: string }) {
   return (
-    <button
-      className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${className}`}
-      onClick={onClick}
-    >
+    <button className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${className}`} onClick={onClick}>
       {label}
     </button>
   )
 }
 
 function ReservationDetail({ r, onStatusClick }: { r: Reservation; onStatusClick: () => void }) {
-  const dt = new Date(r.data_hora)
+  const dt    = new Date(r.data_hora)
   const endDt = addMinutes(dt, r.service_duration ?? 60)
   return (
     <div className="space-y-3 text-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-gray-500">Cliente</span>
-        <span className="font-medium">{r.client_name}</span>
-      </div>
-      {r.client_phone && (
-        <div className="flex items-center justify-between">
-          <span className="text-gray-500">Telefone</span>
-          <a href={`tel:${r.client_phone}`} className="font-medium text-brand-600">{r.client_phone}</a>
-        </div>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="text-gray-500">Serviço</span>
-        <span className="font-medium">{r.service_name}</span>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-gray-500">Horário</span>
-        <span className="font-medium">
-          {format(dt, 'HH:mm')} – {format(endDt, 'HH:mm')}
-        </span>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-gray-500">Estado</span>
-        <button
-          onClick={onStatusClick}
-          className="text-xs px-2 py-1 rounded-full text-white font-medium"
-          style={{ background: STATUS_COLORS[r.status] ?? '#888' }}
-        >
+      <Row label="Cliente"  value={r.client_name} />
+      {r.client_phone && <Row label="Telefone" value={<a href={`tel:${r.client_phone}`} className="text-brand-600">{r.client_phone}</a>} />}
+      <Row label="Serviço"  value={r.service_name} />
+      <Row label="Horário"  value={`${format(dt,'HH:mm')} – ${format(endDt,'HH:mm')}`} />
+      <Row label="Estado"   value={
+        <button onClick={onStatusClick} className="text-xs px-2 py-1 rounded-full text-white font-medium"
+          style={{ background: STATUS_COLORS[r.status] ?? '#888' }}>
           {STATUS_LABEL[r.status]}
         </button>
-      </div>
-      {r.comentario && (
-        <div>
-          <p className="text-gray-500 mb-1">Notas do cliente</p>
-          <p className="text-xs bg-gray-50 rounded-lg px-3 py-2 text-gray-700">{r.comentario}</p>
-        </div>
-      )}
-      {r.nota_privada && (
-        <div>
-          <p className="text-gray-500 mb-1">Nota privada</p>
-          <p className="text-xs bg-amber-50 rounded-lg px-3 py-2 text-amber-800">{r.nota_privada}</p>
-        </div>
-      )}
+      } />
+      {r.comentario  && <NoteBox label="Notas do cliente" text={r.comentario}  bg="gray" />}
+      {r.nota_privada && <NoteBox label="Nota privada"     text={r.nota_privada} bg="amber" />}
+    </div>
+  )
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-gray-500">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  )
+}
+
+function NoteBox({ label, text, bg }: { label: string; text: string; bg: 'gray' | 'amber' }) {
+  return (
+    <div>
+      <p className="text-gray-500 mb-1">{label}</p>
+      <p className={`text-xs rounded-lg px-3 py-2 ${
+        bg === 'amber' ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-700'
+      }`}>{text}</p>
     </div>
   )
 }
@@ -692,11 +629,8 @@ function UnavailableForm({ form, barbers, isNew, error, saving, onChange, onSave
       {isNew && (
         <div>
           <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
-          <select
-            value={form.barbeiro_id ?? ''}
-            onChange={e => onChange('barbeiro_id', Number(e.target.value))}
-            className="input text-sm w-full"
-          >
+          <select value={form.barbeiro_id ?? ''} onChange={e => onChange('barbeiro_id', Number(e.target.value))}
+            className="input text-sm w-full">
             <option value="">Selecionar barbeiro</option>
             {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
@@ -704,86 +638,53 @@ function UnavailableForm({ form, barbers, isNew, error, saving, onChange, onSave
       )}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Tipo</label>
-        <select
-          value={form.tipo ?? 'folga'}
-          onChange={e => onChange('tipo', e.target.value)}
-          className="input text-sm w-full"
-        >
+        <select value={form.tipo ?? 'folga'} onChange={e => onChange('tipo', e.target.value)} className="input text-sm w-full">
           {TIPO_OPTIONS.map(t => <option key={t} value={t}>{TIPO_ICON[t]} {TIPO_LABEL[t]}</option>)}
         </select>
       </div>
       <div>
         <label className="block text-xs text-gray-500 mb-1">Motivo (opcional)</label>
-        <input
-          type="text"
-          value={form.motivo ?? ''}
-          onChange={e => onChange('motivo', e.target.value)}
-          placeholder="Ex.: consulta médica"
-          className="input text-sm w-full"
-        />
+        <input type="text" value={form.motivo ?? ''} onChange={e => onChange('motivo', e.target.value)}
+          placeholder="Ex.: consulta médica" className="input text-sm w-full" />
       </div>
       <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="is_all_day"
-          checked={!!form.is_all_day}
-          onChange={e => onChange('is_all_day', e.target.checked ? 1 : 0)}
-        />
+        <input type="checkbox" id="is_all_day" checked={!!form.is_all_day}
+          onChange={e => onChange('is_all_day', e.target.checked ? 1 : 0)} />
         <label htmlFor="is_all_day" className="text-xs text-gray-600">Dia inteiro</label>
       </div>
-      {!form.is_all_day && (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Início</label>
-            <input
-              type="datetime-local"
-              value={fmtLocal(form.data_hora_inicio)}
-              onChange={e => onChange('data_hora_inicio', e.target.value + ':00')}
-              className="input text-xs w-full"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Fim</label>
-            <input
-              type="datetime-local"
-              value={fmtLocal(form.data_hora_fim)}
-              onChange={e => onChange('data_hora_fim', e.target.value + ':00')}
-              className="input text-xs w-full"
-            />
-          </div>
-        </div>
-      )}
       {form.is_all_day ? (
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Data início</label>
-            <input
-              type="date"
-              value={form.data_hora_inicio?.substring(0, 10) ?? ''}
-              onChange={e => onChange('data_hora_inicio', e.target.value + 'T00:00:00')}
-              className="input text-xs w-full"
-            />
+            <input type="date" value={form.data_hora_inicio?.substring(0, 10) ?? ''}
+              onChange={e => onChange('data_hora_inicio', e.target.value + 'T00:00:00')} className="input text-xs w-full" />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Data fim</label>
-            <input
-              type="date"
-              value={form.data_hora_fim?.substring(0, 10) ?? ''}
-              onChange={e => onChange('data_hora_fim', e.target.value + 'T23:59:00')}
-              className="input text-xs w-full"
-            />
+            <input type="date" value={form.data_hora_fim?.substring(0, 10) ?? ''}
+              onChange={e => onChange('data_hora_fim', e.target.value + 'T23:59:00')} className="input text-xs w-full" />
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Início</label>
+            <input type="datetime-local" value={fmtLocal(form.data_hora_inicio)}
+              onChange={e => onChange('data_hora_inicio', e.target.value + ':00')} className="input text-xs w-full" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Fim</label>
+            <input type="datetime-local" value={fmtLocal(form.data_hora_fim)}
+              onChange={e => onChange('data_hora_fim', e.target.value + ':00')} className="input text-xs w-full" />
+          </div>
+        </div>
+      )}
       {isNew && (
         <>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Recorrência</label>
-            <select
-              value={form.recurrence_type ?? 'none'}
-              onChange={e => onChange('recurrence_type', e.target.value)}
-              className="input text-sm w-full"
-            >
+            <select value={form.recurrence_type ?? 'none'} onChange={e => onChange('recurrence_type', e.target.value)}
+              className="input text-sm w-full">
               <option value="none">Sem recorrência</option>
               <option value="daily">Diária</option>
               <option value="weekly">Semanal</option>
@@ -792,12 +693,8 @@ function UnavailableForm({ form, barbers, isNew, error, saving, onChange, onSave
           {form.recurrence_type && form.recurrence_type !== 'none' && (
             <div>
               <label className="block text-xs text-gray-500 mb-1">Até à data</label>
-              <input
-                type="date"
-                value={form.recurrence_end_date ?? ''}
-                onChange={e => onChange('recurrence_end_date', e.target.value)}
-                className="input text-xs w-full"
-              />
+              <input type="date" value={form.recurrence_end_date ?? ''}
+                onChange={e => onChange('recurrence_end_date', e.target.value)} className="input text-xs w-full" />
             </div>
           )}
         </>

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { Search, Users, ChevronRight, X, Phone, Mail, Star } from 'lucide-react'
+import { Search, Users, ChevronRight, Phone, Mail, Star } from 'lucide-react'
 import { format, parseISO, formatDistanceToNow } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
@@ -13,17 +12,12 @@ import Modal from '@/components/ui/Modal'
 import type { Client } from '@/types'
 
 function FidelityStamps({ count }: { count: number }) {
-  const stamps  = (count ?? 0) % 10
-  const full    = Math.floor((count ?? 0) / 10)
+  const stamps = (count ?? 0) % 10
+  const full   = Math.floor((count ?? 0) / 10)
   return (
     <div className="flex items-center gap-1">
       {Array.from({ length: 10 }).map((_, i) => (
-        <span
-          key={i}
-          className={`inline-block w-2 h-2 rounded-full ${
-            i < stamps ? 'bg-brand-500' : 'bg-gray-200'
-          }`}
-        />
+        <span key={i} className={`inline-block w-2 h-2 rounded-full ${i < stamps ? 'bg-brand-500' : 'bg-gray-200'}`} />
       ))}
       {full > 0 && <span className="text-[10px] text-brand-600 font-semibold ml-1">{full}× 🎁</span>}
     </div>
@@ -40,7 +34,7 @@ function ClientDetailModal({ client, onClose }: { client: Client; onClose: () =>
 
   const fmtDate = (iso?: string) => {
     if (!iso) return '—'
-    try { return format(parseISO(iso), "d MMM yyyy", { locale: pt }) } catch { return '—' }
+    try { return format(parseISO(iso), 'd MMM yyyy', { locale: pt }) } catch { return '—' }
   }
   const fmtAgo = (iso?: string) => {
     if (!iso) return null
@@ -48,9 +42,8 @@ function ClientDetailModal({ client, onClose }: { client: Client; onClose: () =>
   }
 
   return (
-    <Modal onClose={onClose} title={client.name}>
+    <Modal open={true} onClose={onClose} title={client.name}>
       <div className="space-y-4 text-sm">
-        {/* Contactos */}
         <section>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contactos</p>
           <div className="space-y-1.5">
@@ -75,7 +68,6 @@ function ClientDetailModal({ client, onClose }: { client: Client; onClose: () =>
           </div>
         </section>
 
-        {/* Fidelização */}
         <section>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fidelização</p>
           <div className="flex items-center gap-3">
@@ -90,7 +82,6 @@ function ClientDetailModal({ client, onClose }: { client: Client; onClose: () =>
           </div>
         </section>
 
-        {/* Reservas */}
         <section>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Reservas</p>
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -110,7 +101,6 @@ function ClientDetailModal({ client, onClose }: { client: Client; onClose: () =>
           </div>
         </section>
 
-        {/* Notas */}
         {client.notes && (
           <section>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Notas</p>
@@ -118,16 +108,12 @@ function ClientDetailModal({ client, onClose }: { client: Client; onClose: () =>
           </section>
         )}
 
-        {/* Datas */}
         <p className="text-xs text-gray-400">Cliente desde {fmtDate(client.created_at)}</p>
 
-        {/* Acções */}
         <div className="flex justify-between items-center pt-2 border-t border-gray-100">
           <button
             onClick={() => {
-              if (window.confirm(`Eliminar o cliente "${client.name}"? Esta acção é irreversível.`)) {
-                deleteM.mutate()
-              }
+              if (window.confirm(`Eliminar o cliente "${client.name}"? Esta acção é irreversível.`)) deleteM.mutate()
             }}
             disabled={deleteM.isPending}
             className="text-xs text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
@@ -142,9 +128,9 @@ function ClientDetailModal({ client, onClose }: { client: Client; onClose: () =>
 }
 
 export default function ClientsPage() {
-  const [search, setSearch]        = useState('')
-  const [page, setPage]            = useState(1)
-  const [selected, setSelected]    = useState<Client | null>(null)
+  const [search, setSearch]     = useState('')
+  const [page, setPage]         = useState(1)
+  const [selected, setSelected] = useState<Client | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['clients', { search, page }],
@@ -158,7 +144,7 @@ export default function ClientsPage() {
 
   const fmtDate = (iso?: string) => {
     if (!iso) return '—'
-    try { return format(parseISO(iso), "d MMM yy", { locale: pt }) } catch { return '—' }
+    try { return format(parseISO(iso), 'd MMM yy', { locale: pt }) } catch { return '—' }
   }
 
   return (
@@ -181,11 +167,8 @@ export default function ClientsPage() {
         {isLoading ? (
           <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
         ) : clients.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="Nenhum cliente encontrado"
-            description="Os clientes aparecem aqui quando fazem a primeira reserva."
-          />
+          <EmptyState icon={Users} title="Nenhum cliente encontrado"
+            description="Os clientes aparecem aqui quando fazem a primeira reserva." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -203,11 +186,7 @@ export default function ClientsPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {clients.map(c => (
-                  <tr
-                    key={c.id}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => setSelected(c)}
-                  >
+                  <tr key={c.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelected(c)}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex-shrink-0 w-8 h-8 bg-brand-100 rounded-xl flex items-center justify-center">
@@ -221,37 +200,26 @@ export default function ClientsPage() {
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
                       <div className="space-y-0.5">
-                        {c.email  && <p className="text-xs text-gray-600 flex items-center gap-1"><Mail size={11} className="text-gray-400" />{c.email}</p>}
-                        {c.phone  && <p className="text-xs text-gray-600 flex items-center gap-1"><Phone size={11} className="text-gray-400" />{c.phone}</p>}
+                        {c.email && <p className="text-xs text-gray-600 flex items-center gap-1"><Mail size={11} className="text-gray-400" />{c.email}</p>}
+                        {c.phone && <p className="text-xs text-gray-600 flex items-center gap-1"><Phone size={11} className="text-gray-400" />{c.phone}</p>}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center hidden sm:table-cell">
                       <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                        (c.reservas_concluidas ?? 0) >= 10
-                          ? 'bg-brand-100 text-brand-700'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {c.reservas_concluidas ?? 0}
-                      </span>
+                        (c.reservas_concluidas ?? 0) >= 10 ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'
+                      }`}>{c.reservas_concluidas ?? 0}</span>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
                       <FidelityStamps count={c.reservas_concluidas ?? 0} />
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600 hidden lg:table-cell">
-                      {fmtDate(c.last_appointment_date)}
-                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600 hidden lg:table-cell">{fmtDate(c.last_appointment_date)}</td>
                     <td className="px-4 py-3 text-xs hidden xl:table-cell">
                       {c.next_appointment_date
                         ? <span className="text-emerald-600 font-medium">{fmtDate(c.next_appointment_date)}</span>
-                        : <span className="text-gray-400">—</span>
-                      }
+                        : <span className="text-gray-400">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-400 hidden xl:table-cell">
-                      {fmtDate(c.created_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ChevronRight size={14} className="text-gray-400" />
-                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400 hidden xl:table-cell">{fmtDate(c.created_at)}</td>
+                    <td className="px-4 py-3"><ChevronRight size={14} className="text-gray-400" /></td>
                   </tr>
                 ))}
               </tbody>
@@ -263,17 +231,11 @@ export default function ClientsPage() {
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
             <p className="text-xs text-gray-500">{total} clientes</p>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40"
-              >Anterior</button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40">Anterior</button>
               <span className="text-xs text-gray-600">{page} / {totalPages}</span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40"
-              >Seguinte</button>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40">Seguinte</button>
             </div>
           </div>
         )}
