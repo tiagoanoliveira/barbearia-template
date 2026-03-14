@@ -179,10 +179,10 @@ export default function ProfilePage() {
           </div>
 
           <p className="text-xs text-gray-500 mb-3">
-            A cada 10 reservas concluídas, tens um serviço grátis.
+            O 10º corte é por conta da casa 🍻
           </p>
 
-          <div className="grid grid-cols-5 gap-2 mb-3">
+          <div className="grid grid-cols-5 gap-2 mb-3 max-w-md">
             {Array.from({ length: 10 }).map((_, i) => {
               const isFilled = i < currentStamps
               const isGift   = i === 9
@@ -208,7 +208,7 @@ export default function ProfilePage() {
 
           {isNextFree ? (
             <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
-              A tua próxima reserva será gratuita. Fala connosco no balcão para aplicar a oferta.
+              O teu próximo corte será gratuito. Apresenta este ecrã no pagamento para aplicar a oferta.
             </p>
           ) : (
             <p className="text-xs text-gray-500">

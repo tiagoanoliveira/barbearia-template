@@ -378,7 +378,7 @@ export default function CalendarPage() {
                     const blocked = isSlotBlocked(b.id, slot)
                     const key     = `${b.id}_${slot}`
                     const rList   = resByBarberSlot.get(key) ?? []
-                    const colBg   = hexToRgba(b.color ?? '#d4a017', 0.07)
+                    const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
 
                     if (blocked) {
                       const isFirst = blocked.data_hora_inicio === slotToISO(selectedDate, slot)
