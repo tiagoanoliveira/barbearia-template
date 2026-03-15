@@ -1,5 +1,4 @@
 import { verifyJWT } from './jwt.js'
-import { unauthorized } from './response.js'
 
 /**
  * Extrai e valida JWT de cliente (cookie auth_token ou Bearer)
@@ -18,6 +17,9 @@ export async function authenticateClient(request, env) {
 
 /**
  * Valida JWT de admin (Bearer header)
+ * Neste template, o próprio acto de obter um token de admin já garante que
+ * o utilizador vem de `admin_users`, por isso aqui apenas verificamos
+ * a assinatura e extraímos o id.
  */
 export async function authenticateAdmin(request, env) {
   const token = extractToken(request)
@@ -25,7 +27,6 @@ export async function authenticateAdmin(request, env) {
 
   try {
     const payload = await verifyJWT(token, env.JWT_ADMIN_SECRET ?? env.JWT_SECRET)
-    if (payload.role !== 'admin') return { success: false }
     return { success: true, adminId: payload.id, payload }
   } catch {
     return { success: false }

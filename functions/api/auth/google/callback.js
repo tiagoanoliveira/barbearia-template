@@ -26,14 +26,12 @@ export async function onRequest(context) {
     let redirectTo = '/perfil'
     let linkMode = false
     let linkClientId = null
-    let linkClientEmail = null
     try {
       const parsed = JSON.parse(atob(state ?? ''))
       if (parsed.redirect) redirectTo = parsed.redirect
       if (parsed.link) {
-        linkMode       = true
-        linkClientId   = parsed.clientId ?? null
-        linkClientEmail = (parsed.clientEmail ?? '').toLowerCase?.() ?? null
+        linkMode     = true
+        linkClientId = parsed.clientId ?? null
       }
     } catch { /* state inválido — usar default */ }
 
@@ -87,14 +85,8 @@ export async function onRequest(context) {
 
     // ── Modo LINK: associar a conta já autenticada, sem criar nova ───────────
     if (linkMode) {
-      if (!linkClientId || !linkClientEmail) {
+      if (!linkClientId) {
         return badRequest('Ligação social inválida')
-      }
-
-      if (email !== linkClientEmail) {
-        const dest = new URL(redirectTo, url.origin)
-        dest.searchParams.set('social_error', 'google_email_mismatch')
-        return Response.redirect(dest.toString(), 302)
       }
 
       const existing = await env.DB.prepare(
@@ -103,6 +95,13 @@ export async function onRequest(context) {
 
       if (!existing) {
         return badRequest('Conta de cliente não encontrada para associação Google')
+      }
+
+      const storedEmail = (existing.email ?? '').toLowerCase()
+      if (storedEmail && storedEmail !== email) {
+        const dest = new URL(redirectTo, url.origin)
+        dest.searchParams.set('social_error', 'google_email_mismatch')
+        return Response.redirect(dest.toString(), 302)
       }
 
       const methods    = existing.auth_methods ?? 'password'

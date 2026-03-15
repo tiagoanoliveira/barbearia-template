@@ -26,12 +26,13 @@ export async function onRequest(context) {
       return serverError('Google OAuth não configurado')
     }
 
+    // Guardamos apenas o id do cliente e o redirect; o email é validado
+    // no callback a partir da BD para garantir correspondência.
     const state = btoa(JSON.stringify({
       redirect,
       ts: Date.now(),
       link: true,
       clientId: auth.clientId,
-      clientEmail: auth.email,
     }))
 
     const origin      = url.origin

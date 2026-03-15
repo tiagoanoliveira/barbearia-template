@@ -31,7 +31,6 @@ export async function onRequest(context) {
       ts: Date.now(),
       link: true,
       clientId: auth.clientId,
-      clientEmail: auth.email,
     }))
 
     const origin      = url.origin
