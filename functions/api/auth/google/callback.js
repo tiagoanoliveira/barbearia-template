@@ -25,8 +25,8 @@ export async function onRequest(context) {
     // Recuperar redirect a partir do state
     let redirectTo = '/perfil'
     let linkMode = false
-    let linkClientId: number | null = null
-    let linkClientEmail: string | null = null
+    let linkClientId = null
+    let linkClientEmail = null
     try {
       const parsed = JSON.parse(atob(state ?? ''))
       if (parsed.redirect) redirectTo = parsed.redirect
