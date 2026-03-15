@@ -18,7 +18,7 @@ export async function onRequest(context) {
   if (request.method === 'GET') {
     const { results } = await env.DB.prepare(
       // foto (não foto_url), especialidades, color — schema original
-      'SELECT id, nome AS name, foto AS photo_url, especialidades, color, ativo AS active FROM barbeiros ORDER BY nome'
+      'SELECT id, nome AS name, foto AS photo_url, especialidades, color, ativo AS active FROM barbeiros ORDER BY id'
     ).all()
     return ok(results)
   }

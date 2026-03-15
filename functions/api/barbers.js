@@ -7,7 +7,7 @@ export async function onRequest(context) {
   try {
     // foto (não foto_url) — schema original
     const { results } = await env.DB.prepare(
-      'SELECT id, nome AS name, foto AS photo_url, especialidades, color, ativo AS active FROM barbeiros WHERE ativo = 1 ORDER BY nome'
+      'SELECT id, nome AS name, foto AS photo_url, especialidades, color, ativo AS active FROM barbeiros WHERE ativo = 1 ORDER BY id'
     ).all()
 
     return ok(results)
