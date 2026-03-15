@@ -6,7 +6,7 @@ import { pt } from 'date-fns/locale'
 
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
-import { api } from '@/api/client'
+import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import { StatusBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -38,7 +38,7 @@ function EditReservationModal({
   const [cancelReason, setCancelReason] = useState('')
 
   const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
-  const { data: servicesRes } = useQuery({ queryKey: ['services'], queryFn: () => api.get<Service[]>('/api/admin/services') })
+  const { data: servicesRes } = useQuery({ queryKey: ['services'], queryFn: () => adminApi.get<Service[]>('/api/admin/services') })
   const barbers  = barbersRes?.data ?? []
   const services = (servicesRes?.data as unknown as Service[]) ?? []
 
@@ -70,7 +70,7 @@ function EditReservationModal({
         nota_privada: cancelReason ? `[Cancelamento] ${cancelReason}` : reservation.nota_privada,
       })
       if (cancelReason) {
-        await api.post('/api/admin/reservations/cancel-email', {
+        await adminApi.post('/api/admin/reservations/cancel-email', {
           reservation_id: reservation.id, reason: cancelReason,
         }).catch(() => {})
       }
@@ -113,39 +113,46 @@ function EditReservationModal({
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
-            <select value={form.barber_id ?? ''} onChange={e => upd('barber_id', Number(e.target.value))} className="input text-sm w-full">
+            <select className="input text-sm w-full" value={form.barber_id ?? ''}
+              onChange={e => upd('barber_id', Number(e.target.value))}>
               {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Serviço</label>
-            <select value={form.service_id ?? ''} onChange={e => upd('service_id', Number(e.target.value))} className="input text-sm w-full">
+            <select className="input text-sm w-full" value={form.service_id ?? ''}
+              onChange={e => upd('service_id', Number(e.target.value))}>
               {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
-            <input type="datetime-local" value={(form.data_hora ?? '').substring(0,16)}
-              onChange={e => upd('data_hora', e.target.value+':00')} className="input text-sm w-full" />
+            <input type="datetime-local" className="input text-sm w-full"
+              value={(form.data_hora ?? '').substring(0,16)}
+              onChange={e => upd('data_hora', e.target.value+':00')} />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Estado</label>
-            <select value={form.status ?? 'confirmada'} onChange={e => upd('status', e.target.value as ReservationStatus)} className="input text-sm w-full">
+            <select className="input text-sm w-full" value={form.status ?? 'confirmada'}
+              onChange={e => upd('status', e.target.value as ReservationStatus)}>
               {VALID_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Nota do cliente</label>
-            <textarea rows={2} value={form.comentario ?? ''} onChange={e => upd('comentario', e.target.value)}
-              className="input text-sm w-full resize-none" />
+            <textarea rows={2} className="input text-sm w-full resize-none"
+              value={form.comentario ?? ''}
+              onChange={e => upd('comentario', e.target.value)} />
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Nota privada</label>
-            <textarea rows={2} value={form.nota_privada ?? ''} onChange={e => upd('nota_privada', e.target.value)}
-              className="input text-sm w-full resize-none" />
+            <textarea rows={2} className="input text-sm w-full resize-none"
+              value={form.nota_privada ?? ''}
+              onChange={e => upd('nota_privada', e.target.value)} />
           </div>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" checked={!!form.sendEmail} onChange={e => upd('sendEmail', e.target.checked)} />
+            <input type="checkbox" checked={!!form.sendEmail}
+              onChange={e => upd('sendEmail', e.target.checked)} />
             <span>Reenviar email de confirmação ao cliente</span>
           </label>
         </div>

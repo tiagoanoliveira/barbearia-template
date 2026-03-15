@@ -1,6 +1,7 @@
 import { authenticateAdmin } from '../../utils/auth.js'
 import { ok, created, badRequest, unauthorized, serverError, corsOptions } from '../../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../../utils/validators.js'
+import { buildReservationConfirmationEmail, sendEmail } from '../../utils/email.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -84,7 +85,15 @@ export async function onRequest(context) {
   if (request.method === 'POST') {
     try {
       const body = await request.json()
-      const { client_id, service_id, barber_id, date, time, notes } = body
+      const {
+        client_id,
+        service_id,
+        barber_id,
+        date,
+        time,
+        notes,
+        send_email,
+      } = body
 
       if (!isValidId(client_id))   return badRequest('ID do cliente inválido')
       if (!isValidId(service_id))  return badRequest('ID do serviço inválido')
@@ -93,7 +102,10 @@ export async function onRequest(context) {
       if (!isValidTime(time))      return badRequest('Hora inválida')
 
       const dataHora = `${date}T${time}:00`
-      const service  = await env.DB.prepare('SELECT duracao FROM servicos WHERE id = ?').bind(service_id).first()
+      const service  = await env.DB.prepare('SELECT duracao, nome FROM servicos WHERE id = ?').bind(service_id).first()
+      const barber   = await env.DB.prepare('SELECT nome FROM barbeiros WHERE id = ?').bind(barber_id).first()
+      const client   = await env.DB.prepare('SELECT nome, email FROM clientes WHERE id = ?').bind(client_id).first()
+      const duracao  = service?.duracao || 60
 
       const result = await env.DB.prepare(
         `INSERT INTO reservas
@@ -102,10 +114,36 @@ export async function onRequest(context) {
       ).bind(
         client_id, barber_id, service_id,
         dataHora, sanitize(notes ?? '', 2000),
-        service?.duracao || 60
+        duracao
       ).run()
 
-      return created({ id: result.meta.last_row_id })
+      const reservaId = result.meta.last_row_id
+
+      if (send_email && client?.email) {
+        try {
+          const { html, attachments } = buildReservationConfirmationEmail({
+            reservaId,
+            clientName:  client.nome,
+            clientEmail: client.email,
+            dataHora,
+            serviceName: service?.nome ?? 'Serviço',
+            barberName:  barber?.nome  ?? 'Barbeiro',
+            duracao,
+            comentario: notes ?? '',
+          })
+
+          await sendEmail(context, {
+            to:      client.email,
+            subject: `Reserva #${reservaId} confirmada – Brooklyn Barbearia`,
+            html,
+            attachments,
+          })
+        } catch (e) {
+          console.error('Erro ao enviar email de confirmação (admin):', e?.message || e)
+        }
+      }
+
+      return created({ id: reservaId })
     } catch (e) {
       return serverError('Erro ao criar reserva', e.message)
     }

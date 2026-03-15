@@ -1,4 +1,5 @@
 import { Outlet, useLocation, Navigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import { ROUTES } from '@/config/routes'
@@ -15,6 +16,12 @@ const pageTitles: Record<string, { title: string; subtitle?: string }> = {
 export default function AdminLayout() {
   const location = useLocation()
   const token = localStorage.getItem('admin_token')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  useEffect(() => {
+    // Em ecrãs pequenos, fecha sidebar por omissão
+    if (window.innerWidth < 1024) setSidebarOpen(false)
+  }, [])
 
   if (!token) {
     return <Navigate to={ROUTES.ADMIN_LOGIN} replace />
@@ -26,13 +33,10 @@ export default function AdminLayout() {
       : { title: 'Admin' })
 
   return (
-    <div className="admin-root min-h-screen bg-[var(--surface-subtle)]">
-      <Sidebar />
-      <div
-        className="flex flex-col min-h-screen"
-        style={{ marginLeft: 'var(--sidebar-width)' }}
-      >
-        <Header title={pageInfo.title} subtitle={pageInfo.subtitle} />
+    <div className="admin-root min-h-screen bg-[var(--surface-subtle)] flex">
+      <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} />
+      <div className="flex flex-col min-h-screen flex-1">
+        <Header title={pageInfo.title} subtitle={pageInfo.subtitle} onToggleSidebar={() => setSidebarOpen(o => !o)} />
         <main
           className="flex-1 p-4 overflow-auto"
           style={{ marginTop: 'var(--header-height)' }}
