@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Shield, Scissors, Sparkles, Users, Plus, Pencil, Trash2, Eye, EyeOff, Check, X, Upload, Link as LinkIcon } from 'lucide-react'
-import { api } from '@/api/client'
+import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { Barber, Service } from '@/types'
@@ -50,9 +50,16 @@ function MasterCodeGate({ onUnlock }: { onUnlock: () => void }) {
     const code = digits.join('')
     if (code.length < 8) { setError('Introduz os 8 dígitos'); return }
     setLoading(true); setError(null)
-    try { await api.post('/api/admin/master-code/verify', { code }); onUnlock() }
-    catch { setError('Código incorrecto. Tenta novamente.'); setDigits(Array(8).fill('')); refs.current[0]?.focus() }
-    finally { setLoading(false) }
+    try {
+      await adminApi.post('/api/admin/master-code/verify', { code })
+      onUnlock()
+    } catch {
+      setError('Código incorrecto. Tenta novamente.')
+      setDigits(Array(8).fill(''))
+      refs.current[0]?.focus()
+    } finally {
+      setLoading(false)
+    }
   }
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -198,7 +205,7 @@ const emptyService = (): ServiceForm => ({ name: '', duration: '30', price: '0',
 
 function ServicosSection() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({ queryKey: ['admin-services'], queryFn: () => api.get<Service[]>('/api/admin/services') })
+  const { data, isLoading } = useQuery({ queryKey: ['admin-services'], queryFn: () => adminApi.get<Service[]>('/api/admin/services') })
   const services: Service[] = (data?.data as unknown as Service[]) ?? []
 
   const [form, setForm]         = useState<ServiceForm | null>(null)
@@ -217,8 +224,8 @@ function ServicosSection() {
     setSaving(true); setErr(null)
     try {
       const body = { name: form.name, duration: parseInt(form.duration), price: parseInt(form.price), abreviacao: form.abreviacao, color: form.color }
-      if (form.id) await api.put(`/api/admin/services/${form.id}`, body)
-      else         await api.post('/api/admin/services', body)
+      if (form.id) await adminApi.put(`/api/admin/services/${form.id}`, body)
+      else         await adminApi.post('/api/admin/services', body)
       qc.invalidateQueries({ queryKey: ['admin-services'] })
       qc.invalidateQueries({ queryKey: ['services'] })
       setForm(null)
@@ -226,7 +233,11 @@ function ServicosSection() {
     finally { setSaving(false) }
   }
   const del = async (id: number) => {
-    try { await api.delete(`/api/admin/services/${id}`); qc.invalidateQueries({ queryKey: ['admin-services'] }); qc.invalidateQueries({ queryKey: ['services'] }) } catch {}
+    try {
+      await adminApi.delete(`/api/admin/services/${id}`)
+      qc.invalidateQueries({ queryKey: ['admin-services'] })
+      qc.invalidateQueries({ queryKey: ['services'] })
+    } catch {}
     setDeleteId(null)
   }
 
@@ -315,7 +326,7 @@ const emptyBarber = (): BarberForm => ({ name: '', especialidades: '', color: '#
 
 function BarbeirosSection() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => api.get<Barber[]>('/api/admin/barbers') })
+  const { data, isLoading } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => adminApi.get<Barber[]>('/api/admin/barbers') })
   const barbers: Barber[] = (data?.data as unknown as Barber[]) ?? []
 
   const [form, setForm]         = useState<BarberForm | null>(null)
@@ -334,8 +345,8 @@ function BarbeirosSection() {
     setSaving(true); setErr(null)
     try {
       const body = { name: form.name, especialidades: form.especialidades, color: form.color, photo_url: form.photo_url || null, active: form.active }
-      if (form.id) await api.put(`/api/admin/barbers/${form.id}`, body)
-      else         await api.post('/api/admin/barbers', body)
+      if (form.id) await adminApi.put(`/api/admin/barbers/${form.id}`, body)
+      else         await adminApi.post('/api/admin/barbers', body)
       qc.invalidateQueries({ queryKey: ['admin-barbers-cfg'] })
       qc.invalidateQueries({ queryKey: ['barbers'] })
       setForm(null)
@@ -343,7 +354,11 @@ function BarbeirosSection() {
     finally { setSaving(false) }
   }
   const del = async (id: number) => {
-    try { await api.delete(`/api/admin/barbers/${id}`); qc.invalidateQueries({ queryKey: ['admin-barbers-cfg'] }); qc.invalidateQueries({ queryKey: ['barbers'] }) } catch {}
+    try {
+      await adminApi.delete(`/api/admin/barbers/${id}`)
+      qc.invalidateQueries({ queryKey: ['admin-barbers-cfg'] })
+      qc.invalidateQueries({ queryKey: ['barbers'] })
+    } catch {}
     setDeleteId(null)
   }
 
@@ -443,9 +458,9 @@ const emptyAdminUser = (): AdminUserForm => ({ username: '', password: '', nome:
 
 function AdminUsersSection() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({ queryKey: ['admin-users-list'], queryFn: () => api.get<AdminUser[]>('/api/admin/admin-users') })
+  const { data, isLoading } = useQuery({ queryKey: ['admin-users-list'], queryFn: () => adminApi.get<AdminUser[]>('/api/admin/admin-users') })
   const users: AdminUser[] = (data?.data as unknown as AdminUser[]) ?? []
-  const { data: barbersData } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => api.get<Barber[]>('/api/admin/barbers') })
+  const { data: barbersData } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => adminApi.get<Barber[]>('/api/admin/barbers') })
   const barbers: Barber[] = (barbersData?.data as unknown as Barber[]) ?? []
 
   const [form, setForm]         = useState<AdminUserForm | null>(null)
@@ -467,15 +482,18 @@ function AdminUsersSection() {
     try {
       const body: Record<string, unknown> = { username: form.username, nome: form.nome, role: form.role, ativo: form.ativo, barbeiro_id: form.barbeiro_id || null }
       if (form.password) body.password = form.password
-      if (form.id) await api.put(`/api/admin/admin-users/${form.id}`, body)
-      else         await api.post('/api/admin/admin-users', body)
+      if (form.id) await adminApi.put(`/api/admin/admin-users/${form.id}`, body)
+      else         await adminApi.post('/api/admin/admin-users', body)
       qc.invalidateQueries({ queryKey: ['admin-users-list'] })
       setForm(null)
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setSaving(false) }
   }
   const del = async (id: number) => {
-    try { await api.delete(`/api/admin/admin-users/${id}`); qc.invalidateQueries({ queryKey: ['admin-users-list'] }) } catch {}
+    try {
+      await adminApi.delete(`/api/admin/admin-users/${id}`)
+      qc.invalidateQueries({ queryKey: ['admin-users-list'] })
+    } catch {}
     setDeleteId(null)
   }
 
