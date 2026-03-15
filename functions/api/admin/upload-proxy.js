@@ -3,7 +3,7 @@
  * multipart/form-data: file (File/Blob) + key (string)
  *
  * Autenticação: Bearer JWT emitido pelo login de admin.
- * Binding obrigatório: BUCKET (R2) + R2_PUBLIC_URL.
+ * Binding obrigatório: R2 (R2 bucket) + R2_PUBLIC_URL.
  */
 export async function onRequest(context) {
   const { request, env } = context
@@ -48,14 +48,14 @@ export async function onRequest(context) {
     return json({ success: false, error: 'Sessão expirada' }, 401, cors)
 
   // ── Bindings R2 ───────────────────────────────────────────────────────────
-  const bucket     = env.BUCKET
+  const bucket     = env.R2 || env.BUCKET
   const publicBase = (env.R2_PUBLIC_URL ?? '').replace(/\/$/, '')
 
-  console.log('[upload-proxy] BUCKET binding exists:', !!bucket)
+  console.log('[upload-proxy] bucket binding exists:', !!bucket)
   console.log('[upload-proxy] R2_PUBLIC_URL:', publicBase || '(não definido)')
 
   if (!bucket)
-    return json({ success: false, error: 'R2 bucket binding (BUCKET) não configurado no Worker' }, 500, cors)
+    return json({ success: false, error: 'R2 bucket binding (R2) não configurado no Worker' }, 500, cors)
   if (!publicBase)
     return json({ success: false, error: 'R2_PUBLIC_URL não configurado no Worker' }, 500, cors)
 
@@ -99,6 +99,10 @@ export async function onRequest(context) {
   }
 
   try {
+    if (typeof bucket.put !== 'function') {
+      console.error('[upload-proxy] bucket.put não é função. Tipo de bucket:', typeof bucket)
+      return json({ success: false, error: 'R2 bucket binding mal configurado (esperado binding R2).' }, 500, cors)
+    }
     const putResult = await bucket.put(key.trim(), buffer, {
       httpMetadata: { contentType: file.type },
     })

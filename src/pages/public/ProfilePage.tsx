@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, Link, Navigate } from 'react-router-dom'
+import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { LogOut, Edit2, Camera, X, Save, Link2, Unlink, Star } from 'lucide-react'
 import { api } from '@/api/client'
@@ -14,6 +14,7 @@ interface ProfileForm {
 
 export default function ProfilePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const qc = useQueryClient()
   const photoRef = useRef<HTMLInputElement>(null)
   const [editOpen, setEditOpen] = useState(false)
@@ -50,6 +51,16 @@ export default function ProfilePage() {
       }))
     }
   }, [user])
+
+  useEffect(() => {
+    const code = searchParams.get('social_error')
+    if (!code) return
+    if (code === 'google_email_mismatch') {
+      setLinkError('O email da conta Google não corresponde ao email desta conta. Usa o mesmo email para associar ou termina sessão e entra com essa conta primeiro.')
+    } else if (code === 'facebook_email_mismatch') {
+      setLinkError('O email da conta Facebook não corresponde ao email desta conta. Usa o mesmo email para associar ou termina sessão e entra com essa conta primeiro.')
+    }
+  }, [searchParams])
 
   const updateProfile = useMutation({
     mutationFn: (data: Partial<ProfileForm>) => api.put('/api/me', data),
@@ -108,8 +119,41 @@ export default function ProfilePage() {
   const hasFacebook = methods.includes('facebook')
   const hasPassword = methods.includes('password')
 
-  const handleLinkGoogle    = () => { window.location.href = `/api/auth/google?redirect=${encodeURIComponent('/perfil')}` }
-  const handleLinkFacebook  = () => { window.location.href = `/api/auth/facebook?redirect=${encodeURIComponent('/perfil')}` }
+  const handleLinkGoogle = async () => {
+    setLinkError(null)
+    try {
+      const token = localStorage.getItem('user_token')
+      const res = await fetch(`/api/auth/google/link?redirect=${encodeURIComponent('/perfil')}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const data = await res.json()
+      if (data.success && data.data?.url) {
+        window.location.href = data.data.url
+      } else {
+        setLinkError(data.error ?? 'Não foi possível iniciar a associação com a Google.')
+      }
+    } catch (e: any) {
+      setLinkError('Erro de rede ao iniciar associação com a Google.')
+    }
+  }
+
+  const handleLinkFacebook = async () => {
+    setLinkError(null)
+    try {
+      const token = localStorage.getItem('user_token')
+      const res = await fetch(`/api/auth/facebook/link?redirect=${encodeURIComponent('/perfil')}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const data = await res.json()
+      if (data.success && data.data?.url) {
+        window.location.href = data.data.url
+      } else {
+        setLinkError(data.error ?? 'Não foi possível iniciar a associação com o Facebook.')
+      }
+    } catch (e: any) {
+      setLinkError('Erro de rede ao iniciar associação com o Facebook.')
+    }
+  }
 
   const handleUnlinkGoogle = async () => {
     setLinkError(null)

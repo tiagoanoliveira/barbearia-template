@@ -16,12 +16,12 @@ export async function onRequest(context) {
   const auth = await authenticateClient(request, env)
   if (!auth.success) return unauthorized()
 
-  const bucket     = env.BUCKET
+  const bucket     = env.R2 || env.BUCKET
   const publicBase = (env.R2_PUBLIC_URL ?? '').replace(/\/$/, '')
 
-  console.log('[me/photo] BUCKET:', !!bucket, '| publicBase:', publicBase)
+  console.log('[me/photo] bucket binding:', !!bucket, '| publicBase:', publicBase)
 
-  if (!bucket)     return serverError('R2 bucket não configurado')
+  if (!bucket)     return serverError('R2 bucket não configurado (binding R2)')
   if (!publicBase) return serverError('R2_PUBLIC_URL não configurado')
 
   let formData
@@ -40,6 +40,10 @@ export async function onRequest(context) {
 
   try {
     const buf = await file.arrayBuffer()
+    if (typeof bucket.put !== 'function') {
+      console.error('[me/photo] bucket.put não é função. Tipo de bucket:', typeof bucket)
+      return serverError('R2 bucket binding mal configurado (esperado binding R2).', 'bucket.put not function')
+    }
     await bucket.put(key, buf, { httpMetadata: { contentType: file.type } })
   } catch (e) {
     console.error('[me/photo] R2 error:', e.message)

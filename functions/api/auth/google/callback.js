@@ -24,9 +24,17 @@ export async function onRequest(context) {
 
     // Recuperar redirect a partir do state
     let redirectTo = '/perfil'
+    let linkMode = false
+    let linkClientId: number | null = null
+    let linkClientEmail: string | null = null
     try {
       const parsed = JSON.parse(atob(state ?? ''))
       if (parsed.redirect) redirectTo = parsed.redirect
+      if (parsed.link) {
+        linkMode       = true
+        linkClientId   = parsed.clientId ?? null
+        linkClientEmail = (parsed.clientEmail ?? '').toLowerCase?.() ?? null
+      }
     } catch { /* state inválido — usar default */ }
 
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
@@ -76,6 +84,49 @@ export async function onRequest(context) {
     const googleId  = profile.sub
     const nome      = sanitize(profile.name ?? email.split('@')[0], 100)
     const fotoUrl   = profile.picture ?? null
+
+    // ── Modo LINK: associar a conta já autenticada, sem criar nova ───────────
+    if (linkMode) {
+      if (!linkClientId || !linkClientEmail) {
+        return badRequest('Ligação social inválida')
+      }
+
+      if (email !== linkClientEmail) {
+        const dest = new URL(redirectTo, url.origin)
+        dest.searchParams.set('social_error', 'google_email_mismatch')
+        return Response.redirect(dest.toString(), 302)
+      }
+
+      const existing = await env.DB.prepare(
+        'SELECT id, email, auth_methods, foto_perfil FROM clientes WHERE id = ?'
+      ).bind(linkClientId).first()
+
+      if (!existing) {
+        return badRequest('Conta de cliente não encontrada para associação Google')
+      }
+
+      const methods    = existing.auth_methods ?? 'password'
+      const newMethods = methods.includes('google') ? methods : `${methods},google`
+
+      await env.DB.prepare(
+        `UPDATE clientes
+           SET google_id = ?, foto_perfil = COALESCE(foto_perfil, ?),
+               auth_methods = ?, atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).bind(googleId, fotoUrl, newMethods, existing.id).run()
+
+      const jwt = await signJWT(
+        { id: existing.id, email: existing.email ?? email },
+        env.JWT_SECRET
+      )
+
+      return Response.redirect(
+        `${url.origin}/auth/callback?token=${encodeURIComponent(jwt)}&redirect=${encodeURIComponent(redirectTo)}`,
+        302
+      )
+    }
+
+    // ── Modo LOGIN normal: comportamento anterior ───────────────────────────
 
     // 3. Procurar cliente existente por google_id ou email
     let client = await env.DB.prepare(

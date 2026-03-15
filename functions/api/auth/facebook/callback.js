@@ -21,9 +21,17 @@ export async function onRequest(context) {
     }
 
     let redirectTo = '/perfil'
+    let linkMode = false
+    let linkClientId: number | null = null
+    let linkClientEmail: string | null = null
     try {
       const parsed = JSON.parse(atob(state ?? ''))
       if (parsed.redirect) redirectTo = parsed.redirect
+      if (parsed.link) {
+        linkMode        = true
+        linkClientId    = parsed.clientId ?? null
+        linkClientEmail = (parsed.clientEmail ?? '').toLowerCase?.() ?? null
+      }
     } catch {
       // state inválido — usar default
     }
@@ -69,10 +77,53 @@ export async function onRequest(context) {
       return Response.redirect(`${url.origin}/login?error=facebook_no_email`, 302)
     }
 
-    const email    = String(profile.email).toLowerCase()
+    const email      = String(profile.email).toLowerCase()
     const facebookId = String(profile.id)
-    const nome     = sanitize(profile.name ?? email.split('@')[0], 100)
-    const fotoUrl  = profile.picture?.data?.url ?? null
+    const nome       = sanitize(profile.name ?? email.split('@')[0], 100)
+    const fotoUrl    = profile.picture?.data?.url ?? null
+
+    // ── Modo LINK: associar a conta já autenticada, sem criar nova ───────────
+    if (linkMode) {
+      if (!linkClientId || !linkClientEmail) {
+        return serverError('Ligação social inválida')
+      }
+
+      if (email !== linkClientEmail) {
+        const dest = new URL(redirectTo, url.origin)
+        dest.searchParams.set('social_error', 'facebook_email_mismatch')
+        return Response.redirect(dest.toString(), 302)
+      }
+
+      const existing = await env.DB.prepare(
+        'SELECT id, email, auth_methods, foto_perfil FROM clientes WHERE id = ?'
+      ).bind(linkClientId).first()
+
+      if (!existing) {
+        return serverError('Conta de cliente não encontrada para associação Facebook')
+      }
+
+      const methods    = existing.auth_methods ?? 'password'
+      const newMethods = methods.includes('facebook') ? methods : `${methods},facebook`
+
+      await env.DB.prepare(
+        `UPDATE clientes
+           SET facebook_id = ?, foto_perfil = COALESCE(foto_perfil, ?),
+               auth_methods = ?, atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).bind(facebookId, fotoUrl, newMethods, existing.id).run()
+
+      const jwt = await signJWT(
+        { id: existing.id, email: existing.email ?? email },
+        env.JWT_SECRET
+      )
+
+      return Response.redirect(
+        `${url.origin}/auth/callback?token=${encodeURIComponent(jwt)}&redirect=${encodeURIComponent(redirectTo)}`,
+        302
+      )
+    }
+
+    // ── Modo LOGIN normal: comportamento anterior ───────────────────────────
 
     // 3. Procurar cliente existente por facebook_id ou email
     let client = await env.DB.prepare(

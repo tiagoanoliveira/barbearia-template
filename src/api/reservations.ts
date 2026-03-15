@@ -1,4 +1,4 @@
-import { api } from './client'
+import { adminApi } from './client'
 import type { Reservation, ApiResponse, PaginatedResponse } from '@/types'
 
 export interface ReservationsFilter {
@@ -19,22 +19,22 @@ export const reservationsApi = {
     if (filters.date)    params.append('date',   filters.date)
     if (filters.barberId) params.append('barber_id', String(filters.barberId))
     if (filters.search)   params.append('search', filters.search)
-    return api.get<PaginatedResponse<Reservation>>(`/api/admin/reservations?${params}`)
+    return adminApi.get<PaginatedResponse<Reservation>>(`/api/admin/reservations?${params}`)
   },
 
   get: (id: number) =>
-    api.get<Reservation>(`/api/admin/reservations/${id}`),
+    adminApi.get<Reservation>(`/api/admin/reservations/${id}`),
 
   create: (data: Partial<Reservation>) =>
-    api.post<Reservation>('/api/admin/reservations', data),
+    adminApi.post<Reservation>('/api/admin/reservations', data),
 
   // PATCH /api/admin/reservations/:id — body { status, notes, private_note }
   update: (id: number, data: Partial<Reservation>) =>
-    api.patch<Reservation>(`/api/admin/reservations/${id}`, data),
+    adminApi.patch<Reservation>(`/api/admin/reservations/${id}`, data),
 
   updateStatus: (id: number, status: Reservation['status']) =>
-    api.patch<Reservation>(`/api/admin/reservations/${id}`, { status }),
+    adminApi.patch<Reservation>(`/api/admin/reservations/${id}`, { status }),
 
   delete: (id: number) =>
-    api.delete<ApiResponse<null>>(`/api/admin/reservations/${id}`),
+    adminApi.delete<ApiResponse<null>>(`/api/admin/reservations/${id}`),
 }

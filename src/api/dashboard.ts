@@ -1,6 +1,6 @@
-import { api } from './client'
+import { adminApi } from './client'
 import type { DashboardStats } from '@/types'
 
 export const dashboardApi = {
-  stats: () => api.get<DashboardStats>('/api/admin/dashboard'),
+  stats: () => adminApi.get<DashboardStats>('/api/admin/dashboard'),
 }

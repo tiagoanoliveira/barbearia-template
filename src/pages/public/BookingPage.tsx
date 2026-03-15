@@ -22,11 +22,22 @@ interface BookingState {
   notes:      string
 }
 
+interface BookingDraft {
+  serviceId: number | null
+  barberId:  number | null
+  anyBarber: boolean
+  date:      string
+  time:      string
+  notes:     string
+  step:      Step
+}
+
 const ANY_BARBER_ID = 'any'
 const INITIAL: BookingState = {
   service: null, barber: null, anyBarber: false, date: '', time: '', notes: '',
 }
 const STEP_LABELS = ['Serviço', 'Barbeiro', 'Data & Hora', 'Confirmar']
+const DRAFT_KEY = 'booking_draft_v1'
 
 function serviceAvailableOnDay(serviceId: number, dow: number): boolean {
   const r = serviceRestrictions[serviceId]
@@ -40,7 +51,7 @@ export default function BookingPage() {
   const [booking, setBooking] = useState<BookingState>(INITIAL)
   const [calMonth, setCalMonth] = useState(new Date())
   const [error, setError]     = useState<string | null>(null)
-  const [tosChecked, setTosChecked] = useState(false)
+  const [tosChecked, setTosChecked] = useState(true)
 
   const isLoggedIn = !!localStorage.getItem('user_token')
 
@@ -52,6 +63,62 @@ export default function BookingPage() {
     queryKey: ['public-barbers'],
     queryFn:  () => api.get<Barber[]>('/api/barbers'),
   })
+
+  const services = servicesRes?.data ?? []
+  const barbers  = barbersRes?.data  ?? []
+
+  // Repor rascunho da reserva após login/refresh
+  useEffect(() => {
+    if (!services.length || !barbers.length) return
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw) as BookingDraft
+      if (!draft.serviceId) return
+      const service = services.find(s => s.id === draft.serviceId)
+      if (!service) return
+      const barber  = draft.barberId ? barbers.find(b => b.id === draft.barberId) ?? null : null
+      setBooking({
+        service,
+        barber: draft.anyBarber ? null : barber,
+        anyBarber: !!draft.anyBarber,
+        date:  draft.date  || '',
+        time:  draft.time  || '',
+        notes: draft.notes || '',
+      })
+      const s = draft.step ?? 1
+      if (s >= 1 && s <= 4) setStep(s as Step)
+    } catch {
+      // ignora rascunhos inválidos
+    }
+  }, [services, barbers])
+
+  // Guardar rascunho sempre que o estado muda
+  useEffect(() => {
+    const draft: BookingDraft = {
+      serviceId: booking.service?.id ?? null,
+      barberId:  booking.anyBarber ? null : booking.barber?.id ?? null,
+      anyBarber: booking.anyBarber,
+      date:      booking.date,
+      time:      booking.time,
+      notes:     booking.notes,
+      step,
+    }
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+    } catch {
+      // storage cheia ou indisponível — ignorar
+    }
+  }, [booking, step])
+
+  // Pré-seleccionar serviço via ?service_id= apenas quando não há rascunho
+  useEffect(() => {
+    const id = searchParams.get('service_id')
+    if (!id || !services.length) return
+    if (booking.service) return
+    const s = services.find(s => String(s.id) === id)
+    if (s) setBooking(b => ({ ...b, service: s }))
+  }, [searchParams, services, booking.service])
 
   // Slots normais (barbeiro específico)
   const { data: slotsRes } = useQuery({
@@ -69,17 +136,9 @@ export default function BookingPage() {
     enabled: booking.anyBarber && !!booking.date && !!booking.service,
   })
 
-  const services = servicesRes?.data ?? []
-  const barbers  = barbersRes?.data  ?? []
-  const slots    = booking.anyBarber ? (slotsAnyRes?.data ?? []) : (slotsRes?.data ?? [])
-
-  // Pré-seleccionar serviço via ?service_id=
-  useEffect(() => {
-    const id = searchParams.get('service_id')
-    if (!id || !services.length) return
-    const s = services.find(s => String(s.id) === id)
-    if (s) setBooking(b => ({ ...b, service: s }))
-  }, [searchParams, services])
+  const slots = booking.anyBarber
+    ? (slotsAnyRes?.data ?? [])
+    : (slotsRes?.data ?? [])
 
   const confirmMutation = useMutation({
     mutationFn: () =>
@@ -90,7 +149,10 @@ export default function BookingPage() {
         time:       booking.time,
         notes:      booking.notes || undefined,
       }),
-    onSuccess: () => navigate('/reservations?confirmed=1'),
+    onSuccess: () => {
+      try { localStorage.removeItem(DRAFT_KEY) } catch {}
+      navigate('/reservations?confirmed=1')
+    },
     onError:   (e: Error) => setError(e?.message ?? 'Erro ao confirmar reserva.'),
   })
 
@@ -125,6 +187,8 @@ export default function BookingPage() {
   const barberDisplayName = booking.anyBarber
     ? 'Sem preferência (atribuição automática)'
     : booking.barber?.name ?? ''
+
+  const { data: slotsData } = { data: slots }
 
   return (
     <div className="min-h-screen relative flex items-start justify-center pt-24 pb-16 px-4">
@@ -307,10 +371,10 @@ export default function BookingPage() {
                       <h4 className="text-sm font-semibold text-gray-400 mb-3 capitalize">
                         {format(parseISO(booking.date), "EEEE, d 'de' MMMM", { locale: pt })}
                       </h4>
-                      {slots.length === 0
+                      {slotsData.length === 0
                         ? <p className="text-center text-gray-500 py-4">Sem horários disponíveis neste dia.</p>
                         : <div className="grid grid-cols-4 gap-2">
-                            {slots.map(slot => (
+                            {slotsData.map(slot => (
                               <button key={slot} onClick={() => setBooking(b => ({ ...b, time: slot }))}
                                 className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
                                   booking.time === slot ? 'bg-primary-500 text-white' : 'bg-white/5 text-gray-300 hover:bg-white/10'
