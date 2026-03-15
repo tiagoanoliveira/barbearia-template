@@ -12,10 +12,22 @@ export async function onRequest(context) {
   if (request.method === 'OPTIONS') return corsOptions()
 
   const auth = await authenticateAdmin(request, env)
-  if (!auth.success) return unauthorized()
+  if (!auth.success) {
+    console.warn('admin/admin-users: pedido não autorizado (falha no token)', {
+      url: request.url,
+      hasAuthHeader: !!request.headers.get('Authorization'),
+    })
+    return unauthorized()
+  }
 
   // Só o role 'admin' pode gerir utilizadores
-  if (auth.payload?.role !== 'admin') return unauthorized('Apenas admins podem gerir utilizadores')
+  if (auth.payload?.role !== 'admin') {
+    console.warn('admin/admin-users: role sem permissões', {
+      url: request.url,
+      role: auth.payload?.role,
+    })
+    return unauthorized('Apenas admins podem gerir utilizadores')
+  }
 
   if (request.method === 'GET') {
     const { results } = await env.DB.prepare(

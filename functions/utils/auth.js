@@ -5,12 +5,16 @@ import { verifyJWT } from './jwt.js'
  */
 export async function authenticateClient(request, env) {
   const token = extractToken(request)
-  if (!token) return { success: false }
+  if (!token) {
+    console.warn('authenticateClient: nenhum token encontrado', request.url)
+    return { success: false }
+  }
 
   try {
     const payload = await verifyJWT(token, env.JWT_SECRET)
     return { success: true, clientId: payload.id, role: 'client', payload }
-  } catch {
+  } catch (e) {
+    console.error('authenticateClient: token inválido', request.url, e?.message)
     return { success: false }
   }
 }
@@ -23,12 +27,16 @@ export async function authenticateClient(request, env) {
  */
 export async function authenticateAdmin(request, env) {
   const token = extractToken(request)
-  if (!token) return { success: false }
+  if (!token) {
+    console.warn('authenticateAdmin: nenhum token encontrado', request.url)
+    return { success: false }
+  }
 
   try {
     const payload = await verifyJWT(token, env.JWT_ADMIN_SECRET ?? env.JWT_SECRET)
     return { success: true, adminId: payload.id, payload }
-  } catch {
+  } catch (e) {
+    console.error('authenticateAdmin: token inválido', request.url, e?.message)
     return { success: false }
   }
 }

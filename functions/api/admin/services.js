@@ -7,7 +7,13 @@ export async function onRequest(context) {
   if (request.method === 'OPTIONS') return corsOptions()
 
   const auth = await authenticateAdmin(request, env)
-  if (!auth.success) return unauthorized()
+  if (!auth.success) {
+    console.warn('admin/services: pedido não autorizado', {
+      url: request.url,
+      hasAuthHeader: !!request.headers.get('Authorization'),
+    })
+    return unauthorized()
+  }
 
   if (request.method === 'GET') {
     const { results } = await env.DB.prepare(

@@ -72,8 +72,10 @@ export default function BookingPage() {
     if (!services.length || !barbers.length) return
     try {
       const raw = localStorage.getItem(DRAFT_KEY)
+      console.debug('BookingPage: rascunho bruto lido do localStorage', raw)
       if (!raw) return
       const draft = JSON.parse(raw) as BookingDraft
+      console.debug('BookingPage: rascunho parseado', draft)
       if (!draft.serviceId) return
       const service = services.find(s => s.id === draft.serviceId)
       if (!service) return
@@ -87,8 +89,12 @@ export default function BookingPage() {
         notes: draft.notes || '',
       })
       const s = draft.step ?? 1
-      if (s >= 1 && s <= 4) setStep(s as Step)
-    } catch {
+      if (s >= 1 && s <= 4) {
+        console.debug('BookingPage: a repor passo a partir do rascunho', s)
+        setStep(s as Step)
+      }
+    } catch (e) {
+      console.warn('BookingPage: erro ao ler rascunho da reserva', e)
       // ignora rascunhos inválidos
     }
   }, [services, barbers])
@@ -106,7 +112,9 @@ export default function BookingPage() {
     }
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
-    } catch {
+      console.debug('BookingPage: rascunho guardado', draft)
+    } catch (e) {
+      console.warn('BookingPage: não foi possível guardar o rascunho', e)
       // storage cheia ou indisponível — ignorar
     }
   }, [booking, step])
