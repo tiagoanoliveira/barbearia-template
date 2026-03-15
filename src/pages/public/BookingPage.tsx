@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Check, Scissors, User, Calendar, Clock, LogIn, AlertTriangle } from 'lucide-react'
+import {
+  ArrowLeft, ArrowRight, Check, Scissors, User,
+  Calendar, Clock, LogIn, AlertTriangle, Shuffle
+} from 'lucide-react'
 import { format, addMonths, subMonths, getDaysInMonth, startOfMonth, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 import { api } from '@/api/client'
@@ -11,51 +14,64 @@ import type { Service, Barber } from '@/types'
 type Step = 1 | 2 | 3 | 4
 
 interface BookingState {
-  service: Service | null
-  barber:  Barber  | null
-  date:    string
-  time:    string
-  notes:   string
+  service:    Service | null
+  barber:     Barber  | null
+  anyBarber:  boolean          // opção "Sem preferência"
+  date:       string
+  time:       string
+  notes:      string
 }
 
-const INITIAL: BookingState = { service: null, barber: null, date: '', time: '', notes: '' }
+const ANY_BARBER_ID = 'any'
+const INITIAL: BookingState = {
+  service: null, barber: null, anyBarber: false, date: '', time: '', notes: '',
+}
 const STEP_LABELS = ['Serviço', 'Barbeiro', 'Data & Hora', 'Confirmar']
 
-/** Devolve true se o serviço está disponível num dado dia da semana (0=dom) */
-function serviceAvailableOnDay(serviceId: number, dayOfWeek: number): boolean {
+function serviceAvailableOnDay(serviceId: number, dow: number): boolean {
   const r = serviceRestrictions[serviceId]
-  if (!r) return true
-  return r.allowedDays.includes(dayOfWeek)
+  return r ? r.allowedDays.includes(dow) : true
 }
 
 export default function BookingPage() {
-  const navigate        = useNavigate()
-  const [searchParams]  = useSearchParams()
-  const [step, setStep] = useState<Step>(1)
+  const navigate       = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [step, setStep]     = useState<Step>(1)
   const [booking, setBooking] = useState<BookingState>(INITIAL)
   const [calMonth, setCalMonth] = useState(new Date())
-  const [error, setError]       = useState<string | null>(null)
+  const [error, setError]     = useState<string | null>(null)
+  const [tosChecked, setTosChecked] = useState(false)
 
   const isLoggedIn = !!localStorage.getItem('user_token')
 
   const { data: servicesRes } = useQuery({
     queryKey: ['public-services'],
-    queryFn: () => api.get<Service[]>('/api/services'),
+    queryFn:  () => api.get<Service[]>('/api/services'),
   })
   const { data: barbersRes } = useQuery({
     queryKey: ['public-barbers'],
-    queryFn: () => api.get<Barber[]>('/api/barbers'),
+    queryFn:  () => api.get<Barber[]>('/api/barbers'),
   })
+
+  // Slots normais (barbeiro específico)
   const { data: slotsRes } = useQuery({
     queryKey: ['slots', booking.barber?.id, booking.date],
-    queryFn: () =>
+    queryFn:  () =>
       api.get<string[]>(`/api/slots?barber_id=${booking.barber!.id}&date=${booking.date}&service_id=${booking.service!.id}`),
-    enabled: !!booking.barber && !!booking.date && !!booking.service,
+    enabled: !booking.anyBarber && !!booking.barber && !!booking.date && !!booking.service,
+  })
+
+  // Slots "Sem preferência" (todos os barbeiros)
+  const { data: slotsAnyRes } = useQuery({
+    queryKey: ['slots-any', booking.date, booking.service?.id],
+    queryFn:  () =>
+      api.get<string[]>(`/api/slots-any-barber?date=${booking.date}&service_id=${booking.service!.id}`),
+    enabled: booking.anyBarber && !!booking.date && !!booking.service,
   })
 
   const services = servicesRes?.data ?? []
   const barbers  = barbersRes?.data  ?? []
-  const slots    = slotsRes?.data    ?? []
+  const slots    = booking.anyBarber ? (slotsAnyRes?.data ?? []) : (slotsRes?.data ?? [])
 
   // Pré-seleccionar serviço via ?service_id=
   useEffect(() => {
@@ -69,7 +85,7 @@ export default function BookingPage() {
     mutationFn: () =>
       api.post('/api/reservations', {
         service_id: booking.service!.id,
-        barber_id:  booking.barber!.id,
+        barber_id:  booking.anyBarber ? ANY_BARBER_ID : booking.barber!.id,
         date:       booking.date,
         time:       booking.time,
         notes:      booking.notes || undefined,
@@ -78,8 +94,8 @@ export default function BookingPage() {
     onError:   (e: Error) => setError(e?.message ?? 'Erro ao confirmar reserva.'),
   })
 
-  const today    = new Date()
-  const firstDay = startOfMonth(calMonth).getDay() || 7
+  const today     = new Date()
+  const firstDay  = startOfMonth(calMonth).getDay() || 7
   const daysCount = getDaysInMonth(calMonth)
   const calDays: (number | null)[] = [
     ...Array.from({ length: firstDay - 1 }, (): null => null),
@@ -89,8 +105,8 @@ export default function BookingPage() {
   const selectDate = (day: number) => {
     const d   = new Date(calMonth.getFullYear(), calMonth.getMonth(), day)
     const dow = d.getDay()
-    if (d < new Date(today.setHours(0,0,0,0))) return
-    if (dow === 0) return // domingo fechado
+    if (d < new Date(new Date().setHours(0,0,0,0))) return
+    if (dow === 0) return
     if (booking.service && !serviceAvailableOnDay(booking.service.id, dow)) return
     setBooking(b => ({ ...b, date: format(d, 'yyyy-MM-dd'), time: '' }))
   }
@@ -99,12 +115,16 @@ export default function BookingPage() {
 
   const canNext = (
     (step === 1 && !!booking.service) ||
-    (step === 2 && !!booking.barber)  ||
+    (step === 2 && (!!booking.barber || booking.anyBarber)) ||
     (step === 3 && !!booking.date && !!booking.time) ||
-    step === 4
+    (step === 4 && tosChecked)
   )
 
   const showLoginGate = step === 4 && !isLoggedIn
+
+  const barberDisplayName = booking.anyBarber
+    ? 'Sem preferência (atribuição automática)'
+    : booking.barber?.name ?? ''
 
   return (
     <div className="min-h-screen relative flex items-start justify-center pt-24 pb-16 px-4">
@@ -122,7 +142,9 @@ export default function BookingPage() {
             return (
               <div key={n} className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                  completed ? 'bg-primary-500 text-white' : active ? 'bg-white text-gray-900' : 'bg-white/10 text-gray-400'
+                  completed ? 'bg-primary-500 text-white'
+                  : active  ? 'bg-white text-gray-900'
+                             : 'bg-white/10 text-gray-400'
                 }`}>
                   {completed ? <Check size={14} /> : n}
                 </div>
@@ -164,7 +186,7 @@ export default function BookingPage() {
                 {step === 4 && 'Confirmar reserva'}
               </h2>
 
-              {/* PASSO 1 — Serviços */}
+              {/* PASSO 1 */}
               {step === 1 && (
                 <div className="grid gap-3">
                   {services.map(s => {
@@ -179,9 +201,7 @@ export default function BookingPage() {
                         }`}>
                         <div>
                           <p className="font-semibold">{s.name}</p>
-                          <p className="text-sm text-gray-500 mt-0.5">
-                            <Clock size={12} className="inline mr-1" />{s.duration} min
-                          </p>
+                          <p className="text-sm text-gray-500 mt-0.5"><Clock size={12} className="inline mr-1" />{s.duration} min</p>
                           {restriction && (
                             <p className="text-xs text-secondary-400 mt-1 flex items-center gap-1">
                               <AlertTriangle size={11} /> {restriction.message}
@@ -195,14 +215,33 @@ export default function BookingPage() {
                 </div>
               )}
 
-              {/* PASSO 2 — Barbeiros */}
+              {/* PASSO 2 — Barbeiro + Sem preferência */}
               {step === 2 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Opção "Sem preferência" */}
+                  <button
+                    onClick={() => setBooking(bk => ({ ...bk, barber: null, anyBarber: true }))}
+                    className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
+                      booking.anyBarber
+                        ? 'bg-secondary-500/20 border-secondary-400 text-white'
+                        : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                    }`}>
+                    <div className="w-12 h-12 rounded-2xl bg-secondary-500/20 flex-shrink-0 flex items-center justify-center">
+                      <Shuffle size={20} className="text-secondary-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-semibold text-sm">Sem preferência</p>
+                      <p className="text-xs text-gray-500">Atribuição automática</p>
+                    </div>
+                  </button>
+
                   {barbers.map(b => (
                     <button key={b.id}
-                      onClick={() => setBooking(bk => ({ ...bk, barber: b }))}
+                      onClick={() => setBooking(bk => ({ ...bk, barber: b, anyBarber: false }))}
                       className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
-                        booking.barber?.id === b.id ? 'bg-primary-500/20 border-primary-500' : 'bg-white/5 border-white/10 hover:bg-white/10'
+                        !booking.anyBarber && booking.barber?.id === b.id
+                          ? 'bg-primary-500/20 border-primary-500'
+                          : 'bg-white/5 border-white/10 hover:bg-white/10'
                       }`}>
                       <div className="w-12 h-12 rounded-2xl bg-gray-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
                         {b.photo_url
@@ -220,8 +259,7 @@ export default function BookingPage() {
                 <div className="space-y-6">
                   {serviceRestriction && (
                     <div className="flex items-center gap-2 bg-secondary-500/10 border border-secondary-500/30 rounded-xl px-4 py-2.5 text-secondary-300 text-sm">
-                      <AlertTriangle size={15} className="flex-shrink-0" />
-                      {serviceRestriction.message}
+                      <AlertTriangle size={15} className="flex-shrink-0" /> {serviceRestriction.message}
                     </div>
                   )}
                   <div>
@@ -244,8 +282,8 @@ export default function BookingPage() {
                     <div className="grid grid-cols-7 gap-1">
                       {calDays.map((day, i) => {
                         if (!day) return <div key={`e-${i}`} />
-                        const d   = new Date(calMonth.getFullYear(), calMonth.getMonth(), day)
-                        const dow = d.getDay()
+                        const d    = new Date(calMonth.getFullYear(), calMonth.getMonth(), day)
+                        const dow  = d.getDay()
                         const past       = d < new Date(new Date().setHours(0,0,0,0))
                         const sun        = dow === 0
                         const restricted = booking.service ? !serviceAvailableOnDay(booking.service.id, dow) : false
@@ -254,10 +292,10 @@ export default function BookingPage() {
                         return (
                           <button key={day} onClick={() => selectDate(day)} disabled={disabled}
                             className={`aspect-square rounded-xl text-sm font-medium transition-all ${
-                              sel     ? 'bg-primary-500 text-white' :
-                              disabled ? 'text-gray-700 cursor-not-allowed' :
-                                         'text-gray-300 hover:bg-white/10'
-                            }${ restricted && !sun ? ' line-through opacity-40' : '' }`}>
+                              sel      ? 'bg-primary-500 text-white'
+                              : disabled ? 'text-gray-700 cursor-not-allowed'
+                                         : 'text-gray-300 hover:bg-white/10'
+                            }${restricted && !sun ? ' line-through opacity-40' : ''}`}>
                             {day}
                           </button>
                         )
@@ -290,7 +328,7 @@ export default function BookingPage() {
                 <div className="space-y-4">
                   {[
                     { icon: Scissors, label: 'Serviço',  value: `${booking.service?.name} — ${booking.service?.price}€` },
-                    { icon: User,     label: 'Barbeiro', value: booking.barber?.name ?? '' },
+                    { icon: User,     label: 'Barbeiro', value: barberDisplayName },
                     { icon: Calendar, label: 'Data',     value: booking.date ? format(parseISO(booking.date), "EEEE, d 'de' MMMM yyyy", { locale: pt }) : '' },
                     { icon: Clock,    label: 'Hora',     value: booking.time },
                   ].map(({ icon: Icon, label, value }) => (
@@ -308,6 +346,21 @@ export default function BookingPage() {
                       value={booking.notes} onChange={e => setBooking(b => ({ ...b, notes: e.target.value }))}
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
+
+                  {/* ToS */}
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                      tosChecked ? 'bg-primary-500 border-primary-500' : 'border-white/30 group-hover:border-primary-400'
+                    }`} onClick={() => setTosChecked(v => !v)}>
+                      {tosChecked && <Check size={12} className="text-white" />}
+                    </div>
+                    <span className="text-xs text-gray-400 leading-relaxed">
+                      Ao confirmar a reserva declara que leu e aceitou as{' '}
+                      <Link to="/condicoes-reserva" target="_blank" className="text-primary-400 hover:underline">Condições de Reserva</Link>{' '}
+                      em vigor.
+                    </span>
+                  </label>
+
                   {error && (
                     <p className="text-sm text-red-400 bg-red-950/50 border border-red-800/50 rounded-xl px-4 py-2.5">{error}</p>
                   )}
@@ -328,7 +381,7 @@ export default function BookingPage() {
                     Continuar <ArrowRight size={16} />
                   </button>
                 ) : (
-                  <button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}
+                  <button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending || !tosChecked}
                     className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 text-white rounded-xl text-sm font-semibold hover:bg-primary-600 transition-all disabled:opacity-40">
                     {confirmMutation.isPending
                       ? <span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
