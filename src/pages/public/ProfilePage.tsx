@@ -203,7 +203,7 @@ export default function ProfilePage() {
             <span className="text-xs text-gray-500">{totalCompleted} cortes concluídos</span>
           </div>
           <p className="text-xs text-gray-500 mb-3">O 10º corte é por conta da casa 🍻</p>
-          <div className="grid grid-cols-5 gap-2 mb-3 max-w-md">
+          <div className="grid grid-cols-5 gap-2 mb-3 max-w-md mx-auto">
             {Array.from({ length: 10 }).map((_, i) => {
               const isFilled = i < currentStamps
               const isGift   = i === 9

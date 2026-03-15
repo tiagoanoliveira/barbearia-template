@@ -32,15 +32,15 @@ export async function onRequest(context) {
       ).bind(identifier).first()
     }
 
-    if (!client) return unauthorized()
+    if (!client) return badRequest('Credenciais inválidas')
 
     // Verifica password — pode ser null em contas OAuth puras
     if (!client.password_hash) {
-      return unauthorized()
+      return badRequest('Credenciais inválidas')
     }
 
     const valid = await verifyPassword(password, client.password_hash)
-    if (!valid) return unauthorized()
+    if (!valid) return badRequest('Credenciais inválidas')
 
     const token = await signJWT({ id: client.id, email: client.email }, env.JWT_SECRET)
 

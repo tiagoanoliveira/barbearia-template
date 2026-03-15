@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
 import { clientsApi } from '@/api/clients'
-import { api } from '@/api/client'
+import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Modal from '@/components/ui/Modal'
@@ -131,7 +131,7 @@ export default function CalendarPage() {
   const gridRef = useRef<HTMLDivElement>(null)
 
   const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
-  const { data: servicesRes } = useQuery({ queryKey: ['services'], queryFn: () => api.get<Service[]>('/api/admin/services') })
+  const { data: servicesRes } = useQuery({ queryKey: ['services'], queryFn: () => adminApi.get<Service[]>('/api/admin/services') })
   const { data: resRes,  isLoading: loadingRes } = useQuery({
     queryKey: ['cal-reservations', selectedDate],
     queryFn:  () => reservationsApi.list({ date: selectedDate, perPage: 200 }),
@@ -204,7 +204,7 @@ export default function CalendarPage() {
         nota_privada: cancelReason ? `[Cancelamento] ${cancelReason}` : modal.reservation.nota_privada,
       })
       if (cancelReason) {
-        await api.post('/api/admin/reservations/cancel-email', {
+        await adminApi.post('/api/admin/reservations/cancel-email', {
           reservation_id: modal.reservation.id, reason: cancelReason,
         }).catch(() => {})
       }
