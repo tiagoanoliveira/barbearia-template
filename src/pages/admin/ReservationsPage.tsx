@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Pencil, X, ChevronRight } from 'lucide-react'
+import { Search, Pencil } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
@@ -28,6 +28,30 @@ const STATUS_LABEL: Record<string, string> = {
 }
 const VALID_STATUSES = ['confirmada', 'concluida', 'cancelada', 'faltou'] as const
 
+// ─── Modal de confirmação genérico ───────────────────────────────────────────
+function ConfirmModal({
+  open, title, message, confirmLabel, confirmClass, onConfirm, onCancel,
+}: {
+  open: boolean; title: string; message: string
+  confirmLabel: string; confirmClass?: string
+  onConfirm: () => void; onCancel: () => void
+}) {
+  return (
+    <Modal open={open} onClose={onCancel} title={title}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onCancel}>Não</button>
+          <button className={confirmClass ?? 'btn-primary'} onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </>
+      }>
+      <p className="text-sm text-gray-600">{message}</p>
+    </Modal>
+  )
+}
+
+// ─── Modal de edição ─────────────────────────────────────────────────────────
 function EditReservationModal({
   reservation, onClose,
 }: { reservation: Reservation; onClose: () => void }) {
@@ -36,6 +60,7 @@ function EditReservationModal({
   const [saving, setSaving] = useState(false)
   const [cancelMode, setCancelMode] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
   const { data: servicesRes } = useQuery({ queryKey: ['services'], queryFn: () => adminApi.get<Service[]>('/api/admin/services') })
@@ -63,17 +88,20 @@ function EditReservationModal({
   }
 
   const handleCancel = async () => {
+    if (!cancelReason.trim()) {
+      setCancelError('O motivo de cancelamento é obrigatório.')
+      return
+    }
+    setCancelError(null)
     setSaving(true)
     try {
       await reservationsApi.update(reservation.id, {
         status: 'cancelada',
-        nota_privada: cancelReason ? `[Cancelamento] ${cancelReason}` : reservation.nota_privada,
+        nota_privada: `[Cancelamento] ${cancelReason}`,
       })
-      if (cancelReason) {
-        await adminApi.post('/api/admin/reservations/cancel-email', {
-          reservation_id: reservation.id, reason: cancelReason,
-        }).catch(() => {})
-      }
+      await adminApi.post('/api/admin/reservations/cancel-email', {
+        reservation_id: reservation.id, reason: cancelReason,
+      }).catch(() => {})
       qc.invalidateQueries({ queryKey: ['reservations'] })
       onClose()
     } catch {}
@@ -85,7 +113,7 @@ function EditReservationModal({
       footer={
         cancelMode
           ? <>
-              <button className="btn-secondary" onClick={() => setCancelMode(false)}>Voltar</button>
+              <button className="btn-secondary" onClick={() => { setCancelMode(false); setCancelError(null) }}>Voltar</button>
               <button className="btn-danger" onClick={handleCancel} disabled={saving}>
                 {saving ? 'A cancelar...' : 'Confirmar cancelamento'}
               </button>
@@ -101,9 +129,11 @@ function EditReservationModal({
       }>
       {cancelMode ? (
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">Opcional: indica o motivo do cancelamento.</p>
-          <textarea rows={3} value={cancelReason} onChange={e => setCancelReason(e.target.value)}
-            placeholder="Ex.: Barbeiro indisponível..." className="input text-sm w-full resize-none" />
+          <p className="text-sm text-gray-600">Indica o motivo do cancelamento. O cliente receberá um email com essa informação.</p>
+          <textarea rows={3} value={cancelReason} onChange={e => { setCancelReason(e.target.value); setCancelError(null) }}
+            placeholder="Ex.: Barbeiro indisponível por motivo de saúde"
+            className={`input text-sm w-full resize-none ${cancelError ? 'border-red-400' : ''}`} />
+          {cancelError && <p className="text-xs text-red-500">{cancelError}</p>}
         </div>
       ) : (
         <div className="space-y-3 text-sm">
@@ -135,7 +165,7 @@ function EditReservationModal({
             <label className="block text-xs text-gray-500 mb-1">Estado</label>
             <select className="input text-sm w-full" value={form.status ?? 'confirmada'}
               onChange={e => upd('status', e.target.value as ReservationStatus)}>
-              {VALID_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+              {VALID_STATUSES.filter(s => s !== 'cancelada').map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
             </select>
           </div>
           <div>
@@ -172,12 +202,6 @@ export default function ReservationsPage() {
     queryKey: ['reservations', { search, status, page }],
     queryFn: () => reservationsApi.list({ search, status, page, perPage: 20 }),
     placeholderData: (prev) => prev,
-  })
-
-  const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: ReservationStatus }) =>
-      reservationsApi.updateStatus(id, status),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['reservations'] }),
   })
 
   const reservations = data?.data?.items ?? []
@@ -237,10 +261,6 @@ export default function ReservationsPage() {
                     <td className="px-5 py-3"><StatusBadge status={r.status} /></td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        {(r.status === 'confirmada') && (
-                          <button onClick={() => updateStatus.mutate({ id: r.id, status: 'concluida' })}
-                            className="text-xs font-medium text-emerald-600 hover:text-emerald-700">Concluir</button>
-                        )}
                         <button onClick={() => setEditing(r)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"
                           title="Editar">

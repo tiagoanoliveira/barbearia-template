@@ -105,24 +105,46 @@ function icsParams(dataHora, duracao) {
   return { dtStart: fmt(dt), dtEnd: fmt(dtEnd) }
 }
 
-// ─── Envio central ────────────────────────────────────────────────────────────
+// ─── Envio central com debug completo ────────────────────────────────────────
 export async function sendEmail(context, { to, subject, html, attachments = [] }) {
   const key = context.env?.RESEND_API_KEY
-  if (!key) throw new Error('RESEND_API_KEY não configurada')
 
-  const body = { from: FROM, to, subject, html }
-  if (attachments.length) body.attachments = attachments
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Resend error ${res.status}: ${err}`)
+  if (!key) {
+    console.error('[sendEmail] RESEND_API_KEY não está definida nas variáveis de ambiente.')
+    throw new Error('RESEND_API_KEY não configurada')
   }
-  return res.json()
+
+  const payload = { from: FROM, to, subject, html }
+  if (attachments.length) payload.attachments = attachments
+
+  console.log(`[sendEmail] A enviar email para: ${to} | assunto: "${subject}" | anexos: ${attachments.length}`)
+
+  let res
+  try {
+    res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch (fetchErr) {
+    console.error('[sendEmail] Erro de rede ao chamar Resend API:', fetchErr)
+    throw fetchErr
+  }
+
+  const responseText = await res.text()
+
+  if (!res.ok) {
+    console.error(`[sendEmail] Resend devolveu ${res.status}:`, responseText)
+    throw new Error(`Resend error ${res.status}: ${responseText}`)
+  }
+
+  console.log(`[sendEmail] Email enviado com sucesso para ${to}. Resposta Resend:`, responseText)
+
+  try {
+    return JSON.parse(responseText)
+  } catch {
+    return { raw: responseText }
+  }
 }
 
 // ─── 1. Email de confirmação de reserva ───────────────────────────────────────
@@ -212,7 +234,7 @@ export function buildReservationCancellationEmail({ reservaId, clientName, clien
   }
 }
 
-// ─── 3. Email de verificação de conta ────────────────────────────────────────
+// ─── 3. Email de verificação de conta / novo email ────────────────────────────
 export function buildVerificationEmail({ clientName, verifyToken }) {
   const verifyUrl = `${BASE_URL}/api/auth/verify?token=${verifyToken}`
 
@@ -233,9 +255,31 @@ export function buildVerificationEmail({ clientName, verifyToken }) {
   return { html }
 }
 
-// ─── 4. Email de recuperação de password ─────────────────────────────────────
+// ─── 4. Email de confirmação de alteração de email ────────────────────────────
+export function buildEmailChangeEmail({ clientName, confirmToken, newEmail }) {
+  const confirmUrl = `${BASE_URL}/confirmar-email?token=${confirmToken}`
+
+  const html = shell('header-gold','Confirme o novo email 📧',`
+    <p>Olá <strong>${clientName}</strong>,</p>
+    <p>Recebemos um pedido para alterar o email da sua conta para <strong>${newEmail}</strong>.</p>
+    <p>Para confirmar esta alteração, clique no botão abaixo:</p>
+    <div style="text-align:center;margin:30px 0">
+      <a href="${confirmUrl}" class="btn">Confirmar novo email</a>
+    </div>
+    <p style="font-size:14px;color:#888">Ou copie este link:</p>
+    <p style="word-break:break-all;font-size:12px;color:#2d4a3e">${confirmUrl}</p>
+    <div class="warn">
+      <p><strong>⚠️</strong> Este link expira em <strong>24 horas</strong>.</p>
+      <p>Se não pediu esta alteração, ignore este email — a sua conta não será alterada.</p>
+    </div>
+  `)
+
+  return { html }
+}
+
+// ─── 5. Email de recuperação de password ─────────────────────────────────────
 export function buildPasswordResetEmail({ clientName, resetToken }) {
-  const resetUrl = `${BASE_URL}/reset-password?token=${resetToken}`
+  const resetUrl = `${BASE_URL}/recuperar-password?token=${resetToken}`
 
   const html = shell('header-gold','Recuperação de Password 🔑',`
     <p>Olá <strong>${clientName}</strong>,</p>

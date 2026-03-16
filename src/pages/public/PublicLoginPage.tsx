@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { Scissors, Eye, EyeOff, LogIn } from 'lucide-react'
+import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { api } from '@/api/client'
-import { barberShopConfig } from '@/config/theme'
 
 type Mode = 'login' | 'register'
 
@@ -31,7 +30,6 @@ export default function PublicLoginPage() {
 
     setLoading(true)
     const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register'
-    // Permite login por email ou telefone
     const payload  = mode === 'login'
       ? { identifier: form.email || form.phone, password: form.password }
       : { name: form.name, email: form.email, phone: form.phone, password: form.password }
@@ -51,7 +49,6 @@ export default function PublicLoginPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 pt-24">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <p className="text-gray-500 text-sm mt-1">
             {mode === 'login' ? 'Bem-vindo de volta!' : 'Criar conta'}
@@ -140,7 +137,14 @@ export default function PublicLoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1.5">Password</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-gray-400">Password</label>
+              {mode === 'login' && (
+                <Link to="/esqueci-password" className="text-xs text-brand-400 hover:underline">
+                  Esqueceste a password?
+                </Link>
+              )}
+            </div>
             <div className="relative">
               <input type={showPw ? 'text' : 'password'} required
                      value={form.password} onChange={field('password')}

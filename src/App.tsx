@@ -22,6 +22,8 @@ import ProfilePage from '@/pages/public/ProfilePage'
 import ReservationsPublicPage from '@/pages/public/ReservationsPublicPage'
 import PublicLoginPage from '@/pages/public/PublicLoginPage'
 import AuthCallbackPage from '@/pages/public/AuthCallbackPage'
+import ForgotPasswordPage from '@/pages/public/ForgotPasswordPage'
+import ResetPasswordPage from '@/pages/public/ResetPasswordPage'
 
 // Legal & support pages
 import FaqPage from '@/pages/public/FaqPage'
@@ -34,7 +36,7 @@ import SupportPage from '@/pages/public/SupportPage'
 export default function App() {
   return (
     <Routes>
-      {/* OAuth callback — fora do PublicLayout para não ter Navbar/Footer */}
+      {/* OAuth callback */}
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
       {/* Público */}
@@ -44,6 +46,8 @@ export default function App() {
         <Route path="/perfil"             element={<ProfilePage />} />
         <Route path="/reservations"       element={<ReservationsPublicPage />} />
         <Route path="/login"              element={<PublicLoginPage />} />
+        <Route path="/esqueci-password"   element={<ForgotPasswordPage />} />
+        <Route path="/recuperar-password" element={<ResetPasswordPage />} />
 
         {/* Legal */}
         <Route path="/faq"                element={<FaqPage />} />

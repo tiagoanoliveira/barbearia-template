@@ -4,6 +4,7 @@ import {
   conflict, serverError, corsOptions
 } from '../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../utils/validators.js'
+import { sendEmail, buildReservationConfirmationEmail } from '../utils/email.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -17,7 +18,6 @@ export async function onRequest(context) {
       const body = await request.json()
       const { service_id, barber_id, date, time, notes } = body
 
-      // barber_id pode ser null/0/'any' para "Sem preferência"
       const anyBarber = !barber_id || barber_id === 'any' || barber_id === 0
 
       if (!isValidId(service_id)) return badRequest('ID do serviço inválido')
@@ -36,10 +36,6 @@ export async function onRequest(context) {
       let finalBarberId
 
       if (anyBarber) {
-        // Algoritmo de distribuição:
-        // 1º barbeiro com menos reservas no dia
-        // 2º barbeiro com menos reservas no dia anterior
-        // 3º aleatório entre os disponíveis no slot
         finalBarberId = await pickBarber(env, date, time, service.duracao || 60)
         if (!finalBarberId) return conflict('Sem barbeiros disponíveis neste horário')
       } else {
@@ -74,25 +70,29 @@ export async function onRequest(context) {
         service.duracao || 60
       ).run()
 
+      const reservationId = result.meta.last_row_id
+
       await env.DB.prepare(
         `INSERT INTO notifications (type, message, reservation_id, client_name, barber_id)
          VALUES ('new_booking', ?, ?, ?, ?)`
       ).bind(
         `Nova reserva: cliente ${auth.clientId} às ${time}`,
-        result.meta.last_row_id,
+        reservationId,
         String(auth.clientId),
         finalBarberId
       ).run().catch(() => {})
 
-      sendConfirmationEmail(env, {
-        reservationId: result.meta.last_row_id,
-        clientId:      auth.clientId,
-        barberName:    barber.nome,
-        serviceName:   service.nome,
+      // Enviar email de confirmação usando utilitário centralizado
+      sendConfirmationEmail(context, {
+        reservationId,
+        clientId:   auth.clientId,
+        barberName: barber.nome,
+        serviceName: service.nome,
+        duracao:    service.duracao || 60,
         dataHora,
-      }).catch(console.error)
+      }).catch(err => console.error('[reservations] Erro ao enviar email de confirmação:', err))
 
-      return created({ id: result.meta.last_row_id, barber_id: finalBarberId, barber_name: barber.nome })
+      return created({ id: reservationId, barber_id: finalBarberId, barber_name: barber.nome })
     } catch (e) {
       return serverError('Erro ao criar reserva', e.message)
     }
@@ -101,12 +101,6 @@ export async function onRequest(context) {
   return badRequest('Método não suportado')
 }
 
-/**
- * Escolhe o melhor barbeiro disponível para um slot:
- * a) menos reservas hoje
- * b) menos reservas ontem
- * c) aleatório
- */
 async function pickBarber(env, date, time, duration) {
   const dataHora   = `${date}T${time}:00`
   const dateObj    = new Date(date)
@@ -114,13 +108,11 @@ async function pickBarber(env, date, time, duration) {
   yesterday.setDate(yesterday.getDate() - 1)
   const yesterdayStr = yesterday.toISOString().slice(0, 10)
 
-  // Todos os barbeiros activos
   const { results: barbers } = await env.DB.prepare(
     'SELECT id FROM barbeiros WHERE ativo = 1'
   ).all()
   if (!barbers.length) return null
 
-  // Filtrar os que estão disponíveis no slot
   const available = []
   for (const b of barbers) {
     const occupied = await env.DB.prepare(
@@ -141,7 +133,6 @@ async function pickBarber(env, date, time, duration) {
   if (!available.length) return null
   if (available.length === 1) return available[0]
 
-  // Contagem de reservas hoje
   const todayCounts = await Promise.all(
     available.map(async id => {
       const row = await env.DB.prepare(
@@ -156,7 +147,6 @@ async function pickBarber(env, date, time, duration) {
   const afterToday = todayCounts.filter(r => r.today === minToday)
   if (afterToday.length === 1) return afterToday[0].id
 
-  // Contagem de reservas ontem
   const yesterdayCounts = await Promise.all(
     afterToday.map(async ({ id }) => {
       const row = await env.DB.prepare(
@@ -171,32 +161,39 @@ async function pickBarber(env, date, time, duration) {
   const afterYest = yesterdayCounts.filter(r => r.yesterday === minYest)
   if (afterYest.length === 1) return afterYest[0].id
 
-  // Aleatório
   return afterYest[Math.floor(Math.random() * afterYest.length)].id
 }
 
-async function sendConfirmationEmail(env, { reservationId, clientId, barberName, serviceName, dataHora }) {
-  if (!env.RESEND_API_KEY) return
+async function sendConfirmationEmail(context, { reservationId, clientId, barberName, serviceName, duracao, dataHora }) {
+  const { env } = context
+  if (!env.RESEND_API_KEY) {
+    console.warn('[sendConfirmationEmail] RESEND_API_KEY não definida — email não enviado.')
+    return
+  }
+
   const client = await env.DB.prepare(
     'SELECT nome, email FROM clientes WHERE id = ?'
   ).bind(clientId).first()
-  if (!client?.email) return
 
-  const dt      = new Date(dataHora)
-  const dateStr = dt.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const timeStr = dt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
+  if (!client?.email) {
+    console.warn(`[sendConfirmationEmail] Cliente ${clientId} sem email — email não enviado.`)
+    return
+  }
 
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from:    'Barbearia <noreply@brooklynbarbearia.pt>',
-      to:      client.email,
-      subject: `Reserva #${reservationId} confirmada`,
-      html: `<p>Olá <strong>${client.nome}</strong>,</p>
-             <p><strong>Serviço:</strong> ${serviceName}<br>
-             <strong>Barbeiro:</strong> ${barberName}<br>
-             <strong>Data:</strong> ${dateStr} às ${timeStr}</p>`,
-    }),
+  const { html, attachments } = buildReservationConfirmationEmail({
+    reservaId:   reservationId,
+    clientName:  client.nome,
+    clientEmail: client.email,
+    dataHora,
+    serviceName,
+    barberName,
+    duracao,
+  })
+
+  await sendEmail(context, {
+    to:      client.email,
+    subject: `Reserva #${reservationId} confirmada – Brooklyn Barbearia`,
+    html,
+    attachments,
   })
 }

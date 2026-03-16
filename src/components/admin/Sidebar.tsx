@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Settings,
   X,
-  Menu,
 } from 'lucide-react'
 import { ROUTES } from '@/config/routes'
 import { barberShopConfig, LOGO_URL } from '@/config/theme'
@@ -49,7 +48,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
 
   return (
     <>
-      {/* Backdrop mobile */}
+      {/* Backdrop — só em mobile quando aberta */}
       {open && (
         <div
           className="fixed inset-0 bg-black/40 z-30 lg:hidden"
@@ -63,7 +62,6 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
           flex flex-col
           bg-gray-900 text-gray-400
           transition-transform duration-300
-          lg:translate-x-0
           ${open ? 'translate-x-0' : '-translate-x-full'}
         `}
         style={{ width: 'var(--sidebar-width)' }}
@@ -79,6 +77,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
             </p>
             <p className="text-gray-500 text-xs">Painel Admin</p>
           </div>
+          {/* Botão fechar — visível em mobile */}
           <button
             className="lg:hidden ml-2 p-1.5 rounded-lg hover:bg-gray-800"
             onClick={onToggle}
@@ -103,7 +102,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
                     : 'hover:bg-gray-800 hover:text-gray-200'
                 }`
               }
-              onClick={onToggle}
+              onClick={() => { if (window.innerWidth < 1024) onToggle() }}
             >
               {({ isActive }) => (
                 <>
