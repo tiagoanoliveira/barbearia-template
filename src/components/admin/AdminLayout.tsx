@@ -47,12 +47,8 @@ export default function AdminLayout() {
       {/* Conteúdo principal — em desktop desloca-se com a sidebar */}
       <div
         className="flex flex-col min-h-screen transition-all duration-300"
-        style={{ marginLeft: `var(--sidebar-collapsed-width)` }}
-        // Em desktop usamos sempre a largura efectiva via CSS; marginLeft base é o mini
       >
-        {/* Nos ecrãs lg+ ajustamos via inline-style para reagir à expansão */}
-        <style>{`@media(min-width:1024px){.admin-main-wrap{margin-left:${sidebarW}!important}}`}</style>
-        <div className="admin-main-wrap flex flex-col min-h-screen transition-all duration-300">
+        <div className="admin-main-wrap flex flex-col min-h-screen transition-all duration-300 ml-4">
           <Header
             title={pageInfo.title}
             subtitle={pageInfo.subtitle}
