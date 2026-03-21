@@ -4,7 +4,6 @@
 
 /* ─── Variáveis CSS ──────────────────────────────────────────────────────────── */
 :root {
-  /* Cor primária: verde */
   --color-primary-50:  #f0fdf4;
   --color-primary-100: #dcfce7;
   --color-primary-200: #bbf7d0;
@@ -16,7 +15,6 @@
   --color-primary-800: #14532d;
   --color-primary-900: #052e16;
 
-  /* Cor secundária: champanhe/dourado */
   --color-secondary-50:  #fefdf7;
   --color-secondary-100: #fdf9e7;
   --color-secondary-200: #faf0c2;
@@ -28,7 +26,6 @@
   --color-secondary-800: #6b4d07;
   --color-secondary-900: #3d2c04;
 
-  /* Alias brand → primary (mantém compatibilidade com classes Tailwind brand-*) */
   --color-brand-50:  var(--color-primary-50);
   --color-brand-100: var(--color-primary-100);
   --color-brand-200: var(--color-primary-200);
@@ -40,13 +37,15 @@
   --color-brand-800: var(--color-primary-800);
   --color-brand-900: var(--color-primary-900);
 
-  --sidebar-width:  260px;
-  --header-height:  64px;
+  --sidebar-width:           260px;
+  --sidebar-collapsed-width:  56px;
+  --header-height:            64px;
 
-  /* Superfícies — SEMPRE claras */
   --surface:        #ffffff;
   --surface-subtle: #f9fafb;
   --surface-raised: #f3f4f6;
+  --surface-elevated: #ffffff;
+  --border-subtle:  #e5e7eb;
 
   --text:           #111827;
   --text-muted:     #6b7280;
@@ -54,41 +53,29 @@
   --border:         #e5e7eb;
 }
 
-/* ─── Base ───────────────────────────────────────────────────────────────────── */
 @layer base {
   * { box-sizing: border-box; }
-
   html {
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     color-scheme: light;
   }
-
   body {
     background-color: var(--surface-subtle);
     color: var(--text);
   }
-
   ::-webkit-scrollbar       { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb {
-    background-color: var(--border);
-    border-radius: 9999px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: var(--text-subtle);
-  }
+  ::-webkit-scrollbar-thumb { background-color: var(--border); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--text-subtle); }
 }
 
-/* ─── Componentes partilhados ────────────────────────────────────────────────── */
 @layer components {
-
   .card {
     background-color: var(--surface);
     border-color: var(--border);
     @apply rounded-2xl shadow-card border;
   }
-
   .input {
     background-color: #ffffff;
     border-color: var(--border);
@@ -99,40 +86,26 @@
            focus:ring-primary-500 focus:border-transparent
            transition-shadow border;
   }
-
-  .label {
-    color: var(--text-muted);
-    @apply block text-sm font-medium mb-1;
-  }
-
-  /* Botão primário: verde */
+  .label { color: var(--text-muted); @apply block text-sm font-medium mb-1; }
   .btn-primary {
     @apply inline-flex items-center gap-2 px-4 py-2
-           bg-primary-500 text-white
-           font-medium rounded-xl
+           bg-primary-500 text-white font-medium rounded-xl
            hover:bg-primary-600 active:bg-primary-700
            transition-colors duration-150
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
-
-  /* Botão secundário: neutro claro */
   .btn-secondary {
     background-color: #f3f4f6;
     color: #6b7280;
     @apply inline-flex items-center gap-2 px-4 py-2
-           font-medium rounded-xl
-           transition-colors duration-150;
+           font-medium rounded-xl transition-colors duration-150;
   }
-  .btn-secondary:hover {
-    background-color: #e5e7eb;
-  }
-
+  .btn-secondary:hover { background-color: #e5e7eb; }
   .btn-danger {
     @apply inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white
            font-medium rounded-xl hover:bg-red-600 active:bg-red-700
            transition-colors duration-150;
   }
-
   .badge           { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
   .badge-confirmed { @apply badge bg-blue-100    text-blue-800; }
   .badge-completed { @apply badge bg-green-100   text-green-800; }

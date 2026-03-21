@@ -11,6 +11,12 @@ import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Modal from '@/components/ui/Modal'
+import {
+  ReservationDetailModal,
+  ReservationEditModal,
+  ReservationStatusModal,
+  STATUS_BAR,
+} from '@/components/admin/reservation-modals'
 import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from '@/types'
 
 const SLOT_H  = 40
@@ -24,18 +30,9 @@ const TIPO_ICON: Record<UnavailableTipo, string> = {
 const TIPO_LABEL: Record<UnavailableTipo, string> = {
   folga: 'Folga', ferias: 'Férias', almoco: 'Almoço', ausencia: 'Ausência', outro: 'Outro',
 }
-const STATUS_COLORS: Record<string, string> = {
-  confirmada: '#3b82f6', concluida: '#10b981', cancelada: '#ef4444', faltou: '#6b7280',
-}
-const STATUS_BAR: Record<string, string> = {
+const STATUS_BAR_LOCAL: Record<string, string> = {
   confirmada: '#3b82f6', concluida: '#10b981', faltou: '#ef4444', cancelada: '#9ca3af',
 }
-const STATUS_LABEL: Record<string, string> = {
-  confirmada: 'Confirmada', concluida: 'Concluída', cancelada: 'Cancelada', faltou: 'Não compareceu',
-}
-// Todos os status válidos, incluindo cancelada (para edit)
-const VALID_STATUSES       = ['confirmada', 'concluida', 'cancelada', 'faltou'] as const
-type ValidStatus = typeof VALID_STATUSES[number]
 const TIPO_OPTIONS: UnavailableTipo[] = ['folga', 'ferias', 'almoco', 'ausencia', 'outro']
 
 function timeToSlot(iso: string) {
@@ -60,42 +57,34 @@ type ContextTarget =
   | { kind: 'reservation'; reservation: Reservation }
   | { kind: 'unavailable'; unavailable: Unavailable }
 
-type ModalState =
-  | { type: 'reservation_detail';  reservation: Reservation }
-  | { type: 'reservation_edit';    reservation: Reservation }
-  | { type: 'reservation_copy';    source: Reservation }
-  | { type: 'reservation_cancel';  reservation: Reservation }
-  | { type: 'reservation_confirm'; reservation: Reservation; action: 'concluida' | 'faltou' }
-  | { type: 'reservation_new';     barberId: number; slot: number }
-  | { type: 'unavailable_form';    data: Partial<Unavailable>; isNew: boolean }
+type CalModal =
+  | { type: 'res_detail';  r: Reservation }
+  | { type: 'res_edit';    r: Reservation }
+  | { type: 'res_status';  r: Reservation; action: 'concluida' | 'faltou' | 'cancelada' }
+  | { type: 'res_copy';    source: Reservation }
+  | { type: 'res_new';     barberId: number; slot: number }
+  | { type: 'unavail';     data: Partial<Unavailable>; isNew: boolean }
   | null
 
-// ─── Debounced date input ─────────────────────────────────────────────────────────────────────
 function useDebouncedDate(initial: string, delay = 600) {
   const [display, setDisplay] = useState(initial)
   const [committed, setCommitted] = useState(initial)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   const onChange = useCallback((val: string) => {
     setDisplay(val)
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => { if (val) setCommitted(val) }, delay)
   }, [delay])
-
   const setDate = useCallback((val: string) => {
     if (timer.current) clearTimeout(timer.current)
-    setDisplay(val)
-    setCommitted(val)
+    setDisplay(val); setCommitted(val)
   }, [])
-
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
-
   return { display, committed, onChange, setDate }
 }
 
 export default function CalendarPage() {
   const qc = useQueryClient()
-
   const adminUser = useMemo(() => {
     try { const r = localStorage.getItem('admin_user'); return r ? JSON.parse(r) as { role?: string; barbeiro_id?: number } : null }
     catch { return null }
@@ -108,14 +97,11 @@ export default function CalendarPage() {
 
   const [ctx, setCtx]       = useState<ContextTarget | null>(null)
   const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 })
-  const [modal, setModal]   = useState<ModalState>(null)
+  const [modal, setModal]   = useState<CalModal>(null)
+
   const [uForm, setUForm]   = useState<Partial<Unavailable> & { recurrence_end_date?: string }>({})
   const [uError, setUError] = useState<string | null>(null)
   const [uSaving, setUSaving] = useState(false)
-  const [statusSaving, setStatusSaving] = useState<number | null>(null)
-
-  const [cancelReason, setCancelReason] = useState('')
-  const [cancelSaving, setCancelSaving] = useState(false)
 
   const [copyDate, setCopyDate]   = useState('')
   const [copyTime, setCopyTime]   = useState('')
@@ -125,12 +111,9 @@ export default function CalendarPage() {
   const [newResForm, setNewResForm] = useState<Partial<Reservation & { sendEmail: boolean }>>({})
   const [newResSaving, setNewResSaving] = useState(false)
 
-  const [editResForm, setEditResForm] = useState<Partial<Reservation & { sendEmail: boolean }>>({})
-  const [editResSaving, setEditResSaving] = useState(false)
-
   const gridRef = useRef<HTMLDivElement>(null)
 
-  const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
+  const { data: barbersRes } = useQuery({ queryKey: ['barbers'],   queryFn: () => barbersApi.list() })
   const { data: servicesRes } = useQuery({ queryKey: ['services'], queryFn: () => adminApi.get<Service[]>('/api/admin/services') })
   const { data: resRes,  isLoading: loadingRes } = useQuery({
     queryKey: ['cal-reservations', selectedDate],
@@ -141,9 +124,9 @@ export default function CalendarPage() {
     queryFn:  () => barbersApi.listUnavailable({ date: selectedDate }),
   })
 
-  const allBarbers: Barber[]       = barbersRes?.data ?? []
-  const barbers: Barber[]          = (barberFilter ? allBarbers.filter(b => b.id === barberFilter) : [...allBarbers]).sort((a,b) => a.id - b.id)
-  const services: Service[]        = (servicesRes?.data as unknown as Service[]) ?? []
+  const allBarbers: Barber[]        = barbersRes?.data ?? []
+  const barbers: Barber[]           = (barberFilter ? allBarbers.filter(b => b.id === barberFilter) : [...allBarbers]).sort((a,b) => a.id - b.id)
+  const services: Service[]         = (servicesRes?.data as unknown as Service[]) ?? []
   const reservations: Reservation[] = resRes?.data?.items ?? []
   const unavailable: Unavailable[]  = (uRes?.data as unknown as Unavailable[]) ?? []
   const isLoading = loadingRes || loadingU
@@ -161,115 +144,24 @@ export default function CalendarPage() {
     setCtx(target); setCtxPos({ x: e.clientX, y: e.clientY })
   }
   const closeCtx = () => setCtx(null)
+  const close    = () => setModal(null)
 
   const openNewReservation = (barberId: number, slot: number) => {
-    const iso = slotToISO(selectedDate, slot)
-    setNewResForm({ barber_id: barberId, data_hora: iso, status: 'confirmada', sendEmail: true })
-    setModal({ type: 'reservation_new', barberId, slot }); closeCtx()
+    setNewResForm({ barber_id: barberId, data_hora: slotToISO(selectedDate, slot), status: 'confirmada', sendEmail: true })
+    setModal({ type: 'res_new', barberId, slot }); closeCtx()
   }
-  const openReservationDetail = (r: Reservation) => {
-    setModal({ type: 'reservation_detail', reservation: r }); closeCtx()
-  }
-  const openEditReservation = (r: Reservation) => {
-    setEditResForm({ ...r, sendEmail: false })
-    setModal({ type: 'reservation_edit', reservation: r }); closeCtx()
-  }
-  const openCopyReservation = (r: Reservation) => {
-    setCopyDate(selectedDate)
-    setCopyTime(format(new Date(r.data_hora), 'HH:mm'))
-    setCopyEmail(true)
-    setModal({ type: 'reservation_copy', source: r }); closeCtx()
-  }
-  const openCancelReservation = (r: Reservation) => {
-    setCancelReason('')
-    setModal({ type: 'reservation_cancel', reservation: r }); closeCtx()
-  }
-  // Abre diálogo de confirmação de "Chegou" / "Faltou" (sem mudar status automaticamente)
-  const openConfirmAction = (r: Reservation, action: 'concluida' | 'faltou') => {
-    setModal({ type: 'reservation_confirm', reservation: r, action }); closeCtx()
-  }
-
-  // Executado depois da confirmação pelo utilizador
-  const handleConfirmAction = async () => {
-    if (modal?.type !== 'reservation_confirm') return
-    setStatusSaving(modal.reservation.id)
-    try {
-      await reservationsApi.updateStatus(modal.reservation.id, modal.action as Reservation['status'])
-      qc.invalidateQueries({ queryKey: ['cal-reservations'] })
-      setModal(null)
-    } catch {}
-    finally { setStatusSaving(null) }
-  }
-
-  const handleCancel = async () => {
-    if (modal?.type !== 'reservation_cancel') return
-    setCancelSaving(true)
-    try {
-      await reservationsApi.update(modal.reservation.id, {
-        status: 'cancelada',
-        nota_privada: cancelReason ? `[Cancelamento] ${cancelReason}` : modal.reservation.nota_privada,
-      })
-      if (cancelReason) {
-        await adminApi.post('/api/admin/reservations/cancel-email', {
-          reservation_id: modal.reservation.id, reason: cancelReason,
-        }).catch(() => {})
-      }
-      qc.invalidateQueries({ queryKey: ['cal-reservations'] })
-      setModal(null)
-    } catch {}
-    finally { setCancelSaving(false) }
-  }
-
-  const handleCopy = async () => {
-    if (modal?.type !== 'reservation_copy') return
-    setCopySaving(true)
-    const src = modal.source
-    try {
-      await reservationsApi.create({
-        barber_id: src.barber_id, client_id: src.client_id,
-        service_id: src.service_id, data_hora: `${copyDate}T${copyTime}:00`,
-        status: 'confirmada', send_email: copyEmail,
-      })
-      qc.invalidateQueries({ queryKey: ['cal-reservations'] })
-      setModal(null)
-    } catch {}
-    finally { setCopySaving(false) }
-  }
-
-  const handleEditReservation = async () => {
-    if (modal?.type !== 'reservation_edit') return
-    setEditResSaving(true)
-    try {
-      await reservationsApi.update(modal.reservation.id, {
-        barber_id:    editResForm.barber_id,
-        service_id:   editResForm.service_id,
-        data_hora:    editResForm.data_hora,
-        status:       editResForm.status,
-        comentario:   editResForm.comentario,
-        nota_privada: editResForm.nota_privada,
-        send_email:   editResForm.sendEmail,
-      })
-      qc.invalidateQueries({ queryKey: ['cal-reservations'] })
-      setModal(null)
-    } catch {}
-    finally { setEditResSaving(false) }
-  }
-
   const openNewUnavailable = (barberId: number, slot: number) => {
     setUForm({ barbeiro_id: barberId, data_hora_inicio: slotToISO(selectedDate, slot),
                data_hora_fim: slotToISO(selectedDate, slot + 2), is_all_day: 0, tipo: 'folga', motivo: '', recurrence_type: 'none' })
-    setUError(null)
-    setModal({ type: 'unavailable_form', data: {}, isNew: true }); closeCtx()
+    setUError(null); setModal({ type: 'unavail', data: {}, isNew: true }); closeCtx()
   }
   const openEditUnavailable = (u: Unavailable) => {
-    setUForm({ ...u }); setUError(null)
-    setModal({ type: 'unavailable_form', data: u, isNew: false }); closeCtx()
+    setUForm({ ...u }); setUError(null); setModal({ type: 'unavail', data: u, isNew: false }); closeCtx()
   }
   const handleDeleteUnavailable = async (u: Unavailable) => {
     if (!window.confirm(`Eliminar esta indisponibilidade (${TIPO_LABEL[u.tipo]})?`)) return
     try { await barbersApi.deleteUnavailable(u.id, { group: false }); qc.invalidateQueries({ queryKey: ['cal-unavail'] }); closeCtx() } catch {}
   }
-
   const handleSaveUnavailable = async () => {
     if (!uForm.barbeiro_id)      { setUError('Barbeiro obrigatório'); return }
     if (!uForm.data_hora_inicio) { setUError('Data de início obrigatória'); return }
@@ -280,9 +172,24 @@ export default function CalendarPage() {
       const isNew = modal && 'isNew' in modal ? modal.isNew : false
       if (isNew || !uForm.id) await barbersApi.createUnavailable(uForm as Unavailable)
       else                    await barbersApi.updateUnavailable(uForm.id, uForm as Unavailable)
-      qc.invalidateQueries({ queryKey: ['cal-unavail'] }); setModal(null)
+      qc.invalidateQueries({ queryKey: ['cal-unavail'] }); close()
     } catch (e: unknown) { setUError(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setUSaving(false) }
+  }
+
+  const handleCopy = async () => {
+    if (modal?.type !== 'res_copy') return
+    setCopySaving(true)
+    const src = modal.source
+    try {
+      await reservationsApi.create({
+        barber_id: src.barber_id, client_id: src.client_id,
+        service_id: src.service_id, data_hora: `${copyDate}T${copyTime}:00`,
+        status: 'confirmada', send_email: copyEmail,
+      })
+      qc.invalidateQueries({ queryKey: ['cal-reservations'] }); close()
+    } catch {}
+    finally { setCopySaving(false) }
   }
 
   const timeSlots = Array.from({ length: TOTAL_SLOTS }, (_, i) => i)
@@ -322,7 +229,6 @@ export default function CalendarPage() {
 
   return (
     <div className="space-y-3" onClick={closeCtx}>
-      {/* cabeçalho */}
       <Card padding="xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -336,17 +242,14 @@ export default function CalendarPage() {
             <button onClick={() => changeDate(1)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
               <ChevronRight size={18} className="text-gray-600" />
             </button>
-            <button
-              onClick={() => setSelectedDate(format(new Date(), 'yyyy-MM-dd'))}
-              className="text-xs px-2 py-1 bg-brand-50 text-brand-700 rounded-lg hover:bg-brand-100 transition-colors"
-            >Hoje</button>
+            <button onClick={() => setSelectedDate(format(new Date(), 'yyyy-MM-dd'))}
+              className="text-xs px-2 py-1 bg-brand-50 text-brand-700 rounded-lg hover:bg-brand-100 transition-colors">
+              Hoje
+            </button>
           </div>
-          <input
-            type="date" value={dateDisplay}
-            onChange={e => onDateInput(e.target.value)}
+          <input type="date" value={dateDisplay} onChange={e => onDateInput(e.target.value)}
             className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white
-                       focus:outline-none focus:ring-2 focus:ring-brand-400"
-          />
+                       focus:outline-none focus:ring-2 focus:ring-brand-400" />
         </div>
       </Card>
 
@@ -361,11 +264,8 @@ export default function CalendarPage() {
       ) : (
         <Card padding="none">
           <div className="overflow-x-auto">
-            <div
-              ref={gridRef}
-              className="grid select-none"
-              style={{ gridTemplateColumns: `3rem repeat(${barbers.length}, minmax(140px, 1fr))`, minWidth: 3*16 + barbers.length*140 }}
-            >
+            <div ref={gridRef} className="grid select-none"
+              style={{ gridTemplateColumns: `3rem repeat(${barbers.length}, minmax(140px, 1fr))`, minWidth: 3*16 + barbers.length*140 }}>
               <div className="sticky top-0 z-10 bg-white border-b border-gray-100 h-10" />
               {barbers.map(b => (
                 <div key={b.id} className="sticky top-0 z-10 h-10 flex items-center justify-center border-b border-l"
@@ -373,7 +273,6 @@ export default function CalendarPage() {
                   <span className="text-xs font-bold text-white drop-shadow-sm">{b.name}</span>
                 </div>
               ))}
-
               {timeSlots.map(slot => (
                 <>
                   <div key={`t_${slot}`} className="border-b border-gray-50 flex items-top justify-center" style={{ height: SLOT_H }}>
@@ -384,7 +283,6 @@ export default function CalendarPage() {
                     const key     = `${b.id}_${slot}`
                     const rList   = resByBarberSlot.get(key) ?? []
                     const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
-
                     if (blocked) {
                       const isFirst = blocked.data_hora_inicio === slotToISO(selectedDate, slot)
                         || (slot === 0 && new Date(blocked.data_hora_inicio) <= new Date(slotToISO(selectedDate, 0)))
@@ -404,7 +302,6 @@ export default function CalendarPage() {
                         </div>
                       )
                     }
-
                     if (rList.length === 0) {
                       return (
                         <div key={key} className="border-b border-l border-gray-300 hover:brightness-95 transition-all cursor-pointer"
@@ -412,14 +309,13 @@ export default function CalendarPage() {
                           onClick={e => openCtx(e, { kind: 'slot', barberId: b.id, slot })} />
                       )
                     }
-
                     return (
                       <div key={key} className="relative border-b border-l border-gray-300" style={{ height: SLOT_H, background: colBg }}>
                         {rList.map(r => {
                           const barColor  = b.color ?? '#888'
                           const dur       = r.service_duration ?? 60
                           const heightPx  = Math.max(SLOT_H, Math.round((dur / 30) * SLOT_H))
-                          const barColor2 = STATUS_BAR[r.status] ?? barColor
+                          const barColor2 = STATUS_BAR_LOCAL[r.status] ?? barColor
                           return (
                             <div key={r.id}
                               className="absolute inset-x-0.5 top-0 rounded overflow-hidden cursor-pointer flex flex-col justify-start pl-2.5 pr-1 py-0.5 z-20"
@@ -445,11 +341,10 @@ export default function CalendarPage() {
         </Card>
       )}
 
-      {/* context menu */}
+      {/* Context menu */}
       {ctx && (
         <div className="fixed z-50 bg-white rounded-xl shadow-2xl border border-gray-100 py-1 min-w-[210px] text-sm"
-          style={{ top: ctxPos.y, left: ctxPos.x }}
-          onClick={e => e.stopPropagation()}>
+          style={{ top: ctxPos.y, left: ctxPos.x }} onClick={e => e.stopPropagation()}>
           {ctx.kind === 'slot' && (
             <>
               <CtxItem icon="📅" label="Nova reserva"       onClick={() => openNewReservation(ctx.barberId, ctx.slot)} />
@@ -460,23 +355,25 @@ export default function CalendarPage() {
             const r = ctx.reservation
             return (
               <>
-                <CtxItem icon="👁️" label="Ver Reserva"    onClick={() => openReservationDetail(r)} />
-                <CtxItem icon="✏️" label="Editar Reserva"  onClick={() => openEditReservation(r)} />
-                <CtxItem icon="📋" label="Copiar Reserva"  onClick={() => openCopyReservation(r)} />
+                <CtxItem icon="👁️" label="Ver Reserva"    onClick={() => { setModal({ type: 'res_detail', r }); closeCtx() }} />
+                <CtxItem icon="✏️" label="Editar Reserva"  onClick={() => { setModal({ type: 'res_edit',   r }); closeCtx() }} />
+                <CtxItem icon="📋" label="Copiar Reserva"  onClick={() => { setCopyDate(selectedDate); setCopyTime(format(new Date(r.data_hora),'HH:mm')); setCopyEmail(true); setModal({ type: 'res_copy', source: r }); closeCtx() }} />
                 <div className="border-t border-gray-100 my-1" />
                 {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
-                  <CtxItem icon="✅" label="Chegou" onClick={() => openConfirmAction(r, 'concluida')} />
+                  <CtxItem icon="✅" label="Chegou" onClick={() => { setModal({ type: 'res_status', r, action: 'concluida' }); closeCtx() }} />
                 )}
                 {r.status !== 'faltou' && r.status !== 'cancelada' && (
-                  <CtxItem icon="👤" label="Faltou" onClick={() => openConfirmAction(r, 'faltou')} />
+                  <CtxItem icon="👤" label="Faltou" onClick={() => { setModal({ type: 'res_status', r, action: 'faltou'    }); closeCtx() }} />
                 )}
-                <CtxItem icon="❌" label="Cancelar Reserva" onClick={() => openCancelReservation(r)} className="text-red-600" />
+                <CtxItem icon="❌" label="Cancelar Reserva"
+                  onClick={() => { setModal({ type: 'res_status', r, action: 'cancelada' }); closeCtx() }}
+                  className="text-red-600" />
               </>
             )
           })()}
           {ctx.kind === 'unavailable' && (
             <>
-              <CtxItem icon="✏️" label="Editar" onClick={() => openEditUnavailable(ctx.unavailable)} />
+              <CtxItem icon="✏️" label="Editar"   onClick={() => openEditUnavailable(ctx.unavailable)} />
               <CtxItem icon="🗑️" label="Eliminar" onClick={() => handleDeleteUnavailable(ctx.unavailable)} className="text-red-600" />
               {ctx.unavailable.recurrence_group_id && (
                 <p className="px-4 py-1 text-[10px] text-gray-400 italic">Recorrência – edita o grupo na página de indisponibilidades</p>
@@ -486,102 +383,43 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* modal detalhe — sem botões de quick-status, apenas Editar e Cancelar reserva */}
-      <Modal open={modal?.type === 'reservation_detail'} onClose={() => setModal(null)} title="Detalhe da reserva">
-        {modal?.type === 'reservation_detail' ? (
-          <ReservationDetail
-            r={modal.reservation}
-            onEdit={() => openEditReservation(modal.reservation)}
-            onCancel={() => { setModal(null); openCancelReservation(modal.reservation) }}
-            onChegou={() => { setModal(null); openConfirmAction(modal.reservation, 'concluida') }}
-            onFaltou={() => { setModal(null); openConfirmAction(modal.reservation, 'faltou') }}
-          />
-        ) : <></>}
-      </Modal>
+      {/* Modais partilhados de reservas */}
+      {modal?.type === 'res_detail' && (
+        <ReservationDetailModal
+          reservation={modal.r}
+          onClose={close}
+          onEdit={() => setModal({ type: 'res_edit', r: modal.r })}
+          onChangeStatus={action => setModal({ type: 'res_status', r: modal.r, action })}
+          onCancel={() => setModal({ type: 'res_status', r: modal.r, action: 'cancelada' })}
+        />
+      )}
+      {modal?.type === 'res_edit' && (
+        <ReservationEditModal
+          reservation={modal.r}
+          invalidateKey="cal-reservations"
+          onClose={close}
+        />
+      )}
+      {modal?.type === 'res_status' && (
+        <ReservationStatusModal
+          reservation={modal.r}
+          action={modal.action}
+          invalidateKey="cal-reservations"
+          onClose={close}
+        />
+      )}
 
-      {/* modal confirmação Chegou / Faltou */}
-      <Modal
-        open={modal?.type === 'reservation_confirm'}
-        onClose={() => setModal(null)}
-        title={modal?.type === 'reservation_confirm'
-          ? (modal.action === 'concluida' ? '✅ Confirmar presença' : '👤 Confirmar falta')
-          : ''}
+      {/* Modal copiar reserva */}
+      <Modal open={modal?.type === 'res_copy'} onClose={close} title="Copiar reserva"
         footer={
           <>
-            <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-            <button
-              className={modal?.type === 'reservation_confirm' && modal.action === 'concluida' ? 'btn-primary' : 'btn-danger'}
-              onClick={handleConfirmAction}
-              disabled={statusSaving !== null}
-            >
-              {statusSaving !== null ? 'A guardar...' : 'Confirmar'}
-            </button>
-          </>
-        }
-      >
-        {modal?.type === 'reservation_confirm' && (
-          <p className="text-sm text-gray-700">
-            {modal.action === 'concluida'
-              ? `Confirmas que o cliente <strong>${modal.reservation.client_name}</strong> chegou e a reserva foi concluída?`
-              : `Confirmas que o cliente <strong>${modal.reservation.client_name}</strong> não compareceu a esta reserva?`
-            }
-          </p>
-        )}
-      </Modal>
-
-      {/* modal editar reserva */}
-      <Modal
-        open={modal?.type === 'reservation_edit'}
-        onClose={() => setModal(null)}
-        title="Editar reserva"
-        footer={
-          <>
-            <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn-primary" onClick={handleEditReservation} disabled={editResSaving}>
-              {editResSaving ? 'A guardar...' : 'Guardar'}
-            </button>
-          </>
-        }
-      >
-        {modal?.type === 'reservation_edit' ? (
-          <EditReservationForm
-            form={editResForm}
-            barbers={barbers}
-            services={services}
-            onChange={(k, v) => setEditResForm(f => ({ ...f, [k]: v }))}
-          />
-        ) : <></>}
-      </Modal>
-
-      {/* modal cancelar */}
-      <Modal open={modal?.type === 'reservation_cancel'} onClose={() => setModal(null)} title="Cancelar reserva"
-        footer={
-          <>
-            <button className="btn-secondary" onClick={() => setModal(null)}>Voltar</button>
-            <button className="btn-danger" onClick={handleCancel} disabled={cancelSaving}>
-              {cancelSaving ? 'A cancelar...' : 'Confirmar cancelamento'}
-            </button>
-          </>
-        }>
-        <div className="space-y-3">
-          <p className="text-sm text-gray-600">Opcional: indica o motivo do cancelamento. O cliente receberá um email com essa informação.</p>
-          <textarea rows={3} value={cancelReason} onChange={e => setCancelReason(e.target.value)}
-            placeholder="Ex.: Barbeiro indisponível por motivo de saúde"
-            className="input text-sm w-full resize-none" />
-        </div>
-      </Modal>
-
-      {/* modal copiar */}
-      <Modal open={modal?.type === 'reservation_copy'} onClose={() => setModal(null)} title="Copiar reserva"
-        footer={
-          <>
-            <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+            <button className="btn-secondary" onClick={close}>Cancelar</button>
             <button className="btn-primary" onClick={handleCopy} disabled={copySaving}>
               {copySaving ? 'A criar...' : 'Criar reserva'}
             </button>
           </>
         }>
-        {modal?.type === 'reservation_copy' ? (
+        {modal?.type === 'res_copy' ? (
           <div className="space-y-3 text-sm">
             <div className="bg-gray-50 rounded-lg p-3 space-y-1">
               <p><span className="text-gray-500">Cliente:</span> <strong>{modal.source.client_name}</strong></p>
@@ -606,9 +444,9 @@ export default function CalendarPage() {
         ) : <></>}
       </Modal>
 
-      {/* modal nova reserva */}
-      <Modal open={modal?.type === 'reservation_new'} onClose={() => setModal(null)} title="Nova reserva">
-        {modal?.type === 'reservation_new' ? (
+      {/* Modal nova reserva */}
+      <Modal open={modal?.type === 'res_new'} onClose={close} title="Nova reserva">
+        {modal?.type === 'res_new' ? (
           <NewReservationForm
             barberId={modal.barberId} slot={modal.slot}
             selectedDate={selectedDate} barbers={barbers} services={services}
@@ -619,30 +457,29 @@ export default function CalendarPage() {
               try {
                 await reservationsApi.create(newResForm)
                 qc.invalidateQueries({ queryKey: ['cal-reservations'] })
-                setModal(null)
+                close()
               } catch {}
               finally { setNewResSaving(false) }
             }}
-            onCancel={() => setModal(null)}
+            onCancel={close}
           />
         ) : <></>}
       </Modal>
 
-      {/* modal indisponibilidade */}
-      <Modal open={modal?.type === 'unavailable_form'} onClose={() => setModal(null)}
-        title={modal?.type === 'unavailable_form' && modal.isNew ? 'Nova indisponibilidade' : 'Editar indisponibilidade'}>
-        {modal?.type === 'unavailable_form' ? (
+      {/* Modal indisponibilidade */}
+      <Modal open={modal?.type === 'unavail'} onClose={close}
+        title={modal?.type === 'unavail' && modal.isNew ? 'Nova indisponibilidade' : 'Editar indisponibilidade'}>
+        {modal?.type === 'unavail' ? (
           <UnavailableForm form={uForm} barbers={barbers} isNew={modal.isNew}
             error={uError} saving={uSaving}
             onChange={(k, v) => setUForm(f => ({ ...f, [k]: v }))}
-            onSave={handleSaveUnavailable} onCancel={() => setModal(null)} />
+            onSave={handleSaveUnavailable} onCancel={close} />
         ) : <></>}
       </Modal>
     </div>
   )
 }
 
-// ─── Sub-componentes ─────────────────────────────────────────────────────────────────────────
 function CtxItem({ icon, label, onClick, className = '', loading = false }: {
   icon: string; label: string; onClick: () => void; className?: string; loading?: boolean
 }) {
@@ -655,94 +492,22 @@ function CtxItem({ icon, label, onClick, className = '', loading = false }: {
   )
 }
 
-// Modal de detalhe: sem botões de quick-status, apenas ações via Chegou/Faltou/Editar/Cancelar
-function ReservationDetail({ r, onEdit, onCancel, onChegou, onFaltou }: {
-  r: Reservation
-  onEdit: () => void
-  onCancel: () => void
-  onChegou: () => void
-  onFaltou: () => void
-}) {
-  const dt    = new Date(r.data_hora)
-  const endDt = addMinutes(dt, r.service_duration ?? 60)
-  return (
-    <div className="space-y-3 text-sm">
-      <Row label="Cliente"  value={r.client_name} />
-      {r.client_phone && <Row label="Telefone" value={<a href={`tel:${r.client_phone}`} className="text-brand-600">{r.client_phone}</a>} />}
-      <Row label="Serviço"  value={r.service_name} />
-      <Row label="Horário"  value={`${format(dt,'HH:mm')} – ${format(endDt,'HH:mm')}`} />
-      <Row label="Estado"   value={
-        <span className="text-xs px-2 py-1 rounded-full text-white font-medium" style={{ background: STATUS_COLORS[r.status] ?? '#888' }}>
-          {STATUS_LABEL[r.status] ?? r.status}
-        </span>
-      } />
-      {r.comentario   && <NoteBox label="Notas do cliente" text={r.comentario}   bg="gray" />}
-      {r.nota_privada && <NoteBox label="Nota privada"     text={r.nota_privada} bg="amber" />}
-      <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2">
-        {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
-          <button onClick={onChegou}
-            className="text-xs px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 font-medium hover:bg-emerald-200">
-            ✅ Chegou
-          </button>
-        )}
-        {r.status !== 'faltou' && r.status !== 'cancelada' && (
-          <button onClick={onFaltou}
-            className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 font-medium hover:bg-gray-200">
-            👤 Faltou
-          </button>
-        )}
-        <button onClick={onEdit}
-          className="text-xs px-3 py-1.5 rounded-full bg-blue-100 text-blue-600 font-medium hover:bg-blue-200">
-          ✏️ Editar
-        </button>
-        {r.status !== 'cancelada' && (
-          <button onClick={onCancel}
-            className="text-xs px-3 py-1.5 rounded-full bg-red-100 text-red-600 font-medium hover:bg-red-200">
-            Cancelar reserva
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
-  )
-}
-function NoteBox({ label, text, bg }: { label: string; text: string; bg: 'gray' | 'amber' }) {
-  return (
-    <div>
-      <p className="text-gray-500 mb-1">{label}</p>
-      <p className={`text-xs rounded-lg px-3 py-2 ${ bg === 'amber' ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-700' }`}>{text}</p>
-    </div>
-  )
-}
-
-// ─── Client search with debounce ─────────────────────────────────────────────────────────
 function ClientSearch({ value, onChange }: { value?: number; onChange: (id: number, name: string) => void }) {
   const [q, setQ] = useState('')
   const [dq, setDq] = useState('')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [open, setOpen] = useState(false)
-
   const onType = (v: string) => {
     setQ(v); setOpen(true)
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => setDq(v), 350)
   }
-
   const { data } = useQuery({
     queryKey: ['client-search', dq],
     queryFn:  () => clientsApi.list({ search: dq, page: 1, perPage: 8 }),
     enabled:  dq.length >= 1,
   })
   const results = data?.data?.items ?? []
-
   return (
     <div className="relative">
       <input type="text" placeholder="Pesquisar cliente por nome / email / telefone"
@@ -752,8 +517,7 @@ function ClientSearch({ value, onChange }: { value?: number; onChange: (id: numb
       {open && results.length > 0 && (
         <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
           {results.map(c => (
-            <li key={c.id}
-              className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer flex justify-between"
+            <li key={c.id} className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer flex justify-between"
               onMouseDown={() => { onChange(c.id, c.name); setQ(c.name); setOpen(false) }}>
               <span className="font-medium">{c.name}</span>
               <span className="text-xs text-gray-400">{c.phone ?? c.email ?? ''}</span>
@@ -765,7 +529,6 @@ function ClientSearch({ value, onChange }: { value?: number; onChange: (id: numb
   )
 }
 
-// ─── Nova reserva ─────────────────────────────────────────────────────────────────────────────
 function NewReservationForm({ barberId, slot, selectedDate, barbers, services, form, saving, onChange, onSave, onCancel }: {
   barberId: number; slot: number; selectedDate: string; barbers: Barber[]; services: Service[]
   form: Partial<Reservation & { sendEmail: boolean }>
@@ -796,14 +559,12 @@ function NewReservationForm({ barberId, slot, selectedDate, barbers, services, f
       <div>
         <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
         <input type="datetime-local" value={(form.data_hora ?? iso).substring(0,16)}
-          onChange={e => onChange('data_hora', e.target.value + ':00')}
-          className="input text-sm w-full" />
+          onChange={e => onChange('data_hora', e.target.value + ':00')} className="input text-sm w-full" />
       </div>
       <div>
         <label className="block text-xs text-gray-500 mb-1">Nota (opcional)</label>
         <textarea rows={2} value={form.comentario ?? ''} onChange={e => onChange('comentario', e.target.value)}
-          placeholder="Observações para o barbeiro..."
-          className="input text-sm w-full resize-none" />
+          placeholder="Observações para o barbeiro..." className="input text-sm w-full resize-none" />
       </div>
       <label className="flex items-center gap-2 text-sm cursor-pointer">
         <input type="checkbox" checked={!!form.sendEmail} onChange={e => onChange('sendEmail', e.target.checked)} />
@@ -820,63 +581,6 @@ function NewReservationForm({ barberId, slot, selectedDate, barbers, services, f
   )
 }
 
-// ─── Editar reserva ───────────────────────────────────────────────────────────────────────────
-function EditReservationForm({ form, barbers, services, onChange }: {
-  form: Partial<Reservation & { sendEmail: boolean }>
-  barbers: Barber[]; services: Service[]
-  onChange: (k: string, v: unknown) => void
-}) {
-  return (
-    <div className="space-y-3 text-sm">
-      <div className="bg-gray-50 rounded-lg px-3 py-2">
-        <p className="text-xs text-gray-400 mb-0.5">Cliente</p>
-        <p className="font-medium">{form.client_name}</p>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
-        <select value={form.barber_id ?? ''} onChange={e => onChange('barber_id', Number(e.target.value))} className="input text-sm w-full">
-          {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Serviço</label>
-        <select value={form.service_id ?? ''} onChange={e => onChange('service_id', Number(e.target.value))} className="input text-sm w-full">
-          <option value="">Selecionar serviço</option>
-          {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
-        <input type="datetime-local" value={(form.data_hora ?? '').substring(0,16)}
-          onChange={e => onChange('data_hora', e.target.value + ':00')}
-          className="input text-sm w-full" />
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Estado</label>
-        {/* Inclui cancelada para que reservas já canceladas mostrem o estado correto */}
-        <select value={form.status ?? 'confirmada'} onChange={e => onChange('status', e.target.value)} className="input text-sm w-full">
-          {VALID_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Nota do cliente</label>
-        <textarea rows={2} value={form.comentario ?? ''} onChange={e => onChange('comentario', e.target.value)}
-          className="input text-sm w-full resize-none" />
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Nota privada</label>
-        <textarea rows={2} value={form.nota_privada ?? ''} onChange={e => onChange('nota_privada', e.target.value)}
-          className="input text-sm w-full resize-none" />
-      </div>
-      <label className="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" checked={!!form.sendEmail} onChange={e => onChange('sendEmail', e.target.checked)} />
-        <span>Reenviar email de confirmação ao cliente</span>
-      </label>
-    </div>
-  )
-}
-
-// ─── Indisponibilidade ────────────────────────────────────────────────────────────────────────────
 interface UnavailableFormProps {
   form: Partial<Unavailable> & { recurrence_end_date?: string }
   barbers: Barber[]; isNew: boolean; error: string | null; saving: boolean
@@ -949,7 +653,7 @@ function UnavailableForm({ form, barbers, isNew, error, saving, onChange, onSave
           </div>
           {form.recurrence_type && form.recurrence_type !== 'none' && (
             <div>
-              <label className="block text-xs text-gray-500 mb-1">À data de</label>
+              <label className="block text-xs text-gray-500 mb-1">Até à data</label>
               <input type="date" value={form.recurrence_end_date??''}
                 onChange={e => onChange('recurrence_end_date', e.target.value)} className="input text-xs w-full" />
             </div>

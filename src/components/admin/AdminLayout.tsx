@@ -13,52 +13,56 @@ const pageTitles: Record<string, { title: string; subtitle?: string }> = {
   '/admin/configuracao':       { title: 'Configuração',       subtitle: 'Serviços, barbeiros, utilizadores e site' },
 }
 
-// Em desktop (lg+) a sidebar ocupa var(--sidebar-width).
-// Em mobile a sidebar flutua por cima (backdrop), por isso marginLeft = 0.
-
 export default function AdminLayout() {
   const location = useLocation()
   const token = localStorage.getItem('admin_token')
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024)
 
-  // Fecha ao navegar em mobile
-  useEffect(() => {
-    if (window.innerWidth < 1024) setSidebarOpen(false)
-  }, [location.pathname])
+  // mobile: sidebar aberta/fechada
+  const [mobileOpen, setMobileOpen] = useState(false)
+  // desktop: sidebar expandida (texto) ou colapsada (mini-icons) — por defeito colapsada
+  const [desktopExpanded, setDesktopExpanded] = useState(false)
 
-  if (!token) {
-    return <Navigate to={ROUTES.ADMIN_LOGIN} replace />
-  }
+  // Fecha o mobile ao navegar
+  useEffect(() => { setMobileOpen(false) }, [location.pathname])
+
+  if (!token) return <Navigate to={ROUTES.ADMIN_LOGIN} replace />
 
   const pageInfo = pageTitles[location.pathname] ??
     (location.pathname.startsWith('/admin/clientes/')
       ? { title: 'Detalhe do Cliente' }
       : { title: 'Admin' })
 
+  // Largura efectiva da sidebar para empurrar o conteúdo em desktop
+  const sidebarW = desktopExpanded ? 'var(--sidebar-width)' : 'var(--sidebar-collapsed-width)'
+
   return (
     <div className="admin-root min-h-screen bg-[var(--surface-subtle)]">
-      <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} />
+      <Sidebar
+        open={mobileOpen}
+        expanded={desktopExpanded}
+        onToggle={() => setMobileOpen(o => !o)}
+        onExpand={() => setDesktopExpanded(e => !e)}
+      />
 
-      {/*
-        Em desktop (lg), o content deve ficar deslocado `--sidebar-width` à direita.
-        Em mobile a sidebar flutua, por isso não há deslocamento.
-      */}
+      {/* Conteúdo principal — em desktop desloca-se com a sidebar */}
       <div
         className="flex flex-col min-h-screen transition-all duration-300"
-        style={{ marginLeft: sidebarOpen && window.innerWidth >= 1024 ? 'var(--sidebar-width)' : 0 }}
+        style={{ marginLeft: `var(--sidebar-collapsed-width)` }}
+        // Em desktop usamos sempre a largura efectiva via CSS; marginLeft base é o mini
       >
-        <Header
-          title={pageInfo.title}
-          subtitle={pageInfo.subtitle}
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen(o => !o)}
-        />
-        <main
-          className="flex-1 p-4 overflow-auto"
-          style={{ marginTop: 'var(--header-height)' }}
-        >
-          <Outlet />
-        </main>
+        {/* Nos ecrãs lg+ ajustamos via inline-style para reagir à expansão */}
+        <style>{`@media(min-width:1024px){.admin-main-wrap{margin-left:${sidebarW}!important}}`}</style>
+        <div className="admin-main-wrap flex flex-col min-h-screen transition-all duration-300">
+          <Header
+            title={pageInfo.title}
+            subtitle={pageInfo.subtitle}
+            sidebarOpen={mobileOpen}
+            onToggleSidebar={() => setMobileOpen(o => !o)}
+          />
+          <main className="flex-1 p-4 overflow-auto" style={{ marginTop: 'var(--header-height)' }}>
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   )
