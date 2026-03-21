@@ -48,7 +48,7 @@ export default function AdminLayout() {
       <div
         className="flex flex-col min-h-screen transition-all duration-300"
       >
-        <div className="admin-main-wrap flex flex-col min-h-screen transition-all duration-300 ml-4">
+        <div className="admin-main-wrap flex flex-col min-h-screen transition-all duration-300 lg:ml-14">
           <Header
             title={pageInfo.title}
             subtitle={pageInfo.subtitle}
