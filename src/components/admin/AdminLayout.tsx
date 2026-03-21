@@ -55,7 +55,7 @@ export default function AdminLayout() {
             sidebarOpen={mobileOpen}
             onToggleSidebar={() => setMobileOpen(o => !o)}
           />
-          <main className="flex-1 p-4 overflow-auto" style={{ marginTop: 'var(--header-height)' }}>
+          <main className="flex-1 p-2 overflow-auto" style={{ marginTop: 'var(--header-height)' }}>
             <Outlet />
           </main>
         </div>
