@@ -13,18 +13,18 @@ const pageTitles: Record<string, { title: string; subtitle?: string }> = {
   '/admin/configuracao':       { title: 'Configuração',       subtitle: 'Serviços, barbeiros, utilizadores e site' },
 }
 
+// Em desktop (lg+) a sidebar ocupa var(--sidebar-width).
+// Em mobile a sidebar flutua por cima (backdrop), por isso marginLeft = 0.
+
 export default function AdminLayout() {
   const location = useLocation()
   const token = localStorage.getItem('admin_token')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024)
 
+  // Fecha ao navegar em mobile
   useEffect(() => {
-    // Desktop: abrir por omissão; mobile: fechado
-    const handleResize = () => setSidebarOpen(window.innerWidth >= 1024)
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
+    if (window.innerWidth < 1024) setSidebarOpen(false)
+  }, [location.pathname])
 
   if (!token) {
     return <Navigate to={ROUTES.ADMIN_LOGIN} replace />
@@ -36,13 +36,16 @@ export default function AdminLayout() {
       : { title: 'Admin' })
 
   return (
-    <div className="min-h-screen bg-[var(--surface-subtle)] flex">
+    <div className="admin-root min-h-screen bg-[var(--surface-subtle)]">
       <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} />
 
-      {/* Conteúdo principal — em desktop empurrado pela sidebar; em mobile ocupa tudo */}
+      {/*
+        Em desktop (lg), o content deve ficar deslocado `--sidebar-width` à direita.
+        Em mobile a sidebar flutua, por isso não há deslocamento.
+      */}
       <div
-        className="flex flex-col flex-1 min-h-screen transition-all duration-300"
-        style={{ marginLeft: sidebarOpen ? 'var(--sidebar-width)' : 0 }}
+        className="flex flex-col min-h-screen transition-all duration-300"
+        style={{ marginLeft: sidebarOpen && window.innerWidth >= 1024 ? 'var(--sidebar-width)' : 0 }}
       >
         <Header
           title={pageInfo.title}

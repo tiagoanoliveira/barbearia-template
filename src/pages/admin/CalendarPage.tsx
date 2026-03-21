@@ -33,7 +33,8 @@ const STATUS_BAR: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   confirmada: 'Confirmada', concluida: 'Concluída', cancelada: 'Cancelada', faltou: 'Não compareceu',
 }
-const VALID_STATUSES = ['confirmada', 'concluida', 'cancelada', 'faltou'] as const
+// Todos os status válidos, incluindo cancelada (para edit)
+const VALID_STATUSES       = ['confirmada', 'concluida', 'cancelada', 'faltou'] as const
 type ValidStatus = typeof VALID_STATUSES[number]
 const TIPO_OPTIONS: UnavailableTipo[] = ['folga', 'ferias', 'almoco', 'ausencia', 'outro']
 
@@ -64,11 +65,12 @@ type ModalState =
   | { type: 'reservation_edit';    reservation: Reservation }
   | { type: 'reservation_copy';    source: Reservation }
   | { type: 'reservation_cancel';  reservation: Reservation }
+  | { type: 'reservation_confirm'; reservation: Reservation; action: 'concluida' | 'faltou' }
   | { type: 'reservation_new';     barberId: number; slot: number }
   | { type: 'unavailable_form';    data: Partial<Unavailable>; isNew: boolean }
   | null
 
-// ─── Debounced date input ────────────────────────────────────────────────────
+// ─── Debounced date input ─────────────────────────────────────────────────────────────────────
 function useDebouncedDate(initial: string, delay = 600) {
   const [display, setDisplay] = useState(initial)
   const [committed, setCommitted] = useState(initial)
@@ -80,7 +82,6 @@ function useDebouncedDate(initial: string, delay = 600) {
     timer.current = setTimeout(() => { if (val) setCommitted(val) }, delay)
   }, [delay])
 
-  // keep display in sync when committed changes externally (prev/next buttons)
   const setDate = useCallback((val: string) => {
     if (timer.current) clearTimeout(timer.current)
     setDisplay(val)
@@ -124,7 +125,6 @@ export default function CalendarPage() {
   const [newResForm, setNewResForm] = useState<Partial<Reservation & { sendEmail: boolean }>>({})
   const [newResSaving, setNewResSaving] = useState(false)
 
-  // edit reservation
   const [editResForm, setEditResForm] = useState<Partial<Reservation & { sendEmail: boolean }>>({})
   const [editResSaving, setEditResSaving] = useState(false)
 
@@ -184,15 +184,21 @@ export default function CalendarPage() {
     setCancelReason('')
     setModal({ type: 'reservation_cancel', reservation: r }); closeCtx()
   }
+  // Abre diálogo de confirmação de "Chegou" / "Faltou" (sem mudar status automaticamente)
+  const openConfirmAction = (r: Reservation, action: 'concluida' | 'faltou') => {
+    setModal({ type: 'reservation_confirm', reservation: r, action }); closeCtx()
+  }
 
-  const handleQuickStatus = async (r: Reservation, status: ValidStatus) => {
-    if (statusSaving !== null) return
-    setStatusSaving(r.id)
+  // Executado depois da confirmação pelo utilizador
+  const handleConfirmAction = async () => {
+    if (modal?.type !== 'reservation_confirm') return
+    setStatusSaving(modal.reservation.id)
     try {
-      await reservationsApi.updateStatus(r.id, status as Reservation['status'])
+      await reservationsApi.updateStatus(modal.reservation.id, modal.action as Reservation['status'])
       qc.invalidateQueries({ queryKey: ['cal-reservations'] })
+      setModal(null)
     } catch {}
-    finally { setStatusSaving(null); closeCtx() }
+    finally { setStatusSaving(null) }
   }
 
   const handleCancel = async () => {
@@ -335,7 +341,6 @@ export default function CalendarPage() {
               className="text-xs px-2 py-1 bg-brand-50 text-brand-700 rounded-lg hover:bg-brand-100 transition-colors"
             >Hoje</button>
           </div>
-          {/* input de data com debounce — só carrega após 600ms de inatividade */}
           <input
             type="date" value={dateDisplay}
             onChange={e => onDateInput(e.target.value)}
@@ -459,11 +464,11 @@ export default function CalendarPage() {
                 <CtxItem icon="✏️" label="Editar Reserva"  onClick={() => openEditReservation(r)} />
                 <CtxItem icon="📋" label="Copiar Reserva"  onClick={() => openCopyReservation(r)} />
                 <div className="border-t border-gray-100 my-1" />
-                {r.status !== 'concluida' && (
-                  <CtxItem icon="✅" label="Chegou" onClick={() => handleQuickStatus(r, 'concluida')} loading={statusSaving === r.id} />
+                {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
+                  <CtxItem icon="✅" label="Chegou" onClick={() => openConfirmAction(r, 'concluida')} />
                 )}
-                {r.status !== 'faltou' && (
-                  <CtxItem icon="👤" label="Faltou" onClick={() => handleQuickStatus(r, 'faltou')} loading={statusSaving === r.id} />
+                {r.status !== 'faltou' && r.status !== 'cancelada' && (
+                  <CtxItem icon="👤" label="Faltou" onClick={() => openConfirmAction(r, 'faltou')} />
                 )}
                 <CtxItem icon="❌" label="Cancelar Reserva" onClick={() => openCancelReservation(r)} className="text-red-600" />
               </>
@@ -481,14 +486,47 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* modal detalhe */}
+      {/* modal detalhe — sem botões de quick-status, apenas Editar e Cancelar reserva */}
       <Modal open={modal?.type === 'reservation_detail'} onClose={() => setModal(null)} title="Detalhe da reserva">
         {modal?.type === 'reservation_detail' ? (
-          <ReservationDetail r={modal.reservation}
-            onStatusChange={s => handleQuickStatus(modal.reservation, s)}
+          <ReservationDetail
+            r={modal.reservation}
             onEdit={() => openEditReservation(modal.reservation)}
-            onCancel={() => { setModal(null); openCancelReservation(modal.reservation) }} />
+            onCancel={() => { setModal(null); openCancelReservation(modal.reservation) }}
+            onChegou={() => { setModal(null); openConfirmAction(modal.reservation, 'concluida') }}
+            onFaltou={() => { setModal(null); openConfirmAction(modal.reservation, 'faltou') }}
+          />
         ) : <></>}
+      </Modal>
+
+      {/* modal confirmação Chegou / Faltou */}
+      <Modal
+        open={modal?.type === 'reservation_confirm'}
+        onClose={() => setModal(null)}
+        title={modal?.type === 'reservation_confirm'
+          ? (modal.action === 'concluida' ? '✅ Confirmar presença' : '👤 Confirmar falta')
+          : ''}
+        footer={
+          <>
+            <button className="btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+            <button
+              className={modal?.type === 'reservation_confirm' && modal.action === 'concluida' ? 'btn-primary' : 'btn-danger'}
+              onClick={handleConfirmAction}
+              disabled={statusSaving !== null}
+            >
+              {statusSaving !== null ? 'A guardar...' : 'Confirmar'}
+            </button>
+          </>
+        }
+      >
+        {modal?.type === 'reservation_confirm' && (
+          <p className="text-sm text-gray-700">
+            {modal.action === 'concluida'
+              ? `Confirmas que o cliente <strong>${modal.reservation.client_name}</strong> chegou e a reserva foi concluída?`
+              : `Confirmas que o cliente <strong>${modal.reservation.client_name}</strong> não compareceu a esta reserva?`
+            }
+          </p>
+        )}
       </Modal>
 
       {/* modal editar reserva */}
@@ -604,7 +642,7 @@ export default function CalendarPage() {
   )
 }
 
-// ─── Sub-componentes ──────────────────────────────────────────────────────────
+// ─── Sub-componentes ─────────────────────────────────────────────────────────────────────────
 function CtxItem({ icon, label, onClick, className = '', loading = false }: {
   icon: string; label: string; onClick: () => void; className?: string; loading?: boolean
 }) {
@@ -617,8 +655,13 @@ function CtxItem({ icon, label, onClick, className = '', loading = false }: {
   )
 }
 
-function ReservationDetail({ r, onStatusChange, onEdit, onCancel }: {
-  r: Reservation; onStatusChange: (s: ValidStatus) => void; onEdit: () => void; onCancel: () => void
+// Modal de detalhe: sem botões de quick-status, apenas ações via Chegou/Faltou/Editar/Cancelar
+function ReservationDetail({ r, onEdit, onCancel, onChegou, onFaltou }: {
+  r: Reservation
+  onEdit: () => void
+  onCancel: () => void
+  onChegou: () => void
+  onFaltou: () => void
 }) {
   const dt    = new Date(r.data_hora)
   const endDt = addMinutes(dt, r.service_duration ?? 60)
@@ -635,21 +678,29 @@ function ReservationDetail({ r, onStatusChange, onEdit, onCancel }: {
       } />
       {r.comentario   && <NoteBox label="Notas do cliente" text={r.comentario}   bg="gray" />}
       {r.nota_privada && <NoteBox label="Nota privada"     text={r.nota_privada} bg="amber" />}
-      <div className="border-t border-gray-100 pt-3">
-        <p className="text-xs text-gray-500 mb-2">Alterar estado:</p>
-        <div className="flex flex-wrap gap-2">
-          {VALID_STATUSES.filter(s => s !== r.status && s !== 'cancelada').map(s => (
-            <button key={s} onClick={() => onStatusChange(s)}
-              className="text-xs px-3 py-1.5 rounded-full text-white font-medium hover:opacity-80"
-              style={{ background: STATUS_COLORS[s] }}>{STATUS_LABEL[s]}</button>
-          ))}
-          <button onClick={onEdit}
-            className="text-xs px-3 py-1.5 rounded-full bg-blue-100 text-blue-600 font-medium hover:bg-blue-200"
-          >✏️ Editar</button>
+      <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2">
+        {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
+          <button onClick={onChegou}
+            className="text-xs px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 font-medium hover:bg-emerald-200">
+            ✅ Chegou
+          </button>
+        )}
+        {r.status !== 'faltou' && r.status !== 'cancelada' && (
+          <button onClick={onFaltou}
+            className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 font-medium hover:bg-gray-200">
+            👤 Faltou
+          </button>
+        )}
+        <button onClick={onEdit}
+          className="text-xs px-3 py-1.5 rounded-full bg-blue-100 text-blue-600 font-medium hover:bg-blue-200">
+          ✏️ Editar
+        </button>
+        {r.status !== 'cancelada' && (
           <button onClick={onCancel}
-            className="text-xs px-3 py-1.5 rounded-full bg-red-100 text-red-600 font-medium hover:bg-red-200"
-          >Cancelar reserva</button>
-        </div>
+            className="text-xs px-3 py-1.5 rounded-full bg-red-100 text-red-600 font-medium hover:bg-red-200">
+            Cancelar reserva
+          </button>
+        )}
       </div>
     </div>
   )
@@ -672,7 +723,7 @@ function NoteBox({ label, text, bg }: { label: string; text: string; bg: 'gray' 
   )
 }
 
-// ─── Client search with debounce ──────────────────────────────────────────────
+// ─── Client search with debounce ─────────────────────────────────────────────────────────
 function ClientSearch({ value, onChange }: { value?: number; onChange: (id: number, name: string) => void }) {
   const [q, setQ] = useState('')
   const [dq, setDq] = useState('')
@@ -714,7 +765,7 @@ function ClientSearch({ value, onChange }: { value?: number; onChange: (id: numb
   )
 }
 
-// ─── Nova reserva ─────────────────────────────────────────────────────────────
+// ─── Nova reserva ─────────────────────────────────────────────────────────────────────────────
 function NewReservationForm({ barberId, slot, selectedDate, barbers, services, form, saving, onChange, onSave, onCancel }: {
   barberId: number; slot: number; selectedDate: string; barbers: Barber[]; services: Service[]
   form: Partial<Reservation & { sendEmail: boolean }>
@@ -725,19 +776,16 @@ function NewReservationForm({ barberId, slot, selectedDate, barbers, services, f
   const iso = slotToISO(selectedDate, slot)
   return (
     <div className="space-y-3 text-sm">
-      {/* Cliente */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Cliente <span className="text-red-400">*</span></label>
         <ClientSearch value={form.client_id} onChange={(id, name) => { onChange('client_id', id); onChange('client_name', name) }} />
       </div>
-      {/* Barbeiro */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
         <select value={form.barber_id ?? barberId} onChange={e => onChange('barber_id', Number(e.target.value))} className="input text-sm w-full">
           {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
       </div>
-      {/* Serviço */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Serviço <span className="text-red-400">*</span></label>
         <select value={form.service_id ?? ''} onChange={e => onChange('service_id', Number(e.target.value))} className="input text-sm w-full">
@@ -745,21 +793,18 @@ function NewReservationForm({ barberId, slot, selectedDate, barbers, services, f
           {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
         </select>
       </div>
-      {/* Data/hora */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
         <input type="datetime-local" value={(form.data_hora ?? iso).substring(0,16)}
           onChange={e => onChange('data_hora', e.target.value + ':00')}
           className="input text-sm w-full" />
       </div>
-      {/* Nota */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Nota (opcional)</label>
         <textarea rows={2} value={form.comentario ?? ''} onChange={e => onChange('comentario', e.target.value)}
           placeholder="Observações para o barbeiro..."
           className="input text-sm w-full resize-none" />
       </div>
-      {/* Email */}
       <label className="flex items-center gap-2 text-sm cursor-pointer">
         <input type="checkbox" checked={!!form.sendEmail} onChange={e => onChange('sendEmail', e.target.checked)} />
         <span>Enviar email de confirmação ao cliente</span>
@@ -775,7 +820,7 @@ function NewReservationForm({ barberId, slot, selectedDate, barbers, services, f
   )
 }
 
-// ─── Editar reserva ───────────────────────────────────────────────────────────
+// ─── Editar reserva ───────────────────────────────────────────────────────────────────────────
 function EditReservationForm({ form, barbers, services, onChange }: {
   form: Partial<Reservation & { sendEmail: boolean }>
   barbers: Barber[]; services: Service[]
@@ -783,19 +828,16 @@ function EditReservationForm({ form, barbers, services, onChange }: {
 }) {
   return (
     <div className="space-y-3 text-sm">
-      {/* Cliente (só visualização) */}
       <div className="bg-gray-50 rounded-lg px-3 py-2">
         <p className="text-xs text-gray-400 mb-0.5">Cliente</p>
         <p className="font-medium">{form.client_name}</p>
       </div>
-      {/* Barbeiro */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
         <select value={form.barber_id ?? ''} onChange={e => onChange('barber_id', Number(e.target.value))} className="input text-sm w-full">
           {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
       </div>
-      {/* Serviço */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Serviço</label>
         <select value={form.service_id ?? ''} onChange={e => onChange('service_id', Number(e.target.value))} className="input text-sm w-full">
@@ -803,27 +845,24 @@ function EditReservationForm({ form, barbers, services, onChange }: {
           {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
         </select>
       </div>
-      {/* Data/hora */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
         <input type="datetime-local" value={(form.data_hora ?? '').substring(0,16)}
           onChange={e => onChange('data_hora', e.target.value + ':00')}
           className="input text-sm w-full" />
       </div>
-      {/* Estado */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Estado</label>
+        {/* Inclui cancelada para que reservas já canceladas mostrem o estado correto */}
         <select value={form.status ?? 'confirmada'} onChange={e => onChange('status', e.target.value)} className="input text-sm w-full">
           {VALID_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
       </div>
-      {/* Nota do cliente */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Nota do cliente</label>
         <textarea rows={2} value={form.comentario ?? ''} onChange={e => onChange('comentario', e.target.value)}
           className="input text-sm w-full resize-none" />
       </div>
-      {/* Nota privada */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Nota privada</label>
         <textarea rows={2} value={form.nota_privada ?? ''} onChange={e => onChange('nota_privada', e.target.value)}
@@ -837,7 +876,7 @@ function EditReservationForm({ form, barbers, services, onChange }: {
   )
 }
 
-// ─── Indisponibilidade ────────────────────────────────────────────────────────
+// ─── Indisponibilidade ────────────────────────────────────────────────────────────────────────────
 interface UnavailableFormProps {
   form: Partial<Unavailable> & { recurrence_end_date?: string }
   barbers: Barber[]; isNew: boolean; error: string | null; saving: boolean
@@ -910,7 +949,7 @@ function UnavailableForm({ form, barbers, isNew, error, saving, onChange, onSave
           </div>
           {form.recurrence_type && form.recurrence_type !== 'none' && (
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Até à data</label>
+              <label className="block text-xs text-gray-500 mb-1">À data de</label>
               <input type="date" value={form.recurrence_end_date??''}
                 onChange={e => onChange('recurrence_end_date', e.target.value)} className="input text-xs w-full" />
             </div>
