@@ -13,7 +13,7 @@ export default function Header({ title, subtitle, sidebarOpen, onToggleSidebar }
       className="fixed top-0 right-0 left-0 bg-[var(--surface-elevated)] border-b border-[var(--border-subtle)] z-20 transition-all duration-300"
       style={{ height: 'var(--header-height)' }}
     >
-      <div className="h-full flex items-center justify-between px-4 lg:px-6">
+      <div className="h-full flex items-center justify-between px-4 lg:px-20">
         <div className="flex items-center gap-3 min-w-0">
           {/* Botão hambúrguer — apenas em mobile (lg: escondido pois a sidebar desktop é sempre visível) */}
           <button
