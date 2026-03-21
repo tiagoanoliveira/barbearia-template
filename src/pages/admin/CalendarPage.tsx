@@ -15,7 +15,6 @@ import {
   ReservationDetailModal,
   ReservationEditModal,
   ReservationStatusModal,
-  STATUS_BAR,
 } from '@/components/admin/reservation-modals'
 import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from '@/types'
 
