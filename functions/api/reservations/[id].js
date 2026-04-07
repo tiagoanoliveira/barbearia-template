@@ -10,6 +10,7 @@ import {
   corsOptions,
 } from '../../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../../utils/validators.js'
+import { getNowLisboa } from '../../utils/time.js'
 
 export async function onRequest(context) {
   const { request, env, params } = context
@@ -94,7 +95,7 @@ export async function onRequest(context) {
       if (!isValidDate(date)) return badRequest('Data inválida')
       if (!isValidTime(time)) return badRequest('Hora inválida')
 
-      const now      = new Date()
+      const now      = getNowLisboa()
       const current  = new Date(reservation.data_hora)
       const diffHrs  = (current.getTime() - now.getTime()) / (1000 * 60 * 60)
 
@@ -267,7 +268,6 @@ function buildEditedMessage(clientName, changes) {
 
       parts.push(`data/hora (${prevDate} ${prevTime} → ${nextDate} ${nextTime})`)
     } catch {
-      // fallback genérico
       parts.push('data/hora')
     }
   }
