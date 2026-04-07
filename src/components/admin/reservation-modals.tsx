@@ -103,16 +103,26 @@ export function ReservationEditModal({
   const barbers  = barbersRes?.data ?? []
   const services = (servicesRes?.data as unknown as Service[]) ?? []
 
+  const handleServiceChange = (serviceId: number) => {
+    const service = services.find(s => s.id === serviceId)
+    setForm(f => ({
+      ...f,
+      service_id: serviceId,
+      service_duration: service?.duration ?? f.service_duration,
+    }))
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
       await reservationsApi.update(reservation.id, {
-        barber_id:    form.barber_id,
-        service_id:   form.service_id,
-        data_hora:    form.data_hora,
-        comentario:   form.comentario,
-        nota_privada: form.nota_privada,
-        send_email:   form.sendEmail,
+        barber_id:        form.barber_id,
+        service_id:       form.service_id,
+        data_hora:        form.data_hora,
+        comentario:       form.comentario,
+        nota_privada:     form.nota_privada,
+        send_email:       form.sendEmail,
+        service_duration: form.service_duration,
       })
       qc.invalidateQueries({ queryKey: [invalidateKey] })
       onClose()
@@ -153,9 +163,20 @@ export function ReservationEditModal({
         <div>
           <label className="block text-xs text-gray-500 mb-1">Serviço</label>
           <select className="input text-sm w-full" value={form.service_id ?? ''}
-            onChange={e => upd('service_id', Number(e.target.value))}>
-            {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            onChange={e => handleServiceChange(Number(e.target.value))}>
+            {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
           </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Duração (min)</label>
+          <input
+            type="number"
+            min={5}
+            step={5}
+            className="input text-sm w-full"
+            value={form.service_duration ?? reservation.service_duration ?? 60}
+            onChange={e => upd('service_duration', Number(e.target.value))}
+          />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
