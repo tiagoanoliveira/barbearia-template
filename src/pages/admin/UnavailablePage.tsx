@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Pencil, CalendarOff, Eye, ChevronDown, ChevronUp } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
+import { Plus, Trash2, Pencil, CalendarOff, Eye, ChevronDown, ChevronUp, Filter } from 'lucide-react'
+import { format, parseISO, isAfter, startOfDay } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
 import { barbersApi } from '@/api/barbers'
@@ -69,6 +69,10 @@ export default function UnavailablePage() {
   const [groupDetail, setGroupDetail] = useState<GroupDetailState>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
 
+  const [filterBarberId, setFilterBarberId] = useState<number | 'all'>('all')
+  const [filterFrom, setFilterFrom]         = useState('')
+  const [filterTo, setFilterTo]             = useState('')
+
   const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
   const { data: unavailRes, isLoading } = useQuery({
     queryKey: ['unavailable'],
@@ -97,9 +101,27 @@ export default function UnavailablePage() {
   const barbers    = barbersRes?.data ?? []
   const allItems: Unavailable[] = (unavailRes?.data ?? []) as unknown as Unavailable[]
 
-  const singles = allItems.filter(u => !u.recurrence_group_id)
+  const now = startOfDay(new Date())
+  const onlyFuture = allItems.filter(u => {
+    const end = parseISO(u.data_hora_fim)
+    return isAfter(end, now)
+  })
+
+  const filteredByBarber = filterBarberId === 'all'
+    ? onlyFuture
+    : onlyFuture.filter(u => u.barbeiro_id === filterBarberId)
+
+  const filteredByDate = filteredByBarber.filter(u => {
+    const start = parseISO(u.data_hora_inicio)
+    const end   = parseISO(u.data_hora_fim)
+    if (filterFrom && start < parseISO(filterFrom + 'T00:00:00')) return false
+    if (filterTo && end   > parseISO(filterTo + 'T23:59:59'))     return false
+    return true
+  })
+
+  const singles = filteredByDate.filter(u => !u.recurrence_group_id)
   const groupMap = new Map<string, Unavailable[]>()
-  allItems.filter(u => u.recurrence_group_id).forEach(u => {
+  filteredByDate.filter(u => u.recurrence_group_id).forEach(u => {
     const gid = u.recurrence_group_id!
     if (!groupMap.has(gid)) groupMap.set(gid, [])
     groupMap.get(gid)!.push(u)
@@ -107,8 +129,8 @@ export default function UnavailablePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const inicio = form.is_all_day ? `${form.data_hora_inicio}T00:00:00` : form.data_hora_inicio
-    const fim    = form.is_all_day ? `${form.data_hora_fim || form.data_hora_inicio}T23:59:00` : form.data_hora_fim
+    const inicio = form.is_all_day ? `${form.data_hora_inicio}T09:00:00` : form.data_hora_inicio
+    const fim    = form.is_all_day ? `${form.data_hora_fim || form.data_hora_inicio}T20:00:00` : form.data_hora_fim
     if (editTarget) {
       update.mutate({ id: editTarget.id, data: { ...form, data_hora_inicio: inicio, data_hora_fim: fim } })
     } else {
@@ -143,20 +165,59 @@ export default function UnavailablePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <button className="btn-primary" onClick={openCreate}>
-          <Plus size={16} /> Nova indisponibilidade
-        </button>
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-end sm:justify-between">
+        <div className="flex flex-wrap gap-2 items-end">
+          <div>
+            <label className="label flex items-center gap-1 text-xs">
+              <Filter size={12} /> Barbeiro
+            </label>
+            <select
+              className="input text-xs min-w-[160px]"
+              value={filterBarberId === 'all' ? 'all' : String(filterBarberId)}
+              onChange={e => setFilterBarberId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            >
+              <option value="all">Todos os barbeiros</option>
+              {barbers.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2 items-end">
+            <div>
+              <label className="label text-xs">A partir de</label>
+              <input
+                type="date"
+                className="input text-xs"
+                value={filterFrom}
+                onChange={e => setFilterFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label text-xs">Até</label>
+              <input
+                type="date"
+                className="input text-xs"
+                value={filterTo}
+                onChange={e => setFilterTo(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button className="btn-primary" onClick={openCreate}>
+            <Plus size={16} /> Nova indisponibilidade
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
-      ) : allItems.length === 0 ? (
+      ) : filteredByDate.length === 0 ? (
         <Card>
           <EmptyState
             icon={CalendarOff}
-            title="Sem indisponibilidades registadas"
-            description="Regista folgas, férias ou ausências dos barbeiros."
+            title="Sem indisponibilidades futuras"
+            description="Não existem folgas, férias ou ausências futuras para os filtros seleccionados."
             action={<button className="btn-primary" onClick={openCreate}><Plus size={16} /> Adicionar</button>}
           />
         </Card>
