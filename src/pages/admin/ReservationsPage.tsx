@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Pencil, Eye } from 'lucide-react'
+import { Search, Pencil, Eye, Filter } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
 import { reservationsApi } from '@/api/reservations'
+import { barbersApi } from '@/api/barbers'
 import { Card } from '@/components/ui/Card'
 import { StatusBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -36,10 +37,14 @@ export default function ReservationsPage() {
   const [status, setStatus] = useState('')
   const [page,   setPage]   = useState(1)
   const [modal,  setModal]  = useState<ModalMode>(null)
+  const [barberId, setBarberId] = useState<number | 'all'>('all')
+  const [date, setDate] = useState('')
+
+  const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['reservations', { search, status, page }],
-    queryFn: () => reservationsApi.list({ search, status, page, perPage: 20 }),
+    queryKey: ['reservations', { search, status, page, barberId, date }],
+    queryFn: () => reservationsApi.list({ search, status, page, perPage: 20, barber_id: barberId === 'all' ? undefined : barberId, date: date || undefined }),
     placeholderData: (prev) => prev,
   })
 
@@ -48,19 +53,50 @@ export default function ReservationsPage() {
   const totalPages   = data?.data?.totalPages ?? 1
 
   const close = () => setModal(null)
+  const barbers = barbersRes?.data ?? []
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Pesquisar por cliente, serviço..."
-            value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-            className="input pl-9" />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" placeholder="Pesquisar por cliente, serviço..."
+              value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
+              className="input pl-9" />
+          </div>
+          <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }} className="input sm:w-52">
+            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         </div>
-        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }} className="input sm:w-52">
-          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        <div className="flex flex-col sm:flex-row gap-3 items-end">
+          <div className="flex items-end gap-2 flex-1">
+            <div className="flex-1">
+              <label className="label flex items-center gap-1 text-xs">
+                <Filter size={12} /> Barbeiro
+              </label>
+              <select
+                className="input text-xs w-full"
+                value={barberId === 'all' ? 'all' : String(barberId)}
+                onChange={e => { setBarberId(e.target.value === 'all' ? 'all' : Number(e.target.value)); setPage(1) }}
+              >
+                <option value="all">Todos os barbeiros</option>
+                {barbers.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label text-xs">Data</label>
+              <input
+                type="date"
+                className="input text-xs"
+                value={date}
+                onChange={e => { setDate(e.target.value); setPage(1) }}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <Card padding="none">
