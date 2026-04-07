@@ -16,7 +16,7 @@ type Step = 1 | 2 | 3 | 4
 interface BookingState {
   service:    Service | null
   barber:     Barber  | null
-  anyBarber:  boolean          // opção "Sem preferência"
+  anyBarber:  boolean
   date:       string
   time:       string
   notes:      string
@@ -47,13 +47,19 @@ function serviceAvailableOnDay(serviceId: number, dow: number): boolean {
 export default function BookingPage() {
   const navigate       = useNavigate()
   const [searchParams] = useSearchParams()
-  const [step, setStep]     = useState<Step>(1)
+  const [step, setStep]       = useState<Step>(1)
   const [booking, setBooking] = useState<BookingState>(INITIAL)
   const [calMonth, setCalMonth] = useState(new Date())
-  const [error, setError]     = useState<string | null>(null)
+  const [error, setError]       = useState<string | null>(null)
   const [tosChecked, setTosChecked] = useState(true)
 
   const isLoggedIn = !!localStorage.getItem('user_token')
+
+  // Muda de passo e faz scroll instantâneo para o topo
+  const goToStep = (s: Step) => {
+    setStep(s)
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+  }
 
   const { data: servicesRes } = useQuery({
     queryKey: ['public-services'],
@@ -95,7 +101,6 @@ export default function BookingPage() {
       }
     } catch (e) {
       console.warn('BookingPage: erro ao ler rascunho da reserva', e)
-      // ignora rascunhos inválidos
     }
   }, [services, barbers])
 
@@ -115,7 +120,6 @@ export default function BookingPage() {
       console.debug('BookingPage: rascunho guardado', draft)
     } catch (e) {
       console.warn('BookingPage: não foi possível guardar o rascunho', e)
-      // storage cheia ou indisponível — ignorar
     }
   }, [booking, step])
 
@@ -128,7 +132,6 @@ export default function BookingPage() {
     if (s) setBooking(b => ({ ...b, service: s }))
   }, [searchParams, services, booking.service])
 
-  // Slots normais (barbeiro específico)
   const { data: slotsRes } = useQuery({
     queryKey: ['slots', booking.barber?.id, booking.date],
     queryFn:  () =>
@@ -136,7 +139,6 @@ export default function BookingPage() {
     enabled: !booking.anyBarber && !!booking.barber && !!booking.date && !!booking.service,
   })
 
-  // Slots "Sem preferência" (todos os barbeiros)
   const { data: slotsAnyRes } = useQuery({
     queryKey: ['slots-any', booking.date, booking.service?.id],
     queryFn:  () =>
@@ -157,11 +159,17 @@ export default function BookingPage() {
         time:       booking.time,
         notes:      booking.notes || undefined,
       }),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      // Verificar success explicitamente — evita falso positivo quando o backend
+      // devolve HTTP 200 mas com { success: false, error: '...' }
+      if (!res.success) {
+        setError(res.error ?? 'Erro ao confirmar reserva.')
+        return
+      }
       try { localStorage.removeItem(DRAFT_KEY) } catch {}
       navigate('/reservations?confirmed=1')
     },
-    onError:   (e: Error) => setError(e?.message ?? 'Erro ao confirmar reserva.'),
+    onError: (e: Error) => setError(e?.message ?? 'Erro ao confirmar reserva.'),
   })
 
   const today     = new Date()
@@ -240,7 +248,7 @@ export default function BookingPage() {
                   className="w-full flex items-center justify-center gap-2 py-3 bg-primary-500 text-white font-semibold rounded-xl hover:bg-primary-600 transition-colors">
                   <LogIn size={18} /> Fazer login
                 </Link>
-                <button onClick={() => setStep(3)}
+                <button onClick={() => goToStep(3)}
                   className="w-full py-3 bg-white/5 text-gray-400 rounded-xl hover:bg-white/10 text-sm transition-all">
                   Voltar e alterar data
                 </button>
@@ -287,10 +295,9 @@ export default function BookingPage() {
                 </div>
               )}
 
-              {/* PASSO 2 — Barbeiro + Sem preferência */}
+              {/* PASSO 2 */}
               {step === 2 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Opção "Sem preferência" */}
                   <button
                     onClick={() => setBooking(bk => ({ ...bk, barber: null, anyBarber: true }))}
                     className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
@@ -326,7 +333,7 @@ export default function BookingPage() {
                 </div>
               )}
 
-              {/* PASSO 3 — Data & Hora */}
+              {/* PASSO 3 */}
               {step === 3 && (
                 <div className="space-y-6">
                   {serviceRestriction && (
@@ -395,7 +402,7 @@ export default function BookingPage() {
                 </div>
               )}
 
-              {/* PASSO 4 — Confirmar */}
+              {/* PASSO 4 */}
               {step === 4 && (
                 <div className="space-y-4">
                   {[
@@ -419,7 +426,6 @@ export default function BookingPage() {
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
 
-                  {/* ToS */}
                   <label className="flex items-start gap-3 cursor-pointer group">
                     <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
                       tosChecked ? 'bg-primary-500 border-primary-500' : 'border-white/30 group-hover:border-primary-400'
@@ -441,14 +447,14 @@ export default function BookingPage() {
 
               {/* Navegação */}
               <div className="flex items-center justify-between mt-8">
-                <button onClick={() => setStep(s => (s - 1) as Step)}
+                <button onClick={() => goToStep((step - 1) as Step)}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     step === 1 ? 'invisible' : 'bg-white/5 text-gray-300 hover:bg-white/10'
                   }`}>
                   <ArrowLeft size={16} /> Voltar
                 </button>
                 {step < 4 ? (
-                  <button onClick={() => setStep(s => (s + 1) as Step)} disabled={!canNext}
+                  <button onClick={() => goToStep((step + 1) as Step)} disabled={!canNext}
                     className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 text-white rounded-xl text-sm font-semibold hover:bg-primary-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                     Continuar <ArrowRight size={16} />
                   </button>
