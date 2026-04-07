@@ -7,7 +7,23 @@ const FROM = 'Brooklyn Barbearia <noreply@brooklynbarbearia.pt>'
 const BASE_URL = 'https://brooklynbarbearia.pt'
 const YEAR = new Date().getFullYear()
 
-// ─── CSS partilhado ───────────────────────────────────────────────────────────
+/**
+ * Converte uma string UTF-8 para Base64 de forma segura.
+ * btoa() nativo falha com caracteres fora do range Latin1 (ex: acentos em nomes,
+ * emojis, caracteres especiais em assuntos ICS).
+ * Esta função usa TextEncoder para lidar corretamente com UTF-8.
+ *
+ * @param {string} str
+ * @returns {string} Base64
+ */
+function toBase64(str) {
+  const bytes = new TextEncoder().encode(str)
+  let binary = ''
+  bytes.forEach(b => { binary += String.fromCharCode(b) })
+  return btoa(binary)
+}
+
+// ─── CSS partilhado ─────────────────────────────────────────────────────────────────────────────
 function emailCSS() {
   return `
     *{margin:0;padding:0;box-sizing:border-box}
@@ -78,8 +94,8 @@ function shell(headerClass, headerTitle, body) {
   <div class="content">${body}</div>
   <div class="footer">
     <p style="font-size:12px;color:#718096">Este é um email automático, por favor não responda.</p>
-    <p>&copy; ${YEAR} Brooklyn Barbearia – Todos os direitos reservados.
-       Feito com 🤍 por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
+    <p>&copy; ${YEAR} Brooklyn Barbearia &ndash; Todos os direitos reservados.
+       Feito com &#129820; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
   </div>
 </div></div></body></html>`
 }
@@ -90,11 +106,11 @@ function detailRow(icon, label, value) {
 }
 
 function icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName) {
-  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Brooklyn Barbearia//Reservas//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:reserva-${reservaId}@brooklynbarbearia.pt\r\nDTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z\r\nDTSTART:${dtStart}\r\nDTEND:${dtEnd}\r\nSUMMARY:Reserva – ${serviceName} com ${barberName}\r\nDESCRIPTION:Confirmação de reserva na Brooklyn Barbearia\r\nLOCATION:Brooklyn Barbearia\r\nORGANIZER:CN=Brooklyn Barbearia:mailto:noreply@brooklynbarbearia.pt\r\nATTENDEE:mailto:${clientEmail}\r\nSTATUS:CONFIRMED\r\nSEQUENCE:0\r\nEND:VEVENT\r\nEND:VCALENDAR`
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Brooklyn Barbearia//Reservas//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:reserva-${reservaId}@brooklynbarbearia.pt\r\nDTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z\r\nDTSTART:${dtStart}\r\nDTEND:${dtEnd}\r\nSUMMARY:Reserva - ${serviceName} com ${barberName}\r\nDESCRIPTION:Confirmacao de reserva na Brooklyn Barbearia\r\nLOCATION:Brooklyn Barbearia\r\nORGANIZER:CN=Brooklyn Barbearia:mailto:noreply@brooklynbarbearia.pt\r\nATTENDEE:mailto:${clientEmail}\r\nSTATUS:CONFIRMED\r\nSEQUENCE:0\r\nEND:VEVENT\r\nEND:VCALENDAR`
 }
 
 function icsCancelled(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName) {
-  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Brooklyn Barbearia//Reservas//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:CANCEL\r\nBEGIN:VEVENT\r\nUID:reserva-${reservaId}@brooklynbarbearia.pt\r\nDTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z\r\nDTSTART:${dtStart}\r\nDTEND:${dtEnd}\r\nSUMMARY:CANCELADA – ${serviceName} com ${barberName}\r\nDESCRIPTION:Esta reserva foi cancelada pela Brooklyn Barbearia\r\nLOCATION:Brooklyn Barbearia\r\nORGANIZER:CN=Brooklyn Barbearia:mailto:noreply@brooklynbarbearia.pt\r\nATTENDEE:mailto:${clientEmail}\r\nSTATUS:CANCELLED\r\nSEQUENCE:1\r\nEND:VEVENT\r\nEND:VCALENDAR`
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Brooklyn Barbearia//Reservas//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:CANCEL\r\nBEGIN:VEVENT\r\nUID:reserva-${reservaId}@brooklynbarbearia.pt\r\nDTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z\r\nDTSTART:${dtStart}\r\nDTEND:${dtEnd}\r\nSUMMARY:CANCELADA - ${serviceName} com ${barberName}\r\nDESCRIPTION:Esta reserva foi cancelada pela Brooklyn Barbearia\r\nLOCATION:Brooklyn Barbearia\r\nORGANIZER:CN=Brooklyn Barbearia:mailto:noreply@brooklynbarbearia.pt\r\nATTENDEE:mailto:${clientEmail}\r\nSTATUS:CANCELLED\r\nSEQUENCE:1\r\nEND:VEVENT\r\nEND:VCALENDAR`
 }
 
 function icsParams(dataHora, duracao) {
@@ -105,7 +121,7 @@ function icsParams(dataHora, duracao) {
   return { dtStart: fmt(dt), dtEnd: fmt(dtEnd) }
 }
 
-// ─── Envio central com debug completo ────────────────────────────────────────
+// ─── Envio central com debug completo ───────────────────────────────────────────────
 export async function sendEmail(context, { to, subject, html, attachments = [] }) {
   const key = context.env?.RESEND_API_KEY
 
@@ -147,7 +163,7 @@ export async function sendEmail(context, { to, subject, html, attachments = [] }
   }
 }
 
-// ─── 1. Email de confirmação de reserva ───────────────────────────────────────
+// ─── 1. Email de confirmação de reserva ──────────────────────────────────────────────────
 export function buildReservationConfirmationEmail({ reservaId, clientName, clientEmail,
   dataHora, serviceName, barberName, duracao, comentario }) {
 
@@ -157,18 +173,18 @@ export function buildReservationConfirmationEmail({ reservaId, clientName, clien
   const { dtStart, dtEnd } = icsParams(dataHora, duracao)
 
   const notasHtml = comentario
-    ? detailRow('💬','Notas:',`<br>${comentario}`)
+    ? detailRow('&#128172;','Notas:',`<br>${comentario}`)
     : ''
 
-  const html = shell('header-green','Reserva Confirmada! ✅',`
+  const html = shell('header-green','Reserva Confirmada! &#9989;',`
     <p>Olá <strong>${clientName}</strong>,</p>
     <p>A sua reserva foi confirmada com sucesso. Aqui estão os detalhes:</p>
     <div class="info-box border-green">
       <h3>Detalhes da Reserva</h3>
-      ${detailRow('📅','Data:',data)}
-      ${detailRow('🕕','Hora:',hora)}
-      ${detailRow('✂️','Serviço:',serviceName)}
-      ${detailRow('👤','Barbeiro:',barberName)}
+      ${detailRow('&#128197;','Data:',data)}
+      ${detailRow('&#128341;','Hora:',hora)}
+      ${detailRow('&#9986;&#65039;','Serviço:',serviceName)}
+      ${detailRow('&#128100;','Barbeiro:',barberName)}
       ${notasHtml}
     </div>
     <div class="cta-sec">
@@ -177,7 +193,7 @@ export function buildReservationConfirmationEmail({ reservaId, clientName, clien
     </div>
     <div class="contact-sec">
       <p>Ou contacte-nos diretamente:</p>
-      <a href="tel:+351224938542" class="contact-link">📞 +351 224 938 542</a>
+      <a href="tel:+351224938542" class="contact-link">&#128222; +351 224 938 542</a>
     </div>
   `)
 
@@ -185,11 +201,11 @@ export function buildReservationConfirmationEmail({ reservaId, clientName, clien
 
   return {
     html,
-    attachments: [{ filename: 'reserva.ics', content: btoa(ics), type: 'text/calendar' }],
+    attachments: [{ filename: 'reserva.ics', content: toBase64(ics), type: 'text/calendar' }],
   }
 }
 
-// ─── 2. Email de cancelamento de reserva ─────────────────────────────────────
+// ─── 2. Email de cancelamento de reserva ───────────────────────────────────────────────
 export function buildReservationCancellationEmail({ reservaId, clientName, clientEmail,
   dataHora, serviceName, barberName, duracao, motivo }) {
 
@@ -210,10 +226,10 @@ export function buildReservationCancellationEmail({ reservaId, clientName, clien
     <p>Lamentamos informar que a sua reserva foi <strong>cancelada</strong>.</p>
     <div class="info-box border-red">
       <h3>Detalhes da Reserva Cancelada</h3>
-      ${detailRow('📅','Data:',data)}
-      ${detailRow('🕕','Hora:',hora)}
-      ${detailRow('✂️','Serviço:',serviceName)}
-      ${detailRow('👤','Barbeiro:',barberName)}
+      ${detailRow('&#128197;','Data:',data)}
+      ${detailRow('&#128341;','Hora:',hora)}
+      ${detailRow('&#9986;&#65039;','Serviço:',serviceName)}
+      ${detailRow('&#128100;','Barbeiro:',barberName)}
     </div>
     ${motivoHtml}
     <div class="cta-sec">
@@ -222,7 +238,7 @@ export function buildReservationCancellationEmail({ reservaId, clientName, clien
     </div>
     <div class="contact-sec">
       <p>Se tiver alguma dúvida, não hesite em contactar-nos:</p>
-      <a href="tel:+351224938542" class="contact-link">📞 +351 224 938 542</a>
+      <a href="tel:+351224938542" class="contact-link">&#128222; +351 224 938 542</a>
     </div>
   `)
 
@@ -230,15 +246,15 @@ export function buildReservationCancellationEmail({ reservaId, clientName, clien
 
   return {
     html,
-    attachments: [{ filename: 'cancelamento.ics', content: btoa(ics), type: 'text/calendar' }],
+    attachments: [{ filename: 'cancelamento.ics', content: toBase64(ics), type: 'text/calendar' }],
   }
 }
 
-// ─── 3. Email de verificação de conta / novo email ────────────────────────────
+// ─── 3. Email de verificação de conta / novo email ─────────────────────────────────────────
 export function buildVerificationEmail({ clientName, verifyToken }) {
   const verifyUrl = `${BASE_URL}/api/auth/verify?token=${verifyToken}`
 
-  const html = shell('header-gold','Confirme o seu email 📧',`
+  const html = shell('header-gold','Confirme o seu email &#128231;',`
     <p>Olá <strong>${clientName}</strong>,</p>
     <p>Bem-vindo à Brooklyn Barbearia! Por favor confirme o seu email para ativar a conta:</p>
     <div style="text-align:center;margin:30px 0">
@@ -247,7 +263,7 @@ export function buildVerificationEmail({ clientName, verifyToken }) {
     <p style="font-size:14px;color:#888">Ou copie este link:</p>
     <p style="word-break:break-all;font-size:12px;color:#2d4a3e">${verifyUrl}</p>
     <div class="warn">
-      <p><strong>⚠️</strong> Este link expira em <strong>24 horas</strong>.</p>
+      <p><strong>&#9888;&#65039;</strong> Este link expira em <strong>24 horas</strong>.</p>
       <p>Se não criou esta conta, ignore este email.</p>
     </div>
   `)
@@ -255,11 +271,11 @@ export function buildVerificationEmail({ clientName, verifyToken }) {
   return { html }
 }
 
-// ─── 4. Email de confirmação de alteração de email ────────────────────────────
+// ─── 4. Email de confirmação de alteração de email ───────────────────────────────────────
 export function buildEmailChangeEmail({ clientName, confirmToken, newEmail }) {
   const confirmUrl = `${BASE_URL}/confirmar-email?token=${confirmToken}`
 
-  const html = shell('header-gold','Confirme o novo email 📧',`
+  const html = shell('header-gold','Confirme o novo email &#128231;',`
     <p>Olá <strong>${clientName}</strong>,</p>
     <p>Recebemos um pedido para alterar o email da sua conta para <strong>${newEmail}</strong>.</p>
     <p>Para confirmar esta alteração, clique no botão abaixo:</p>
@@ -269,19 +285,19 @@ export function buildEmailChangeEmail({ clientName, confirmToken, newEmail }) {
     <p style="font-size:14px;color:#888">Ou copie este link:</p>
     <p style="word-break:break-all;font-size:12px;color:#2d4a3e">${confirmUrl}</p>
     <div class="warn">
-      <p><strong>⚠️</strong> Este link expira em <strong>24 horas</strong>.</p>
-      <p>Se não pediu esta alteração, ignore este email — a sua conta não será alterada.</p>
+      <p><strong>&#9888;&#65039;</strong> Este link expira em <strong>24 horas</strong>.</p>
+      <p>Se não pediu esta alteração, ignore este email &mdash; a sua conta não será alterada.</p>
     </div>
   `)
 
   return { html }
 }
 
-// ─── 5. Email de recuperação de password ─────────────────────────────────────
+// ─── 5. Email de recuperação de password ──────────────────────────────────────────────────
 export function buildPasswordResetEmail({ clientName, resetToken }) {
   const resetUrl = `${BASE_URL}/recuperar-password?token=${resetToken}`
 
-  const html = shell('header-gold','Recuperação de Password 🔑',`
+  const html = shell('header-gold','Recuperação de Password &#128273;',`
     <p>Olá <strong>${clientName}</strong>,</p>
     <p>Recebemos um pedido para redefinir a password da sua conta.</p>
     <p>Se foi você que fez este pedido, clique no botão abaixo:</p>
@@ -289,10 +305,10 @@ export function buildPasswordResetEmail({ clientName, resetToken }) {
       <a href="${resetUrl}" class="btn">Redefinir Password</a>
     </div>
     <div class="warn">
-      <p><strong>⚠️ Importante:</strong></p>
-      <p>• Este link expira em <strong>1 hora</strong>.</p>
-      <p>• Se não solicitou esta recuperação, ignore e descarte este email.</p>
-      <p>• A sua password atual permanecerá válida até que defina uma nova.</p>
+      <p><strong>&#9888;&#65039; Importante:</strong></p>
+      <p>&bull; Este link expira em <strong>1 hora</strong>.</p>
+      <p>&bull; Se não solicitou esta recuperação, ignore e descarte este email.</p>
+      <p>&bull; A sua password atual permanecerá válida até que defina uma nova.</p>
     </div>
     <p style="font-size:12px;color:#888">Se o botão não funcionar, copie este link:</p>
     <p style="word-break:break-all;font-size:12px;color:#2d4a3e">${resetUrl}</p>
