@@ -29,12 +29,22 @@ export async function onRequest(context) {
 
     const { html } = buildPasswordResetEmail({ clientName: client.nome, resetToken: token })
 
-    // Dispara email mas não bloqueia se falhar
-    sendEmail(context, {
-      to:      email,
-      subject: 'Recuperação de Password – Brooklyn Barbearia',
-      html,
-    }).catch(err => console.error('[forgot-password] Erro ao enviar email:', err))
+    // Aguarda envio de email e regista erro detalhado para diagnóstico no Cloudflare Logs
+    try {
+      await sendEmail(context, {
+        to:      email,
+        subject: 'Recuperação de Password – Brooklyn Barbearia',
+        html,
+      })
+    } catch (emailErr) {
+      console.error('[forgot-password] Falha ao enviar email:', JSON.stringify({
+        message:     emailErr?.message,
+        cause:       emailErr?.cause,
+        key_present: !!env?.RESEND_API_KEY,
+        to:          email,
+      }))
+      // Não bloqueia a resposta ao cliente
+    }
 
     return ok({ message: 'Se o email existir, irá receber um link.' })
   } catch (e) {
