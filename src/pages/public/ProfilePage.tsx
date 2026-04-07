@@ -26,6 +26,10 @@ export default function ProfilePage() {
   const [linkError, setLinkError] = useState<string | null>(null)
   const [photoUploading, setPhotoUploading] = useState(false)
   const [photoError, setPhotoError] = useState<string | null>(null)
+  const [emailChangeInfo, setEmailChangeInfo] = useState<{
+    pendingEmail: string
+    hadSocial: boolean
+  } | null>(null)
 
   const hasToken = !!localStorage.getItem('user_token')
   if (!hasToken) return <Navigate to="/login?redirect=/perfil" replace />
@@ -62,18 +66,41 @@ export default function ProfilePage() {
     }
   }, [searchParams])
 
+  const methods     = (user?.auth_methods ?? '').split(',').map(m => m.trim()).filter(Boolean)
+  const hasGoogle   = methods.includes('google')
+  const hasFacebook = methods.includes('facebook')
+  const hasPassword = methods.includes('password')
+  const hasSocial   = hasGoogle || hasFacebook
+
   const updateProfile = useMutation({
     mutationFn: (data: Partial<ProfileForm>) => api.put('/api/me', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['me'] }); setEditOpen(false); setFormError(null) },
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['me'] })
+      setEditOpen(false)
+      setFormError(null)
+
+      if (res?.data?.email_change_pending && res.data.pending_email) {
+        setEmailChangeInfo({
+          pendingEmail: res.data.pending_email,
+          hadSocial: hasSocial,
+        })
+      }
+    },
     onError:   (e: any) => setFormError(e?.message ?? 'Erro ao guardar.'),
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (form.new_password && form.new_password !== form.new_password_confirm) {
-      setFormError('As passwords não coincidem.'); return
+      setFormError('As passwords não coincidem.')
+      return
     }
-    const payload: Record<string, string> = { name: form.name, email: form.email, phone: form.phone, nif: form.nif }
+    const payload: Record<string, string> = {
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      nif: form.nif,
+    }
     if (form.new_password) {
       payload.current_password = form.current_password
       payload.new_password     = form.new_password
@@ -113,11 +140,6 @@ export default function ProfilePage() {
       if (e.target) e.target.value = ''
     }
   }
-
-  const methods     = (user?.auth_methods ?? '').split(',').map(m => m.trim()).filter(Boolean)
-  const hasGoogle   = methods.includes('google')
-  const hasFacebook = methods.includes('facebook')
-  const hasPassword = methods.includes('password')
 
   const handleLinkGoogle = async () => {
     setLinkError(null)
@@ -366,6 +388,37 @@ export default function ProfilePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {emailChangeInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 space-y-4">
+            <h3 className="font-bold text-gray-900 mb-1">Confirmação de alteração de email</h3>
+            <p className="text-sm text-gray-700">
+              Enviámos um email para <span className="font-semibold">{emailChangeInfo.pendingEmail}</span> com um link para
+              confirmares a alteração do teu email.
+            </p>
+            <p className="text-sm text-gray-700">
+              Tens <span className="font-semibold">24 horas</span> para concluir esta confirmação. Até lá, deves continuar a
+              entrar com o teu email atual.
+            </p>
+            {emailChangeInfo.hadSocial && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                Atenção: ao confirmares o novo email, as contas de redes sociais associadas (Google/Facebook) serão desassociadas
+                deste perfil. Depois podes associá-las novamente se quiseres.
+              </p>
+            )}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setEmailChangeInfo(null)}
+                className="btn-primary text-sm"
+              >
+                Percebi
+              </button>
+            </div>
           </div>
         </div>
       )}
