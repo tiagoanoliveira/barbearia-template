@@ -11,7 +11,6 @@ export async function onRequest(context) {
   try {
     const body = await request.json()
 
-    // Aceita {identifier} (email ou telefone) ou {email} por compatibilidade
     const raw      = body.identifier ?? body.email ?? ''
     const password = body.password   ?? ''
 
@@ -21,26 +20,32 @@ export async function onRequest(context) {
 
     // Primeiro tenta por email, depois por telefone
     let client = await env.DB.prepare(
-      'SELECT id, nome, email, telefone, password_hash, foto_perfil FROM clientes WHERE email = ?'
+        `SELECT id, nome, email, telefone, password_hash, foto_perfil, email_verificado
+       FROM clientes WHERE email = ?`
     ).bind(identifier).first()
 
     if (!client) {
-      // Normaliza telefone: remove espaços e caracteres não numéricos para comparar
       client = await env.DB.prepare(
-        `SELECT id, nome, email, telefone, password_hash, foto_perfil
-         FROM clientes WHERE replace(replace(telefone,' ',''),'-','') = replace(replace(?,' ',''),'-','')`
+          `SELECT id, nome, email, telefone, password_hash, foto_perfil, email_verificado
+           FROM clientes
+           WHERE replace(replace(telefone,' ',''),'-','') = replace(replace(?,' ',''),'-','')`
       ).bind(identifier).first()
     }
 
     if (!client) return badRequest('Credenciais inválidas')
 
-    // Verifica password — pode ser null em contas OAuth puras
-    if (!client.password_hash) {
-      return badRequest('Credenciais inválidas')
-    }
+    if (!client.password_hash) return badRequest('Credenciais inválidas')
 
     const valid = await verifyPassword(password, client.password_hash)
     if (!valid) return badRequest('Credenciais inválidas')
+
+    // Bloquear login se o email ainda não foi verificado
+    if (!client.email_verificado) {
+      return unauthorized(
+          'Por favor verifique o seu email antes de iniciar sessão. ' +
+          'Verifique a caixa de entrada (e spam) do email com que se registou.'
+      )
+    }
 
     const token = await signJWT({ id: client.id, email: client.email }, env.JWT_SECRET)
 

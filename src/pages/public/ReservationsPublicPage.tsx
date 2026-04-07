@@ -171,7 +171,6 @@ export default function ReservationsPublicPage() {
                 <ReservationCard
                   key={r.id}
                   r={r}
-                  onCancel={() => cancel.mutate(r.id)}
                   onEdit={() => openEdit(r)}
                 />
               ))}
@@ -293,20 +292,37 @@ export default function ReservationsPublicPage() {
             )}
             <div className="flex justify-end gap-2 pt-2">
               <button
-                type="button"
-                onClick={() => !edit.isPending && setEditing(null)}
-                className="px-4 py-2 text-xs text-gray-300 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+                  type="button"
+                  onClick={() => !edit.isPending && setEditing(null)}
+                  className="px-4 py-2 text-xs text-gray-300 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
               >
                 Fechar
               </button>
               <button
-                type="button"
-                onClick={handleSaveEdit}
-                disabled={edit.isPending}
-                className="px-4 py-2 text-xs bg-brand-500 text-white rounded-xl hover:bg-brand-600
-                           disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={edit.isPending}
+                  className="px-4 py-2 text-xs bg-brand-500 text-white rounded-xl hover:bg-brand-600
+               disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {edit.isPending ? 'A guardar...' : 'Guardar alterações'}
+              </button>
+            </div>
+
+            <div className="border-t border-white/5 pt-3 text-center">
+              <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Tens a certeza que queres cancelar esta reserva? Esta ação não pode ser desfeita.')) {
+                      cancel.mutate(editing.id)
+                      setEditing(null)
+                    }
+                  }}
+                  disabled={cancel.isPending}
+                  className="text-xs text-red-400/70 hover:text-red-400 underline underline-offset-2
+               transition-colors disabled:opacity-50"
+              >
+                Cancelar esta reserva
               </button>
             </div>
           </div>
@@ -316,56 +332,37 @@ export default function ReservationsPublicPage() {
   )
 }
 
-function ReservationCard({ r, onCancel, onEdit }: { r: Reservation; onCancel?: () => void; onEdit?: () => void }) {
-  const canCancel = r.status === 'confirmada'
-  const canEdit   = canCancel
+function ReservationCard({ r, onEdit }: { r: Reservation; onEdit?: () => void }) {
+  const canEdit = r.status === 'confirmada'
   const dt = parseISO(r.data_hora)
 
-  const handleCancelClick = () => {
-    if (!onCancel) return
-    if (window.confirm('Tens a certeza que queres cancelar esta reserva?')) {
-      onCancel()
-    }
-  }
-
   return (
-    <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-4">
-      <div className="flex-shrink-0 w-12 h-12 bg-brand-500/20 rounded-2xl flex flex-col
+      <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-4">
+        <div className="flex-shrink-0 w-12 h-12 bg-brand-500/20 rounded-2xl flex flex-col
                       items-center justify-center">
-        <span className="text-brand-400 font-black text-lg leading-none">{dt.getDate()}</span>
-        <span className="text-brand-400/60 text-xs uppercase">
+          <span className="text-brand-400 font-black text-lg leading-none">{dt.getDate()}</span>
+          <span className="text-brand-400/60 text-xs uppercase">
           {format(dt, 'MMM', { locale: pt })}
         </span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold">{r.service_name}</p>
-        <p className="text-sm text-gray-500">
-          {r.barber_name} · {format(dt, 'HH:mm')}
-        </p>
-      </div>
-      <div className="flex flex-col items-end gap-1">
-        <StatusBadge status={r.status} />
-        <div className="flex flex-col items-end gap-1 mt-1">
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-semibold">{r.service_name}</p>
+          <p className="text-sm text-gray-500">
+            {r.barber_name} · {format(dt, 'HH:mm')}
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <StatusBadge status={r.status} />
           {canEdit && onEdit && (
-            <button
-              onClick={onEdit}
-              className="px-3 py-1 rounded-full text-xs font-medium bg-brand-500/20 text-brand-200
-                         hover:bg-brand-500/30 transition-colors"
-            >
-              Editar
-            </button>
-          )}
-          {canCancel && onCancel && (
-            <button
-              onClick={handleCancelClick}
-              className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-300
-                         hover:bg-red-500/20 transition-colors"
-            >
-              Cancelar
-            </button>
+              <button
+                  onClick={onEdit}
+                  className="mt-1 px-3 py-1 rounded-full text-xs font-medium bg-brand-500/20 text-brand-200
+                       hover:bg-brand-500/30 transition-colors"
+              >
+                Editar
+              </button>
           )}
         </div>
       </div>
-    </div>
   )
 }

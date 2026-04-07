@@ -22,9 +22,10 @@ export async function onRequest(context) {
     const expires = new Date(Date.now() + 3600000).toISOString() // 1h
 
     await env.DB.prepare(
-      `INSERT OR REPLACE INTO token_reset_password (cliente_id, token, expires_at)
-       VALUES (?, ?, ?)`
-    ).bind(client.id, token, expires).run()
+        `UPDATE clientes
+         SET token_reset_password = ?, token_reset_expira = ?, atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
+    ).bind(token, expires, client.id).run()
 
     const { html } = buildPasswordResetEmail({ clientName: client.nome, resetToken: token })
 
@@ -33,7 +34,7 @@ export async function onRequest(context) {
       to:      email,
       subject: 'Recuperação de Password – Brooklyn Barbearia',
       html,
-    }).catch(() => {})
+    }).catch(err => console.error('[forgot-password] Erro ao enviar email:', err))
 
     return ok({ message: 'Se o email existir, irá receber um link.' })
   } catch (e) {

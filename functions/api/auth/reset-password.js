@@ -20,9 +20,8 @@ export async function onRequest(context) {
 
     // Verificar token
     const row = await env.DB.prepare(
-      `SELECT cliente_id, expires_at
-       FROM token_reset_password
-       WHERE token = ? LIMIT 1`
+        `SELECT id AS cliente_id, token_reset_expira AS expires_at
+         FROM clientes WHERE token_reset_password = ? LIMIT 1`
     ).bind(token).first()
 
     if (!row) {
@@ -31,8 +30,10 @@ export async function onRequest(context) {
 
     if (new Date(row.expires_at) < new Date()) {
       await env.DB.prepare(
-        'DELETE FROM token_reset_password WHERE token = ?'
-      ).bind(token).run()
+          `UPDATE clientes
+           SET token_reset_password = NULL, token_reset_expira = NULL, atualizado_em = CURRENT_TIMESTAMP
+           WHERE id = ?`
+      ).bind(row.cliente_id).run()
       return badRequest('O link de recuperação expirou. Por favor, pede um novo.')
     }
 
@@ -49,15 +50,10 @@ export async function onRequest(context) {
     }
 
     await env.DB.prepare(
-      `UPDATE clientes
-       SET password_hash = ?, auth_methods = ?, atualizado_em = CURRENT_TIMESTAMP
-       WHERE id = ?`
+        `UPDATE clientes
+         SET password_hash = ?, auth_methods = ?, token_reset_password = NULL, token_reset_expira = NULL, atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
     ).bind(newHash, authMethods, row.cliente_id).run()
-
-    // Invalidar token usado (e todos os tokens antigos deste cliente)
-    await env.DB.prepare(
-      'DELETE FROM token_reset_password WHERE cliente_id = ?'
-    ).bind(row.cliente_id).run()
 
     return ok({ message: 'Password alterada com sucesso. Já podes iniciar sessão.' })
   } catch (e) {
