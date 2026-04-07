@@ -7,16 +7,20 @@ export interface ReservationsFilter {
   status?: string
   barberId?: number
   date?: string
+  fromDate?: string
+  toDate?: string
   search?: string
 }
 
 export const reservationsApi = {
   list: (filters: ReservationsFilter = {}) => {
     const params = new URLSearchParams()
-    if (filters.page)    params.append('offset', String((filters.page - 1) * (filters.perPage ?? 20)))
-    if (filters.perPage) params.append('limit',  String(filters.perPage))
-    if (filters.status)  params.append('status', filters.status)
-    if (filters.date)    params.append('date',   filters.date)
+    if (filters.page)     params.append('offset', String((filters.page - 1) * (filters.perPage ?? 20)))
+    if (filters.perPage)  params.append('limit',  String(filters.perPage))
+    if (filters.status)   params.append('status', filters.status)
+    if (filters.date)     params.append('date',   filters.date)
+    if (filters.fromDate) params.append('date_from', filters.fromDate)
+    if (filters.toDate)   params.append('date_to',   filters.toDate)
     if (filters.barberId) params.append('barber_id', String(filters.barberId))
     if (filters.search)   params.append('search', filters.search)
     return adminApi.get<PaginatedResponse<Reservation>>(`/api/admin/reservations?${params}`)
