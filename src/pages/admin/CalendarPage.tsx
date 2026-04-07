@@ -2,6 +2,7 @@ import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO, addMinutes, isSunday } from 'date-fns'
 import { pt } from 'date-fns/locale'
+import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
@@ -96,7 +97,7 @@ export default function CalendarPage() {
     catch { return null }
   }, [])
   const isBarber     = adminUser?.role === 'barbeiro'
-  const barberFilter = isBarber && adminUser?.barbeiro_id ? adminUser.barbreiro_id : null
+  const barberFilter = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
 
   const { display: dateDisplay, committed: selectedDate, onChange: onDateInput, setDate: setSelectedDate } =
     useDebouncedDate(format(new Date(), 'yyyy-MM-dd'))
