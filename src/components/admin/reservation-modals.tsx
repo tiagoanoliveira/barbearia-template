@@ -130,6 +130,8 @@ export function ReservationEditModal({
     finally { setSaving(false) }
   }
 
+  const nowLocal = new Date().toISOString().slice(0, 16)
+
   return (
     <Modal open onClose={onClose} title={`Editar reserva #${reservation.id}`}
       footer={
@@ -162,7 +164,7 @@ export function ReservationEditModal({
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Serviço</label>
-          <select className="input text-sm w-full" value={form.service_id ?? ''}
+          <select className="input text-sm w-full bg-white text-gray-900" value={form.service_id ?? ''}
             onChange={e => handleServiceChange(Number(e.target.value))}>
             {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
           </select>
@@ -180,9 +182,13 @@ export function ReservationEditModal({
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
-          <input type="datetime-local" className="input text-sm w-full"
+          <input
+            type="datetime-local"
+            className="input text-sm w-full"
             value={(form.data_hora ?? '').substring(0,16)}
-            onChange={e => upd('data_hora', e.target.value+':00')} />
+            min={nowLocal}
+            onChange={e => upd('data_hora', e.target.value+':00')}
+          />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Nota do cliente</label>
