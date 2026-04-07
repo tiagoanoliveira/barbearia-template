@@ -2,7 +2,6 @@ import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO, addMinutes, isSunday } from 'date-fns'
 import { pt } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
@@ -18,10 +17,15 @@ import {
 } from '@/components/admin/reservation-modals'
 import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from '@/types'
 
-const SLOT_H  = 40
-const START_H = 9
-const END_H   = 20
-const TOTAL_SLOTS = (END_H - START_H) * 2
+const SLOT_H        = 24
+const START_H       = 9
+const END_H         = 20
+const SLOT_DURATION = 15 // minutos por slot
+const SLOTS_PER_H   = 60 / SLOT_DURATION
+const TOTAL_SLOTS   = (END_H - START_H) * SLOTS_PER_H
+
+const OPEN_H  = 9
+const CLOSE_H = 20
 
 const TIPO_ICON: Record<UnavailableTipo, string> = {
   folga: '✈️', ferias: '🏖️', almoco: '🍴', ausencia: '🚫', outro: '📌',
@@ -36,15 +40,18 @@ const TIPO_OPTIONS: UnavailableTipo[] = ['folga', 'ferias', 'almoco', 'ausencia'
 
 function timeToSlot(iso: string) {
   const d = new Date(iso)
-  return (d.getHours() - START_H) * 2 + (d.getMinutes() >= 30 ? 1 : 0)
+  const totalMin = d.getHours() * 60 + d.getMinutes()
+  const baseMin  = START_H * 60
+  const offset   = Math.max(0, totalMin - baseMin)
+  return Math.floor(offset / SLOT_DURATION)
 }
 function slotToLabel(slot: number) {
-  const t = START_H * 60 + slot * 30
-  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '00')}`
+  const t = START_H * 60 + slot * SLOT_DURATION
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
 }
 function slotToISO(dateStr: string, slot: number) {
-  const t = START_H * 60 + slot * 30
-  return `${dateStr}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '00')}:00`
+  const t = START_H * 60 + slot * SLOT_DURATION
+  return `${dateStr}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}:00`
 }
 function hexToRgba(hex: string, alpha: number) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
@@ -89,7 +96,7 @@ export default function CalendarPage() {
     catch { return null }
   }, [])
   const isBarber     = adminUser?.role === 'barbeiro'
-  const barberFilter = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
+  const barberFilter = isBarber && adminUser?.barbeiro_id ? adminUser.barbreiro_id : null
 
   const { display: dateDisplay, committed: selectedDate, onChange: onDateInput, setDate: setSelectedDate } =
     useDebouncedDate(format(new Date(), 'yyyy-MM-dd'))
@@ -140,7 +147,13 @@ export default function CalendarPage() {
 
   const openCtx = (e: React.MouseEvent, target: ContextTarget) => {
     e.preventDefault(); e.stopPropagation()
-    setCtx(target); setCtxPos({ x: e.clientX, y: e.clientY })
+    const MENU_HEIGHT = 220
+    const MENU_WIDTH  = 260
+    const vpH = window.innerHeight
+    const vpW = window.innerWidth
+    const x = Math.min(e.clientX, vpW - MENU_WIDTH - 8)
+    const y = Math.min(e.clientY, vpH - MENU_HEIGHT - 8)
+    setCtx(target); setCtxPos({ x, y })
   }
   const closeCtx = () => setCtx(null)
   const close    = () => setModal(null)
@@ -150,8 +163,10 @@ export default function CalendarPage() {
     setModal({ type: 'res_new', barberId, slot }); closeCtx()
   }
   const openNewUnavailable = (barberId: number, slot: number) => {
-    setUForm({ barbeiro_id: barberId, data_hora_inicio: slotToISO(selectedDate, slot),
-               data_hora_fim: slotToISO(selectedDate, slot + 2), is_all_day: 0, tipo: 'folga', motivo: '', recurrence_type: 'none' })
+    const startIso = slotToISO(selectedDate, slot)
+    const endIso   = slotToISO(selectedDate, slot + (60 / SLOT_DURATION))
+    setUForm({ barbeiro_id: barberId, data_hora_inicio: startIso,
+               data_hora_fim: endIso, is_all_day: 0, tipo: 'folga', motivo: '', recurrence_type: 'none' })
     setUError(null); setModal({ type: 'unavail', data: {}, isNew: true }); closeCtx()
   }
   const openEditUnavailable = (u: Unavailable) => {
@@ -169,8 +184,17 @@ export default function CalendarPage() {
     setUSaving(true); setUError(null)
     try {
       const isNew = modal && 'isNew' in modal ? modal.isNew : false
-      if (isNew || !uForm.id) await barbersApi.createUnavailable(uForm as Unavailable)
-      else                    await barbersApi.updateUnavailable(uForm.id, uForm as Unavailable)
+      const payload = { ...uForm }
+
+      if (uForm.is_all_day) {
+        const dayStart = (uForm.data_hora_inicio ?? `${selectedDate}T00:00:00`).substring(0, 10)
+        const dayEnd   = (uForm.data_hora_fim    ?? uForm.data_hora_inicio ?? `${selectedDate}T00:00:00`).substring(0, 10)
+        payload.data_hora_inicio = `${dayStart}T${String(OPEN_H).padStart(2,'0')}:00:00`
+        payload.data_hora_fim    = `${dayEnd}T${String(CLOSE_H).padStart(2,'0')}:00:00`
+      }
+
+      if (isNew || !uForm.id) await barbersApi.createUnavailable(payload as Unavailable)
+      else                    await barbersApi.updateUnavailable(uForm.id, payload as Unavailable)
       qc.invalidateQueries({ queryKey: ['cal-unavail'] }); close()
     } catch (e: unknown) { setUError(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setUSaving(false) }
@@ -275,7 +299,7 @@ export default function CalendarPage() {
               {timeSlots.map(slot => (
                 <>
                   <div key={`t_${slot}`} className="border-b border-gray-50 flex items-top justify-center" style={{ height: SLOT_H }}>
-                    {slot % 2 === 0 && <span className="text-[11px] text-gray-400">{slotToLabel(slot)}</span>}
+                    {slot % SLOTS_PER_H === 0 && <span className="text-[11px] text-gray-400">{slotToLabel(slot)}</span>}
                   </div>
                   {barbers.map(b => {
                     const blocked = isSlotBlocked(b.id, slot)
@@ -313,7 +337,7 @@ export default function CalendarPage() {
                         {rList.map(r => {
                           const barColor  = b.color ?? '#888'
                           const dur       = r.service_duration ?? 60
-                          const heightPx  = Math.max(SLOT_H, Math.round((dur / 30) * SLOT_H))
+                          const heightPx  = Math.max(SLOT_H, Math.round((dur / SLOT_DURATION) * SLOT_H))
                           const barColor2 = STATUS_BAR_LOCAL[r.status] ?? barColor
                           return (
                             <div key={r.id}
@@ -536,11 +560,79 @@ function NewReservationForm({ barberId, slot, selectedDate, barbers, services, f
   onSave: () => void; onCancel: () => void
 }) {
   const iso = slotToISO(selectedDate, slot)
+  const [newClientMode, setNewClientMode] = useState(false)
+  const [newClientName, setNewClientName] = useState('')
+  const [newClientEmail, setNewClientEmail] = useState('')
+  const [newClientPhone, setNewClientPhone] = useState('')
+  const [creatingClient, setCreatingClient] = useState(false)
+
+  const handleCreateClient = async () => {
+    if (!newClientName.trim()) return
+    setCreatingClient(true)
+    try {
+      const res = await clientsApi.create({
+        name: newClientName.trim(),
+        email: newClientEmail.trim() || undefined,
+        phone: newClientPhone.trim() || undefined,
+      })
+      if (res.success && res.data) {
+        onChange('client_id', res.data.id)
+        onChange('client_name', res.data.name)
+        setNewClientMode(false)
+      }
+    } finally {
+      setCreatingClient(false)
+    }
+  }
+
   return (
     <div className="space-y-3 text-sm">
       <div>
-        <label className="block text-xs text-gray-500 mb-1">Cliente <span className="text-red-400">*</span></label>
-        <ClientSearch value={form.client_id} onChange={(id, name) => { onChange('client_id', id); onChange('client_name', name) }} />
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-xs text-gray-500">Cliente <span className="text-red-400">*</span></label>
+          <button
+            type="button"
+            onClick={() => setNewClientMode(v => !v)}
+            className="text-[11px] text-brand-700 hover:text-brand-800"
+          >
+            {newClientMode ? 'Escolher existente' : 'Criar novo'}
+          </button>
+        </div>
+        {newClientMode ? (
+          <div className="space-y-2 border rounded-xl p-3 bg-gray-50">
+            <input
+              type="text"
+              placeholder="Nome do cliente"
+              className="input text-sm w-full"
+              value={newClientName}
+              onChange={e => setNewClientName(e.target.value)}
+            />
+            <input
+              type="email"
+              placeholder="Email (opcional)"
+              className="input text-sm w-full"
+              value={newClientEmail}
+              onChange={e => setNewClientEmail(e.target.value)}
+            />
+            <input
+              type="tel"
+              placeholder="Telefone (opcional)"
+              className="input text-sm w-full"
+              value={newClientPhone}
+              onChange={e => setNewClientPhone(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={handleCreateClient}
+              disabled={creatingClient || !newClientName.trim()}
+              className="btn-primary w-full text-xs mt-1 disabled:opacity-50"
+            >
+              {creatingClient ? 'A criar cliente...' : 'Criar e associar cliente'}
+            </button>
+          </div>
+        ) : (
+          <ClientSearch value={form.client_id} onChange={(id, name) => { onChange('client_id', id); onChange('client_name', name) }} />
+        )}
       </div>
       <div>
         <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
