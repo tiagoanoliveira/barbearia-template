@@ -21,7 +21,7 @@ export async function onRequest(context) {
     // Verificar token
     const row = await env.DB.prepare(
       `SELECT cliente_id, expires_at
-       FROM password_reset_tokens
+       FROM token_reset_password
        WHERE token = ? LIMIT 1`
     ).bind(token).first()
 
@@ -31,7 +31,7 @@ export async function onRequest(context) {
 
     if (new Date(row.expires_at) < new Date()) {
       await env.DB.prepare(
-        'DELETE FROM password_reset_tokens WHERE token = ?'
+        'DELETE FROM token_reset_password WHERE token = ?'
       ).bind(token).run()
       return badRequest('O link de recuperação expirou. Por favor, pede um novo.')
     }
@@ -56,7 +56,7 @@ export async function onRequest(context) {
 
     // Invalidar token usado (e todos os tokens antigos deste cliente)
     await env.DB.prepare(
-      'DELETE FROM password_reset_tokens WHERE cliente_id = ?'
+      'DELETE FROM token_reset_password WHERE cliente_id = ?'
     ).bind(row.cliente_id).run()
 
     return ok({ message: 'Password alterada com sucesso. Já podes iniciar sessão.' })

@@ -22,7 +22,7 @@ export async function onRequest(context) {
     const expires = new Date(Date.now() + 3600000).toISOString() // 1h
 
     await env.DB.prepare(
-      `INSERT OR REPLACE INTO password_reset_tokens (cliente_id, token, expires_at)
+      `INSERT OR REPLACE INTO token_reset_password (cliente_id, token, expires_at)
        VALUES (?, ?, ?)`
     ).bind(client.id, token, expires).run()
 
