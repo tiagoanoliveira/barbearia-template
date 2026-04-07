@@ -82,15 +82,20 @@ export async function onRequest(context) {
         finalBarberId
       ).run().catch(() => {})
 
-      // Enviar email de confirmação usando utilitário centralizado
+      // Aguarda envio de email e regista erro detalhado para diagnóstico no Cloudflare Logs
       sendConfirmationEmail(context, {
         reservationId,
-        clientId:   auth.clientId,
-        barberName: barber.nome,
+        clientId:    auth.clientId,
+        barberName:  barber.nome,
         serviceName: service.nome,
-        duracao:    service.duracao || 60,
+        duracao:     service.duracao || 60,
         dataHora,
-      }).catch(err => console.error('[reservations] Erro ao enviar email de confirmação:', err))
+      }).catch(err => console.error('[reservations] Falha ao enviar email de confirmação:', JSON.stringify({
+        message:     err?.message,
+        cause:       err?.cause,
+        key_present: !!context.env?.RESEND_API_KEY,
+        reservationId,
+      })))
 
       return created({ id: reservationId, barber_id: finalBarberId, barber_name: barber.nome })
     } catch (e) {
