@@ -39,6 +39,7 @@ export async function onRequest(context) {
         data_hora,
         comentario,
         nota_privada,
+        service_duration,
       } = body
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
@@ -52,15 +53,19 @@ export async function onRequest(context) {
       const updates = []
       const vals    = []
 
-      if (status        !== undefined) { updates.push('status = ?');       vals.push(status) }
-      if (notes         !== undefined) { updates.push('comentario = ?');   vals.push(sanitize(notes, 2000)) }
-      if (private_note  !== undefined) { updates.push('nota_privada = ?'); vals.push(sanitize(private_note, 2000)) }
+      if (status        !== undefined) { updates.push('status = ?');           vals.push(status) }
+      if (notes         !== undefined) { updates.push('comentario = ?');       vals.push(sanitize(notes, 2000)) }
+      if (private_note  !== undefined) { updates.push('nota_privada = ?');     vals.push(sanitize(private_note, 2000)) }
 
-      if (comentario    !== undefined) { updates.push('comentario = ?');   vals.push(sanitize(comentario, 2000)) }
-      if (nota_privada  !== undefined) { updates.push('nota_privada = ?'); vals.push(sanitize(nota_privada, 2000)) }
-      if (barber_id     !== undefined) { updates.push('barbeiro_id = ?');  vals.push(barber_id) }
-      if (service_id    !== undefined) { updates.push('servico_id = ?');   vals.push(service_id) }
-      if (data_hora     !== undefined) { updates.push('data_hora = ?');    vals.push(data_hora) }
+      if (comentario    !== undefined) { updates.push('comentario = ?');       vals.push(sanitize(comentario, 2000)) }
+      if (nota_privada  !== undefined) { updates.push('nota_privada = ?');     vals.push(sanitize(nota_privada, 2000)) }
+      if (barber_id     !== undefined) { updates.push('barbeiro_id = ?');      vals.push(barber_id) }
+      if (service_id    !== undefined) { updates.push('servico_id = ?');       vals.push(service_id) }
+      if (data_hora     !== undefined) { updates.push('data_hora = ?');        vals.push(data_hora) }
+      if (service_duration !== undefined && Number.isFinite(Number(service_duration))) {
+        updates.push('duracao_minutos = ?')
+        vals.push(Number(service_duration))
+      }
 
       if (!updates.length) return badRequest('Nada para actualizar')
 
