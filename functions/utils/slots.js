@@ -2,6 +2,7 @@
  * Core logic: calcular slots livres para um barbeiro, data e serviço
  * Reutilizável por qualquer rota
  */
+import { getNowLisboa } from './time.js'
 
 export function computeSlots({
   date,
@@ -39,7 +40,8 @@ export function computeSlots({
   })
 
   const closeDate = new Date(`${date}T${closeHour.toString().padStart(2, '0')}:00:00`)
-  const now = new Date()
+  // Usa hora de Lisboa para respeitar DST (hora de verão/inverno)
+  const now = getNowLisboa()
 
   return allSlots.filter(slot => {
     const slotStart = new Date(`${date}T${slot}:00`)
