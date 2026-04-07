@@ -18,7 +18,7 @@ import {
 } from '@/components/admin/reservation-modals'
 import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from '@/types'
 
-const SLOT_H        = 24
+const SLOT_H        = 20
 const START_H       = 9
 const END_H         = 20
 const SLOT_DURATION = 15 // minutos por slot
