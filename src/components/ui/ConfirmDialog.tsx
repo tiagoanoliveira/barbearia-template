@@ -19,17 +19,17 @@ interface ConfirmDialogProps {
 
 const variantStyles: Record<Variant, { icon: React.ReactNode; btn: string; iconBg: string }> = {
   danger: {
-    icon:   <Trash2 size={22} className="text-red-400" />,
+    icon:   <Trash2 size={20} className="text-red-400" />,
     iconBg: 'bg-red-500/10',
     btn:    'bg-red-600 hover:bg-red-700 text-white',
   },
   warning: {
-    icon:   <AlertTriangle size={22} className="text-amber-400" />,
+    icon:   <AlertTriangle size={20} className="text-amber-400" />,
     iconBg: 'bg-amber-500/10',
     btn:    'bg-amber-500 hover:bg-amber-600 text-white',
   },
   info: {
-    icon:   <Info size={22} className="text-primary-400" />,
+    icon:   <Info size={20} className="text-primary-400" />,
     iconBg: 'bg-primary-500/10',
     btn:    'bg-primary-500 hover:bg-primary-600 text-white',
   },
@@ -55,6 +55,7 @@ export default function ConfirmDialog({
       onClose={onClose}
       title=""
       size="sm"
+      hideHeader
       footer={
         <div className="flex w-full items-center justify-between gap-2">
           <button
@@ -81,15 +82,16 @@ export default function ConfirmDialog({
         </div>
       }
     >
-      <div className="flex flex-col items-center text-center gap-4 py-2">
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${styles.iconBg}`}>
+      {/* Layout horizontal: ícone no topo esquerdo, título + descrição à direita */}
+      <div className="flex items-start gap-4 py-2">
+        <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${styles.iconBg}`}>
           {styles.icon}
         </div>
-        <div>
-          <h3 className="text-base font-semibold text-white mb-1">{title}</h3>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base font-semibold text-white mb-1 leading-snug">{title}</h3>
           <p className="text-sm text-gray-400 leading-relaxed">{description}</p>
+          {extra && <div className="w-full text-left mt-3">{extra}</div>}
         </div>
-        {extra && <div className="w-full text-left">{extra}</div>}
       </div>
     </Modal>
   )
