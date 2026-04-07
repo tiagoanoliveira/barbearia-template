@@ -39,10 +39,14 @@ export function computeSlots({
   })
 
   const closeDate = new Date(`${date}T${closeHour.toString().padStart(2, '0')}:00:00`)
+  const now = new Date()
 
   return allSlots.filter(slot => {
     const slotStart = new Date(`${date}T${slot}:00`)
     const slotEnd   = addMinutes(slotStart, serviceDuration)
+
+    // Filtrar slots de horas passadas (incluindo slots do dia atual já ultrapassados)
+    if (slotStart <= now) return false
 
     // Não ultrapassar horário de fecho
     if (slotEnd > closeDate) return false
