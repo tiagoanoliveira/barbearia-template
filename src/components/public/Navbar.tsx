@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Scissors, Menu, X, User, LogIn } from 'lucide-react'
 import { barberShopConfig, LOGO_URL } from '@/config/theme'
@@ -24,7 +24,23 @@ function isLoggedIn(): boolean {
   return !!localStorage.getItem('user_token')
 }
 
-export default function Navbar() {
+// Logo estabilizado fora do componente para evitar re-criações
+const LogoMark = memo(function LogoMark() {
+  return LOGO_URL
+    ? <img
+        src={LOGO_URL}
+        alt={barberShopConfig.name}
+        className="w-8 h-8 object-contain"
+        loading="eager"
+        width={32}
+        height={32}
+      />
+    : <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center">
+        <Scissors size={16} className="text-white" />
+      </div>
+})
+
+const Navbar = memo(function Navbar() {
   const [open, setOpen]         = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const location = useLocation()
@@ -32,7 +48,7 @@ export default function Navbar() {
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 40)
-    window.addEventListener('scroll', handler)
+    window.addEventListener('scroll', handler, { passive: true })
     return () => window.removeEventListener('scroll', handler)
   }, [])
 
@@ -46,15 +62,6 @@ export default function Navbar() {
   const handleProfile = () =>
     loggedIn ? navigate('/perfil') : navigate('/login?redirect=/perfil')
 
-  const LogoMark = () => (
-    LOGO_URL
-      ? <img src={LOGO_URL} alt={barberShopConfig.name}
-             className="w-8 h-8 object-contain" />
-      : <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center">
-          <Scissors size={16} className="text-white" />
-        </div>
-  )
-
   const ProfileButton = ({ mobile = false }: { mobile?: boolean }) => {
     if (loggedIn) {
       return (
@@ -64,7 +71,8 @@ export default function Navbar() {
             : 'p-1.5 rounded-xl hover:bg-white/5 transition-all'
           }>
           {picture
-            ? <img src={picture} alt="perfil" className="w-7 h-7 rounded-full object-cover ring-2 ring-primary-500" />
+            ? <img src={picture} alt="perfil" className="w-7 h-7 rounded-full object-cover ring-2 ring-primary-500"
+                   loading="eager" width={28} height={28} />
             : <div className="w-7 h-7 rounded-full bg-primary-500/20 border border-primary-500/50 flex items-center justify-center">
                 <User size={14} className="text-primary-400" />
               </div>
@@ -136,4 +144,6 @@ export default function Navbar() {
       )}
     </header>
   )
-}
+})
+
+export default Navbar
