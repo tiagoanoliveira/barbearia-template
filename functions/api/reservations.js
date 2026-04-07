@@ -5,6 +5,7 @@ import {
 } from '../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../utils/validators.js'
 import { sendEmail, buildReservationConfirmationEmail } from '../utils/email.js'
+import { getNowLisboa } from '../utils/time.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -26,7 +27,7 @@ export async function onRequest(context) {
       if (!isValidTime(time))     return badRequest('Hora inválida')
 
       const dataHora = `${date}T${time}:00`
-      if (new Date(dataHora) <= new Date()) return badRequest('Não pode reservar para datas passadas')
+      if (new Date(dataHora) <= getNowLisboa()) return badRequest('Não pode reservar para datas passadas')
 
       const service = await env.DB.prepare(
         'SELECT id, nome, duracao FROM servicos WHERE id = ?'
