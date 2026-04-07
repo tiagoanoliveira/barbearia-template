@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { api } from '@/api/client'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 
 type Mode = 'login' | 'register'
 
@@ -14,7 +15,13 @@ export default function PublicLoginPage() {
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '' })
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Estado para modal de telefone duplicado
+  const [phoneExistModal, setPhoneExistModal] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState('')
+  const [pendingPhone, setPendingPhone] = useState('')
 
   const field = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
@@ -22,6 +29,7 @@ export default function PublicLoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSuccessMsg(null)
 
     if (mode === 'register' && form.password !== form.confirm) {
       setError('As passwords não coincidem.')
@@ -38,12 +46,39 @@ export default function PublicLoginPage() {
     setLoading(false)
 
     if (!res.success || !res.data) {
+      // Tentar interpretar erro estruturado (ex: PHONE_EXISTS)
+      try {
+        const parsed = JSON.parse(res.error ?? '')
+        if (parsed?.code === 'PHONE_EXISTS') {
+          setPendingEmail(form.email)
+          setPendingPhone(form.phone)
+          setPhoneExistModal(true)
+          return
+        }
+      } catch {
+        // não é JSON estruturado — mostrar erro normalmente
+      }
       setError(res.error ?? 'Credenciais inválidas.')
       return
     }
 
     localStorage.setItem('user_token', res.data.token)
     navigate(redirectTo)
+  }
+
+  const handlePhoneExistConfirm = async () => {
+    setLoading(true)
+    const res = await api.post('/api/auth/request-email-change-by-phone', {
+      phone:    pendingPhone,
+      newEmail: pendingEmail,
+    })
+    setLoading(false)
+    setPhoneExistModal(false)
+    if (res.success) {
+      setSuccessMsg('Foi enviado um email de confirmação para a conta existente. Verifique a sua caixa de entrada.')
+    } else {
+      setError(res.error ?? 'Erro ao processar pedido.')
+    }
   }
 
   return (
@@ -58,7 +93,7 @@ export default function PublicLoginPage() {
         {/* Toggle login/register */}
         <div className="flex bg-white/5 rounded-2xl p-1 mb-6">
           {(['login', 'register'] as Mode[]).map(m => (
-            <button key={m} onClick={() => { setMode(m); setError(null) }}
+            <button key={m} onClick={() => { setMode(m); setError(null); setSuccessMsg(null) }}
                     className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
                       mode === m ? 'bg-brand-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
                     }`}>
@@ -176,6 +211,12 @@ export default function PublicLoginPage() {
             </p>
           )}
 
+          {successMsg && (
+            <p className="text-sm text-green-400 bg-green-950/50 border border-green-800/50 rounded-xl px-4 py-2.5">
+              {successMsg}
+            </p>
+          )}
+
           <button type="submit" disabled={loading}
                   className="w-full flex items-center justify-center gap-2 py-3 bg-brand-500
                              text-white font-semibold rounded-xl hover:bg-brand-600
@@ -195,6 +236,19 @@ export default function PublicLoginPage() {
           )}
         </form>
       </div>
+
+      {/* Modal: telefone já associado a outra conta */}
+      <ConfirmDialog
+        open={phoneExistModal}
+        onClose={() => setPhoneExistModal(false)}
+        onConfirm={handlePhoneExistConfirm}
+        title="Conta já existente"
+        description={`Já existe uma conta associada ao número ${pendingPhone}. Pretende atualizar o email dessa conta para ${pendingEmail}? Será enviado um email de confirmação para o endereço atual da conta.`}
+        confirmLabel="Sim, atualizar email"
+        cancelLabel="Não, voltar"
+        variant="warning"
+        loading={loading}
+      />
     </div>
   )
 }
