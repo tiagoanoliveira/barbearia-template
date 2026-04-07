@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
-import { CheckCircle, Calendar } from 'lucide-react'
+import { CheckCircle, Calendar, X } from 'lucide-react'
 import { api } from '@/api/client'
 import { StatusBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { ROUTES } from '@/config/routes'
 import type { Reservation, Service, Barber } from '@/types'
 
@@ -15,33 +16,37 @@ export default function ReservationsPublicPage() {
   const [params] = useSearchParams()
   const confirmed = params.get('confirmed') === '1'
 
-  const [editing, setEditing] = useState<Reservation | null>(null)
-  const [editDate, setEditDate] = useState('')
-  const [editTime, setEditTime] = useState('')
-  const [editNotes, setEditNotes] = useState('')
+  const [editing, setEditing]             = useState<Reservation | null>(null)
+  const [editDate, setEditDate]           = useState('')
+  const [editTime, setEditTime]           = useState('')
+  const [editNotes, setEditNotes]         = useState('')
   const [editServiceId, setEditServiceId] = useState<number | null>(null)
-  const [editBarberId, setEditBarberId] = useState<number | null>(null)
-  const [editError, setEditError] = useState<string | null>(null)
+  const [editBarberId, setEditBarberId]   = useState<number | null>(null)
+  const [editError, setEditError]         = useState<string | null>(null)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+
+  // Ref para fechar o modal de edição ao clicar fora
+  const editDialogRef = useRef<HTMLDivElement>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-reservations'],
-    queryFn: () => api.get<Reservation[]>('/api/my-reservations'),
-    retry: false,
+    queryFn:  () => api.get<Reservation[]>('/api/my-reservations'),
+    retry:    false,
   })
 
   const { data: servicesRes } = useQuery({
     queryKey: ['public-services'],
-    queryFn: () => api.get<Service[]>('/api/services'),
+    queryFn:  () => api.get<Service[]>('/api/services'),
   })
 
   const { data: barbersRes } = useQuery({
     queryKey: ['public-barbers'],
-    queryFn: () => api.get<Barber[]>('/api/barbers'),
+    queryFn:  () => api.get<Barber[]>('/api/barbers'),
   })
 
   const { data: slotsRes } = useQuery({
     queryKey: ['edit-slots', editBarberId, editDate, editServiceId],
-    queryFn: () =>
+    queryFn:  () =>
       api.get<string[]>(
         `/api/slots?barber_id=${editBarberId}&date=${editDate}&service_id=${editServiceId}`
       ),
@@ -54,28 +59,22 @@ export default function ReservationsPublicPage() {
 
   const cancel = useMutation({
     mutationFn: (id: number) => api.delete(`/api/reservations/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-reservations'] }),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['my-reservations'] })
+      setEditing(null)
+      setShowCancelConfirm(false)
+    },
   })
 
   const edit = useMutation({
     mutationFn: async ({ id, date, time, notes, service_id, barber_id }: {
-      id: number
-      date: string
-      time: string
-      notes?: string
-      service_id?: number
-      barber_id?: number
+      id: number; date: string; time: string
+      notes?: string; service_id?: number; barber_id?: number
     }) => {
       const res = await api.put(`/api/reservations/${id}`, {
-        date,
-        time,
-        notes: notes || undefined,
-        service_id,
-        barber_id,
+        date, time, notes: notes || undefined, service_id, barber_id,
       })
-      if (!res.success) {
-        throw new Error(res.error ?? 'Erro ao atualizar reserva.')
-      }
+      if (!res.success) throw new Error(res.error ?? 'Erro ao atualizar reserva.')
       return res
     },
     onSuccess: () => {
@@ -90,13 +89,11 @@ export default function ReservationsPublicPage() {
 
   const upcoming = reservations.filter(r => {
     const dt = parseISO(r.data_hora)
-    // Próximas: ainda não aconteceram e não estão canceladas
     return dt >= now && r.status !== 'cancelada'
   })
 
   const past = reservations.filter(r => {
     const dt = parseISO(r.data_hora)
-    // Histórico: já ficaram para trás OU foram canceladas
     return dt < now || r.status === 'cancelada'
   })
 
@@ -109,6 +106,11 @@ export default function ReservationsPublicPage() {
     setEditBarberId((r as any).barber_id ?? null)
     setEditing(r)
     setEditError(null)
+    setShowCancelConfirm(false)
+  }
+
+  const closeEdit = () => {
+    if (!edit.isPending && !cancel.isPending) setEditing(null)
   }
 
   const handleSaveEdit = () => {
@@ -118,13 +120,15 @@ export default function ReservationsPublicPage() {
       return
     }
     edit.mutate({
-      id: editing.id,
-      date: editDate,
-      time: editTime,
-      notes: editNotes,
-      service_id: editServiceId,
-      barber_id: editBarberId,
+      id: editing.id, date: editDate, time: editTime,
+      notes: editNotes, service_id: editServiceId, barber_id: editBarberId,
     })
+  }
+
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (editDialogRef.current && !editDialogRef.current.contains(e.target as Node)) {
+      closeEdit()
+    }
   }
 
   if (isLoading) {
@@ -168,11 +172,7 @@ export default function ReservationsPublicPage() {
           ) : (
             <div className="space-y-3">
               {upcoming.map(r => (
-                <ReservationCard
-                  key={r.id}
-                  r={r}
-                  onEdit={() => openEdit(r)}
-                />
+                <ReservationCard key={r.id} r={r} onEdit={() => openEdit(r)} />
               ))}
             </div>
           )}
@@ -190,30 +190,49 @@ export default function ReservationsPublicPage() {
         )}
       </div>
 
+      {/* ── Modal de edição ───────────────────────────────────────────────── */}
       {editing && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
-          <div className="bg-gray-900 rounded-2xl p-5 w-full max-w-md border border-white/10 space-y-4">
-            <h2 className="text-lg font-semibold text-white">Editar reserva</h2>
-            <p className="text-sm text-gray-400 mb-2">
-              {editing.service_name} · {editing.barber_name}
-            </p>
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4"
+          onMouseDown={handleOverlayClick}
+        >
+          <div
+            ref={editDialogRef}
+            className="bg-gray-900 rounded-2xl p-5 w-full max-w-md border border-white/10 space-y-4"
+          >
+            {/* Header do modal de edição */}
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Editar reserva</h2>
+                <p className="text-sm text-gray-400 mt-0.5">
+                  {editing.service_name} · {editing.barber_name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEdit}
+                disabled={edit.isPending || cancel.isPending}
+                className="p-1.5 rounded-lg text-gray-500 hover:bg-white/10 hover:text-gray-300
+                           transition-colors disabled:opacity-40"
+                aria-label="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Campos de edição */}
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Serviço</label>
                 <select
                   value={editServiceId ?? ''}
-                  onChange={e => {
-                    setEditServiceId(Number(e.target.value) || null)
-                    setEditTime('')
-                  }}
+                  onChange={e => { setEditServiceId(Number(e.target.value) || null); setEditTime('') }}
                   className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Selecionar serviço</option>
                   {services.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
+                    <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
               </div>
@@ -221,18 +240,13 @@ export default function ReservationsPublicPage() {
                 <label className="block text-xs text-gray-400 mb-1.5">Barbeiro</label>
                 <select
                   value={editBarberId ?? ''}
-                  onChange={e => {
-                    setEditBarberId(Number(e.target.value) || null)
-                    setEditTime('')
-                  }}
+                  onChange={e => { setEditBarberId(Number(e.target.value) || null); setEditTime('') }}
                   className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Selecionar barbeiro</option>
                   {barbers.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
+                    <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
@@ -241,10 +255,7 @@ export default function ReservationsPublicPage() {
                 <input
                   type="date"
                   value={editDate}
-                  onChange={e => {
-                    setEditDate(e.target.value)
-                    setEditTime('')
-                  }}
+                  onChange={e => { setEditDate(e.target.value); setEditTime('') }}
                   className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
@@ -285,49 +296,69 @@ export default function ReservationsPublicPage() {
                 />
               </div>
             </div>
+
             {editError && (
               <p className="text-sm text-red-400 bg-red-950/50 border border-red-800/50 rounded-xl px-3 py-2">
                 {editError}
               </p>
             )}
-            <div className="flex justify-end gap-2 pt-2">
+
+            {/*
+              Footer de 3 zonas:
+                esquerda  → Cancelar reserva (botão destrutivo discreto)
+                direita   → Fechar · Guardar alterações
+            */}
+            <div className="flex items-center justify-between gap-2 pt-2">
+              {/* Cancelar reserva — à esquerda, pouco saliente */}
               <button
-                  type="button"
-                  onClick={() => !edit.isPending && setEditing(null)}
-                  className="px-4 py-2 text-xs text-gray-300 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+                type="button"
+                onClick={() => setShowCancelConfirm(true)}
+                disabled={edit.isPending || cancel.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs text-red-400/60
+                           hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors
+                           disabled:opacity-40"
               >
-                Fechar
+                Cancelar reserva
               </button>
-              <button
+
+              {/* Fechar + Guardar — à direita */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={closeEdit}
+                  disabled={edit.isPending}
+                  className="px-4 py-2 text-xs text-gray-300 bg-white/5 rounded-xl
+                             hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Fechar
+                </button>
+                <button
                   type="button"
                   onClick={handleSaveEdit}
                   disabled={edit.isPending}
-                  className="px-4 py-2 text-xs bg-brand-500 text-white rounded-xl hover:bg-brand-600
-               disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {edit.isPending ? 'A guardar...' : 'Guardar alterações'}
-              </button>
-            </div>
-
-            <div className="border-t border-white/5 pt-3 text-center">
-              <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm('Tens a certeza que queres cancelar esta reserva? Esta ação não pode ser desfeita.')) {
-                      cancel.mutate(editing.id)
-                      setEditing(null)
-                    }
-                  }}
-                  disabled={cancel.isPending}
-                  className="text-xs text-red-400/70 hover:text-red-400 underline underline-offset-2
-               transition-colors disabled:opacity-50"
-              >
-                Cancelar esta reserva
-              </button>
+                  className="px-4 py-2 text-xs bg-brand-500 text-white rounded-xl
+                             hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {edit.isPending ? 'A guardar...' : 'Guardar alterações'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Confirmação de cancelamento (z-index acima do modal de edição) ── */}
+      <ConfirmDialog
+        open={showCancelConfirm}
+        onClose={() => setShowCancelConfirm(false)}
+        onConfirm={() => editing && cancel.mutate(editing.id)}
+        variant="danger"
+        title="Cancelar reserva"
+        description="Tens a certeza que queres cancelar esta reserva? Esta ação não pode ser desfeita."
+        confirmLabel="Sim, cancelar"
+        cancelLabel="Não, voltar"
+        loading={cancel.isPending}
+      />
     </div>
   )
 }
@@ -337,32 +368,32 @@ function ReservationCard({ r, onEdit }: { r: Reservation; onEdit?: () => void })
   const dt = parseISO(r.data_hora)
 
   return (
-      <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-4">
-        <div className="flex-shrink-0 w-12 h-12 bg-brand-500/20 rounded-2xl flex flex-col
+    <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-4">
+      <div className="flex-shrink-0 w-12 h-12 bg-brand-500/20 rounded-2xl flex flex-col
                       items-center justify-center">
-          <span className="text-brand-400 font-black text-lg leading-none">{dt.getDate()}</span>
-          <span className="text-brand-400/60 text-xs uppercase">
+        <span className="text-brand-400 font-black text-lg leading-none">{dt.getDate()}</span>
+        <span className="text-brand-400/60 text-xs uppercase">
           {format(dt, 'MMM', { locale: pt })}
         </span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-white font-semibold">{r.service_name}</p>
-          <p className="text-sm text-gray-500">
-            {r.barber_name} · {format(dt, 'HH:mm')}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <StatusBadge status={r.status} />
-          {canEdit && onEdit && (
-              <button
-                  onClick={onEdit}
-                  className="mt-1 px-3 py-1 rounded-full text-xs font-medium bg-brand-500/20 text-brand-200
-                       hover:bg-brand-500/30 transition-colors"
-              >
-                Editar
-              </button>
-          )}
-        </div>
       </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-white font-semibold">{r.service_name}</p>
+        <p className="text-sm text-gray-500">
+          {r.barber_name} · {format(dt, 'HH:mm')}
+        </p>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <StatusBadge status={r.status} />
+        {canEdit && onEdit && (
+          <button
+            onClick={onEdit}
+            className="mt-1 px-3 py-1 rounded-full text-xs font-medium bg-brand-500/20 text-brand-200
+                       hover:bg-brand-500/30 transition-colors"
+          >
+            Editar
+          </button>
+        )}
+      </div>
+    </div>
   )
 }

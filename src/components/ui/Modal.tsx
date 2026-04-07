@@ -1,13 +1,15 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 
-interface ModalProps {
-  open: boolean
-  onClose: () => void
-  title: string
-  children: ReactNode
-  size?: 'sm' | 'md' | 'lg' | 'xl'
-  footer?: ReactNode
+export interface ModalProps {
+  open:        boolean
+  onClose:     () => void
+  title:       string
+  children:    ReactNode
+  size?:       'sm' | 'md' | 'lg' | 'xl'
+  footer?:     ReactNode
+  /** Remove o header (barra de título + botão X) — use apenas em diálogos custom que gerem o próprio header */
+  hideHeader?: boolean
 }
 
 const sizeMap = {
@@ -17,7 +19,17 @@ const sizeMap = {
   xl: 'max-w-2xl',
 }
 
-export default function Modal({ open, onClose, title, children, size = 'md', footer }: ModalProps) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  footer,
+  hideHeader = false,
+}: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
   // Fechar com Escape
   useEffect(() => {
     if (!open) return
@@ -34,27 +46,40 @@ export default function Modal({ open, onClose, title, children, size = 'md', foo
 
   if (!open) return null
 
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Fecha apenas se o clique foi diretamente no overlay e não dentro do dialog
+    if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
+      onClose()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onMouseDown={handleOverlayClick}
+    >
       {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
 
       {/* Dialog */}
-      <div className={`relative w-full ${sizeMap[size]} bg-white rounded-2xl shadow-modal
-                       flex flex-col max-h-[90vh] animate-fade-in`}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
-          >
-            <X size={18} />
-          </button>
-        </div>
+      <div
+        ref={dialogRef}
+        className={`relative w-full ${sizeMap[size]} bg-white rounded-2xl shadow-modal
+                     flex flex-col max-h-[90vh] animate-fade-in`}
+      >
+        {/* Header — omitido quando hideHeader=true */}
+        {!hideHeader && (
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+              aria-label="Fechar"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
