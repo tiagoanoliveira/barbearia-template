@@ -14,6 +14,8 @@ export async function onRequest(context) {
     try {
       const url      = new URL(request.url)
       const date     = url.searchParams.get('date')
+      const dateFrom = url.searchParams.get('date_from')
+      const dateTo   = url.searchParams.get('date_to')
       const status   = url.searchParams.get('status')
       const search   = url.searchParams.get('search') ?? ''
       const limitRaw = parseInt(url.searchParams.get('limit')  ?? '100')
@@ -25,12 +27,20 @@ export async function onRequest(context) {
       const where  = []
       const params = []
 
-      if (date)   { where.push('date(data_hora) = ?'); params.push(date) }
-      if (status) { where.push('status = ?');          params.push(status) }
+      if (date)     { where.push('date(data_hora) = ?');  params.push(date) }
+      if (dateFrom) { where.push('date(data_hora) >= ?'); params.push(dateFrom) }
+      if (dateTo)   { where.push('date(data_hora) <= ?'); params.push(dateTo) }
+      if (status)   { where.push('status = ?');           params.push(status) }
+
+      if (!date && !dateFrom && !dateTo) {
+        const today = new Date().toISOString().slice(0, 10)
+        where.push('date(data_hora) >= ?')
+        params.push(today)
+      }
 
       if (search) {
         where.push(
-          '(cliente_nome LIKE ? OR cliente_email LIKE ? OR cliente_telefone LIKE ? OR servico_nome LIKE ?)' ,
+          '(cliente_nome LIKE ? OR cliente_email LIKE ? OR cliente_telefone LIKE ? OR servico_nome LIKE ?)',
         )
         const like = `%${search}%`
         params.push(like, like, like, like)
@@ -39,7 +49,7 @@ export async function onRequest(context) {
       const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
       const totalRow = await env.DB.prepare(
-        `SELECT COUNT(*) AS count FROM v_reservas_complete ${whereClause}`
+        `SELECT COUNT(*) AS count FROM v_reservas_complete ${whereClause}`,
       ).bind(...params).first()
 
       const total      = totalRow?.count ?? 0
@@ -66,8 +76,8 @@ export async function onRequest(context) {
            servico_preco        AS service_price
          FROM v_reservas_complete
          ${whereClause}
-         ORDER BY data_hora DESC
-         LIMIT ? OFFSET ?`
+         ORDER BY data_hora ASC
+         LIMIT ? OFFSET ?`,
       ).bind(...params, limit, offset).all()
 
       return ok({
@@ -110,11 +120,11 @@ export async function onRequest(context) {
       const result = await env.DB.prepare(
         `INSERT INTO reservas
            (cliente_id, barbeiro_id, servico_id, data_hora, comentario, duracao_minutos, created_by, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'admin', 'confirmada')`
+         VALUES (?, ?, ?, ?, ?, ?, 'admin', 'confirmada')`,
       ).bind(
         client_id, barber_id, service_id,
         dataHora, sanitize(notes ?? '', 2000),
-        duracao
+        duracao,
       ).run()
 
       const reservaId = result.meta.last_row_id
