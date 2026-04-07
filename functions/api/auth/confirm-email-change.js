@@ -11,7 +11,7 @@ export async function onRequest(context) {
   const url   = new URL(request.url)
   const token = url.searchParams.get('token')
 
-  const BASE_URL = 'https://brooklynbarbearia.pt'
+  const BASE_URL = 'https://brooklynbarbearia.pt' // ajusta se precisares
 
   if (!token) {
     return Response.redirect(`${BASE_URL}/perfil?email_change=invalid`, 302)
@@ -19,41 +19,77 @@ export async function onRequest(context) {
 
   try {
     const row = await env.DB.prepare(
-      `SELECT cliente_id, new_email, expires_at
-       FROM email_change_tokens
-       WHERE token = ? LIMIT 1`
+        `SELECT id, email, email_pendente, token_verificacao_expira,
+              google_id, facebook_id, instagram_id, auth_methods
+       FROM clientes
+       WHERE token_verificacao = ? LIMIT 1`
     ).bind(token).first()
 
-    if (!row) {
+    if (!row || !row.email_pendente) {
       return Response.redirect(`${BASE_URL}/perfil?email_change=invalid`, 302)
     }
 
-    if (new Date(row.expires_at) < new Date()) {
-      await env.DB.prepare('DELETE FROM email_change_tokens WHERE token = ?').bind(token).run()
+    // Expirado?
+    if (!row.token_verificacao_expira || new Date(row.token_verificacao_expira) < new Date()) {
+      await env.DB.prepare(
+          `UPDATE clientes
+         SET email_pendente = NULL,
+             token_verificacao = NULL,
+             token_verificacao_expira = NULL,
+             atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).bind(row.id).run()
       return Response.redirect(`${BASE_URL}/perfil?email_change=expired`, 302)
     }
 
-    // Verificar se o novo email já está em uso por outro cliente
+    // Novo email já em uso?
     const existing = await env.DB.prepare(
-      'SELECT id FROM clientes WHERE email = ? AND id != ?'
-    ).bind(row.new_email, row.cliente_id).first()
+        'SELECT id FROM clientes WHERE email = ? AND id != ?'
+    ).bind(row.email_pendente, row.id).first()
 
     if (existing) {
-      await env.DB.prepare('DELETE FROM email_change_tokens WHERE token = ?').bind(token).run()
+      await env.DB.prepare(
+          `UPDATE clientes
+         SET email_pendente = NULL,
+             token_verificacao = NULL,
+             token_verificacao_expira = NULL,
+             atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).bind(row.id).run()
       return Response.redirect(`${BASE_URL}/perfil?email_change=taken`, 302)
     }
 
-    // Aplicar a alteração de email
-    await env.DB.prepare(
-      `UPDATE clientes
-       SET email = ?, email_verificado = 1, atualizado_em = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    ).bind(row.new_email, row.cliente_id).run()
+    // Desassociar redes sociais se existirem
+    const methods = (row.auth_methods ?? 'password')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
 
-    // Limpar o token usado
+    const filteredMethods = methods.filter(m => {
+      if (m === 'google'   && row.google_id)   return false
+      if (m === 'facebook' && row.facebook_id) return false
+      if (m === 'instagram'&& row.instagram_id)return false
+      return true
+    })
+
+    const newAuthMethods = filteredMethods.length > 0
+        ? filteredMethods.join(',')
+        : 'password'
+
     await env.DB.prepare(
-      'DELETE FROM email_change_tokens WHERE token = ?'
-    ).bind(token).run()
+        `UPDATE clientes
+       SET email = ?, 
+           email_pendente = NULL,
+           email_verificado = 1,
+           token_verificacao = NULL,
+           token_verificacao_expira = NULL,
+           google_id = NULL,
+           facebook_id = NULL,
+           instagram_id = NULL,
+           auth_methods = ?,
+           atualizado_em = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).bind(row.email_pendente, newAuthMethods, row.id).run()
 
     return Response.redirect(`${BASE_URL}/perfil?email_change=success`, 302)
   } catch (e) {

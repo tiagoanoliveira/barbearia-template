@@ -15,35 +15,45 @@ export async function onRequest(context) {
   if (request.method === 'GET') {
     try {
       const client = await env.DB.prepare(
-        `SELECT id, nome, email, telefone, nif, foto_perfil,
-                reservas_concluidas, next_appointment_date, last_appointment_date,
-                criado_em, auth_methods, email_verificado
-         FROM clientes WHERE id = ?`
+          `SELECT id, nome, email, email_pendente, telefone, nif, foto_perfil,
+                  reservas_concluidas, next_appointment_date, last_appointment_date,
+                  criado_em, auth_methods, email_verificado, token_verificacao_expira
+           FROM clientes WHERE id = ?`
       ).bind(auth.clientId).first()
 
       if (!client) return notFound('Cliente não encontrado')
 
-      // Se há uma alteração de email pendente, informar o frontend
-      const pendingChange = await env.DB.prepare(
-        `SELECT new_email FROM email_change_tokens
-         WHERE cliente_id = ? AND expires_at > datetime('now')
-         ORDER BY criado_em DESC LIMIT 1`
-      ).bind(auth.clientId).first().catch(() => null)
+      let pendingEmail = null
+      if (client.email_pendente && client.token_verificacao_expira) {
+        if (new Date(client.token_verificacao_expira) > new Date()) {
+          pendingEmail = client.email_pendente
+        } else {
+          // opcional: limpar pendentes expirados
+          await env.DB.prepare(
+              `UPDATE clientes
+       SET email_pendente = NULL,
+           token_verificacao = NULL,
+           token_verificacao_expira = NULL,
+           atualizado_em = CURRENT_TIMESTAMP
+       WHERE id = ?`
+          ).bind(auth.clientId).run().catch(() => {})
+        }
+      }
 
       return ok({
-        id:                      client.id,
-        name:                    client.nome,
-        email:                   client.email,
-        phone:                   client.telefone,
-        nif:                     client.nif,
-        photo_url:               client.foto_perfil,
-        completed_reservations:  client.reservas_concluidas,
-        next_appointment:        client.next_appointment_date,
-        last_appointment:        client.last_appointment_date,
-        created_at:              client.criado_em,
-        auth_methods:            client.auth_methods,
-        email_verified:          !!client.email_verificado,
-        pending_email_change:    pendingChange?.new_email ?? null,
+        id:                     client.id,
+        name:                   client.nome,
+        email:                  client.email,
+        phone:                  client.telefone,
+        nif:                    client.nif,
+        photo_url:              client.foto_perfil,
+        completed_reservations: client.reservas_concluidas,
+        next_appointment:       client.next_appointment_date,
+        last_appointment:       client.last_appointment_date,
+        created_at:             client.criado_em,
+        auth_methods:           client.auth_methods,
+        email_verified:         !!client.email_verificado,
+        pending_email_change:   pendingEmail,
       })
     } catch (e) {
       return serverError('Erro ao carregar perfil', e.message)
@@ -102,31 +112,19 @@ export async function onRequest(context) {
         const token   = generateToken()
         const expires = new Date(Date.now() + 86400000).toISOString() // 24h
 
-        // Guardar na tabela de tokens de alteração de email
-        // (cria a tabela se não existir — safe DDL inline)
-        await env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS email_change_tokens (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            cliente_id  INTEGER NOT NULL,
-            token       TEXT    NOT NULL UNIQUE,
-            new_email   TEXT    NOT NULL,
-            expires_at  TEXT    NOT NULL,
-            criado_em   TEXT    DEFAULT (datetime('now'))
-          )
-        `).run().catch(() => {})
-
-        // Apagar tokens anteriores deste cliente
+        // Guardar novo email e token diretamente em clientes
         await env.DB.prepare(
-          'DELETE FROM email_change_tokens WHERE cliente_id = ?'
-        ).bind(auth.clientId).run()
-
-        await env.DB.prepare(
-          'INSERT INTO email_change_tokens (cliente_id, token, new_email, expires_at) VALUES (?, ?, ?, ?)'
-        ).bind(auth.clientId, token, newEmail, expires).run()
+            `UPDATE clientes
+             SET email_pendente = ?, 
+                 token_verificacao = ?, 
+                 token_verificacao_expira = ?,
+                 atualizado_em = CURRENT_TIMESTAMP
+             WHERE id = ?`
+        ).bind(newEmail, token, expires, auth.clientId).run()
 
         const { html } = buildEmailChangeEmail({
-          clientName:    current.nome,
-          confirmToken:  token,
+          clientName:   current.nome,
+          confirmToken: token,
           newEmail,
         })
 
@@ -134,7 +132,9 @@ export async function onRequest(context) {
           to:      newEmail,
           subject: 'Confirme o novo email – Brooklyn Barbearia',
           html,
-        }).catch(err => console.error('[me] Erro ao enviar email de confirmação de alteração:', err))
+        }).catch(err =>
+            console.error('[me] Erro ao enviar email de confirmação de alteração:', err)
+        )
 
         return ok({
           message: 'Perfil atualizado. Enviámos um email de confirmação para o novo endereço.',

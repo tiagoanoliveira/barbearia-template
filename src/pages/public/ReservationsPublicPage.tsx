@@ -86,8 +86,19 @@ export default function ReservationsPublicPage() {
   })
 
   const reservations = data?.data ?? []
-  const upcoming     = reservations.filter(r => r.status !== 'cancelada' && r.status !== 'concluida')
-  const past         = reservations.filter(r => r.status === 'concluida' || r.status === 'cancelada')
+  const now = new Date()
+
+  const upcoming = reservations.filter(r => {
+    const dt = parseISO(r.data_hora)
+    // Próximas: ainda não aconteceram e não estão canceladas
+    return dt >= now && r.status !== 'cancelada'
+  })
+
+  const past = reservations.filter(r => {
+    const dt = parseISO(r.data_hora)
+    // Histórico: já ficaram para trás OU foram canceladas
+    return dt < now || r.status === 'cancelada'
+  })
 
   const openEdit = (r: Reservation) => {
     const dt = parseISO(r.data_hora)

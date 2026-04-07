@@ -26,13 +26,21 @@ async function request<T>(
   })
 
   if (res.status === 401) {
-    // Token de cliente expirado: limpa só user_token, nunca toca no admin
     if (tokenKey === 'user_token') {
+      // sessão de cliente
       localStorage.removeItem('user_token')
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/admin')) {
         window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
       }
+    } else if (tokenKey === 'admin_token') {
+      // sessão de admin – separada da sessão de cliente
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_user')
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+        window.location.href = '/admin/login'
+      }
     }
+
     return { success: false, error: 'Sessão expirada' }
   }
 
