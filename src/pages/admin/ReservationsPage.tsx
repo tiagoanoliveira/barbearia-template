@@ -44,7 +44,14 @@ export default function ReservationsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['reservations', { search, status, page, barberId, date }],
-    queryFn: () => reservationsApi.list({ search, status, page, perPage: 20, barber_id: barberId === 'all' ? undefined : barberId, date: date || undefined }),
+    queryFn: () => reservationsApi.list({
+      search,
+      status,
+      page,
+      perPage: 20,
+      barberId: barberId === 'all' ? undefined : barberId,
+      date: date || undefined,
+    }),
     placeholderData: (prev) => prev,
   })
 
