@@ -206,10 +206,17 @@ export default function CalendarPage() {
     setCopySaving(true)
     const src = modal.source
     try {
-      await reservationsApi.create({
-        barber_id: src.barber_id, client_id: src.client_id,
-        service_id: src.service_id, data_hora: `${copyDate}T${copyTime}:00`,
-        status: 'confirmada', send_email: copyEmail,
+      const date = copyDate
+      const time = copyTime
+
+      await adminApi.post('/api/admin/reservations', {
+        client_id:  src.client_id,
+        service_id: src.service_id,
+        barber_id:  src.barber_id,
+        date,
+        time,
+        notes:      src.comentario ?? '',
+        send_email: copyEmail,
       })
       qc.invalidateQueries({ queryKey: ['cal-reservations'] }); close()
     } catch {}
@@ -297,69 +304,111 @@ export default function CalendarPage() {
                   <span className="text-xs font-bold text-white drop-shadow-sm">{b.name}</span>
                 </div>
               ))}
-              {timeSlots.map(slot => (
-                <>
-                  <div key={`t_${slot}`} className="border-b border-gray-50 flex items-top justify-center" style={{ height: SLOT_H }}>
-                    {slot % SLOTS_PER_H === 0 && <span className="text-[11px] text-gray-400">{slotToLabel(slot)}</span>}
-                  </div>
-                  {barbers.map(b => {
-                    const blocked = isSlotBlocked(b.id, slot)
-                    const key     = `${b.id}_${slot}`
-                    const rList   = resByBarberSlot.get(key) ?? []
-                    const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
-                    if (blocked) {
-                      const isFirst = blocked.data_hora_inicio === slotToISO(selectedDate, slot)
-                        || (slot === 0 && new Date(blocked.data_hora_inicio) <= new Date(slotToISO(selectedDate, 0)))
+              {timeSlots.map(slot => {
+                const isHourEnd = (slot + 1) % SLOTS_PER_H === 0
+                return (
+                  <>
+                    <div
+                      key={`t_${slot}`}
+                      className={
+                        `flex items-top justify-center ${
+                          isHourEnd ? 'border-b-2 border-gray-200' : 'border-b border-gray-100'
+                        }`
+                      }
+                      style={{ height: SLOT_H }}
+                    >
+                      {slot % SLOTS_PER_H === 0 && (
+                        <span className="text-[11px] text-gray-400">{slotToLabel(slot)}</span>
+                      )}
+                    </div>
+                    {barbers.map(b => {
+                      const blocked = isSlotBlocked(b.id, slot)
+                      const key     = `${b.id}_${slot}`
+                      const rList   = resByBarberSlot.get(key) ?? []
+                      const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
+
+                      const baseCellClasses = isHourEnd
+                        ? 'relative border-l border-b-2 border-gray-300'
+                        : 'relative border-l border-b border-gray-200'
+
+                      if (blocked) {
+                        const isFirst = blocked.data_hora_inicio === slotToISO(selectedDate, slot)
+                          || (slot === 0 && new Date(blocked.data_hora_inicio) <= new Date(slotToISO(selectedDate, 0)))
+                        return (
+                          <div
+                            key={key}
+                            className={`${baseCellClasses} cursor-pointer`}
+                            style={{
+                              height: SLOT_H,
+                              backgroundImage: `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.18)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.18)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 12px)`,
+                            }}
+                            onClick={e => openCtx(e, { kind: 'unavailable', unavailable: blocked })}
+                          >
+                            {isFirst && (
+                              <div className="absolute inset-x-1 top-0.5 flex items-center gap-1 z-10">
+                                <span className="text-sm leading-none">{TIPO_ICON[blocked.tipo]}</span>
+                                <span className="text-[10px] font-medium text-gray-700 truncate">
+                                  {TIPO_LABEL[blocked.tipo]}{blocked.motivo ? ` · ${blocked.motivo}` : ''}
+                                  {blocked.recurrence_group_id ? ' 🔁' : ''}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      if (rList.length === 0) {
+                        return (
+                          <div
+                            key={key}
+                            className={`${baseCellClasses} hover:brightness-95 transition-all cursor-pointer`}
+                            style={{ height: SLOT_H, background: colBg }}
+                            onClick={e => openCtx(e, { kind: 'slot', barberId: b.id, slot })}
+                          />
+                        )
+                      }
+
                       return (
-                        <div key={key} className="relative border-b border-l border-gray-300 cursor-pointer"
-                          style={{ height: SLOT_H, backgroundImage: `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.18)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.18)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 12px)` }}
-                          onClick={e => openCtx(e, { kind: 'unavailable', unavailable: blocked })}>
-                          {isFirst && (
-                            <div className="absolute inset-x-1 top-0.5 flex items-center gap-1 z-10">
-                              <span className="text-sm leading-none">{TIPO_ICON[blocked.tipo]}</span>
-                              <span className="text-[10px] font-medium text-gray-700 truncate">
-                                {TIPO_LABEL[blocked.tipo]}{blocked.motivo ? ` · ${blocked.motivo}` : ''}
-                                {blocked.recurrence_group_id ? ' 🔁' : ''}
-                              </span>
-                            </div>
-                          )}
+                        <div
+                          key={key}
+                          className={baseCellClasses}
+                          style={{ height: SLOT_H, background: colBg }}
+                        >
+                          {rList.map(r => {
+                            const service   = services.find(s => s.id === r.service_id)
+                            const baseColor = service?.color || b.color || '#888'
+                            const dur       = r.service_duration ?? service?.duration ?? 60
+                            const heightPx  = Math.max(SLOT_H, Math.round((dur / SLOT_DURATION) * SLOT_H))
+                            const barColor2 = STATUS_BAR_LOCAL[r.status] ?? baseColor
+
+                            return (
+                              <div
+                                key={r.id}
+                                className="absolute inset-x-0.5 top-0 rounded overflow-hidden cursor-pointer flex flex-col justify-start pl-2.5 pr-1 py-0.5 z-20"
+                                style={{
+                                  background: hexToRgba(baseColor, 0.9),
+                                  height:     heightPx,
+                                  minHeight:  SLOT_H,
+                                  borderLeft: `4px solid ${barColor2}`,
+                                }}
+                                onClick={e => openCtx(e, { kind: 'reservation', reservation: r })}
+                              >
+                                <p className="text-[10px] font-semibold leading-tight truncate text-white">{r.client_name}</p>
+                                <p className="text-[9px] leading-tight truncate text-white/90">{r.service_name}</p>
+                                {heightPx > SLOT_H && (
+                                  <p className="text-[9px] leading-tight text-white/70">
+                                    {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       )
-                    }
-                    if (rList.length === 0) {
-                      return (
-                        <div key={key} className="border-b border-l border-gray-300 hover:brightness-95 transition-all cursor-pointer"
-                          style={{ height: SLOT_H, background: colBg }}
-                          onClick={e => openCtx(e, { kind: 'slot', barberId: b.id, slot })} />
-                      )
-                    }
-                    return (
-                      <div key={key} className="relative border-b border-l border-gray-300" style={{ height: SLOT_H, background: colBg }}>
-                        {rList.map(r => {
-                          const barColor  = b.color ?? '#888'
-                          const dur       = r.service_duration ?? 60
-                          const heightPx  = Math.max(SLOT_H, Math.round((dur / SLOT_DURATION) * SLOT_H))
-                          const barColor2 = STATUS_BAR_LOCAL[r.status] ?? barColor
-                          return (
-                            <div key={r.id}
-                              className="absolute inset-x-0.5 top-0 rounded overflow-hidden cursor-pointer flex flex-col justify-start pl-2.5 pr-1 py-0.5 z-20"
-                              style={{ background: hexToRgba(barColor, 0.9), height: heightPx, minHeight: SLOT_H, borderLeft: `4px solid ${barColor2}` }}
-                              onClick={e => openCtx(e, { kind: 'reservation', reservation: r })}>
-                              <p className="text-[10px] font-semibold leading-tight truncate text-white">{r.client_name}</p>
-                              <p className="text-[9px] leading-tight truncate text-white/90">{r.service_name}</p>
-                              {heightPx > SLOT_H && (
-                                <p className="text-[9px] leading-tight text-white/70">
-                                  {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}
-                                </p>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })}
-                </>
-              ))}
+                    })}
+                  </>
+                )
+              })}
             </div>
           </div>
         </Card>
@@ -477,9 +526,23 @@ export default function CalendarPage() {
             form={newResForm} saving={newResSaving}
             onChange={(k, v) => setNewResForm(f => ({ ...f, [k]: v }))}
             onSave={async () => {
+              if (!newResForm.client_id || !newResForm.service_id || !newResForm.barber_id || !newResForm.data_hora) return
+
+              const iso = newResForm.data_hora as string
+              const [date, timeFull] = iso.split('T')
+              const time = (timeFull ?? '').slice(0, 5)
+
               setNewResSaving(true)
               try {
-                await reservationsApi.create(newResForm)
+                await adminApi.post('/api/admin/reservations', {
+                  client_id:  newResForm.client_id,
+                  service_id: newResForm.service_id,
+                  barber_id:  newResForm.barber_id,
+                  date,
+                  time,
+                  notes:      newResForm.comentario ?? '',
+                  send_email: newResForm.sendEmail ?? false,
+                })
                 qc.invalidateQueries({ queryKey: ['cal-reservations'] })
                 close()
               } catch {}
