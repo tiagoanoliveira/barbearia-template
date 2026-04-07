@@ -38,19 +38,23 @@ export default function ReservationsPage() {
   const [page,   setPage]   = useState(1)
   const [modal,  setModal]  = useState<ModalMode>(null)
   const [barberId, setBarberId] = useState<number | 'all'>('all')
-  const [date, setDate] = useState('')
+
+  const today = new Date().toISOString().slice(0, 10)
+  const [dateFrom, setDateFrom] = useState(today)
+  const [dateTo,   setDateTo]   = useState('')
 
   const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['reservations', { search, status, page, barberId, date }],
+    queryKey: ['reservations', { search, status, page, barberId, dateFrom, dateTo }],
     queryFn: () => reservationsApi.list({
       search,
       status,
       page,
       perPage: 20,
       barberId: barberId === 'all' ? undefined : barberId,
-      date: date || undefined,
+      fromDate: dateFrom || undefined,
+      toDate:   dateTo   || undefined,
     }),
     placeholderData: (prev) => prev,
   })
@@ -66,19 +70,27 @@ export default function ReservationsPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+          <div className="relative w-full sm:max-w-md">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Pesquisar por cliente, serviço..."
-              value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-              className="input pl-9" />
+            <input
+              type="text"
+              placeholder="Pesquisar por cliente, serviço..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              className="input pl-9 text-sm w-full"
+            />
           </div>
-          <select value={status} onChange={e => { setStatus(e.target.value); setPage(1) }} className="input sm:w-52">
+          <select
+            value={status}
+            onChange={e => { setStatus(e.target.value); setPage(1) }}
+            className="input sm:w-52 text-sm"
+          >
             {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 items-end">
-          <div className="flex items-end gap-2 flex-1">
-            <div className="flex-1">
+          <div className="flex items-end gap-2 w-full sm:w-auto">
+            <div className="w-full sm:w-48">
               <label className="label flex items-center gap-1 text-xs">
                 <Filter size={12} /> Barbeiro
               </label>
@@ -93,14 +105,25 @@ export default function ReservationsPage() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="label text-xs">Data</label>
-              <input
-                type="date"
-                className="input text-xs"
-                value={date}
-                onChange={e => { setDate(e.target.value); setPage(1) }}
-              />
+            <div className="flex gap-2 w-full sm:w-64">
+              <div className="flex-1">
+                <label className="label text-xs">De</label>
+                <input
+                  type="date"
+                  className="input text-xs w-full"
+                  value={dateFrom}
+                  onChange={e => { setDateFrom(e.target.value); setPage(1) }}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="label text-xs">Até</label>
+                <input
+                  type="date"
+                  className="input text-xs w-full"
+                  value={dateTo}
+                  onChange={e => { setDateTo(e.target.value); setPage(1) }}
+                />
+              </div>
             </div>
           </div>
         </div>
