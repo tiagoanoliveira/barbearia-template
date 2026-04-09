@@ -3,6 +3,7 @@ import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from
 import { sanitize, isValidDate, isValidTime, isValidId } from '../../../utils/validators.js'
 import {
   sendReservationCancellation,
+  cancelScheduledReminder,
   rescheduleReminder,
 } from '../../../utils/reservationEmails.js'
 
@@ -83,21 +84,30 @@ export async function onRequest(context) {
         `UPDATE reservas SET ${updates.join(', ')} WHERE id = ?`
       ).bind(...vals, id).run()
 
-      // ── Acções de email pós-update ───────────────────────────────────────
+      // ── Acções pós-update ────────────────────────────────────────────────
 
-      // 1. Cancelamento: enviar email + cancelar lembrete agendado
-      if (status === 'cancelada' && reservation.cliente_email) {
-        sendReservationCancellation(context, {
-          reservaId:        reservation.id,
-          clientEmail:      reservation.cliente_email,
-          clientName:       reservation.cliente_nome,
-          dataHora:         reservation.data_hora,
-          serviceName:      reservation.servico_nome,
-          barberName:       reservation.barbeiro_nome,
-          duracao:          reservation.service_duration,
-          motivo:           motivo ?? null,
-          resendLembreteId: reservation.resend_lembrete_id ?? null,
-        })
+      // 1. Cancelamento: APENAS cancelar o lembrete agendado.
+      //    O email de cancelamento é enviado exclusivamente por cancel-email.js
+      //    para evitar duplicados quando o frontend chama ambos os endpoints.
+      if (status === 'cancelada') {
+        const lembreteId = reservation.resend_lembrete_id ?? null
+        console.log(
+          `[admin/reservations/[id] PATCH] Reserva #${id} → cancelada.`,
+          `resend_lembrete_id na BD: ${lembreteId ?? '(nenhum)'}`
+        )
+        if (lembreteId) {
+          console.log(`[admin/reservations/[id] PATCH] A cancelar lembrete agendado ${lembreteId}…`)
+          context.waitUntil(
+            cancelScheduledReminder(context, lembreteId)
+              .then(() =>
+                env.DB.prepare('UPDATE reservas SET resend_lembrete_id = NULL WHERE id = ?')
+                  .bind(id).run()
+              )
+              .catch(e => console.error('[admin/reservations/[id] PATCH] Erro ao cancelar lembrete:', e?.message))
+          )
+        } else {
+          console.log(`[admin/reservations/[id] PATCH] Reserva #${id} sem lembrete agendado — nada a cancelar.`)
+        }
       }
 
       // 2. Alteração de data/hora, barbeiro ou serviço: reagendar lembrete
@@ -105,7 +115,6 @@ export async function onRequest(context) {
       const notCancelled    = status !== 'cancelada'
 
       if (changedRelevant && notCancelled && reservation.cliente_email) {
-        // Resolver nome do barbeiro e do serviço actualizados (se mudaram)
         let newBarberName  = reservation.barbeiro_nome
         let newServiceName = reservation.servico_nome
         let newDuration    = reservation.service_duration
@@ -119,6 +128,12 @@ export async function onRequest(context) {
           const s = await env.DB.prepare('SELECT nome, duracao FROM servicos WHERE id = ?').bind(service_id).first()
           if (s) { newServiceName = s.nome; newDuration = s.duracao ?? newDuration }
         }
+
+        console.log(
+          `[admin/reservations/[id] PATCH] Reserva #${id} — dados relevantes alterados.`,
+          `oldLembreteId: ${reservation.resend_lembrete_id ?? '(nenhum)'},`,
+          `nova data: ${newDataHora}`
+        )
 
         context.waitUntil(
           rescheduleReminder(context, {
@@ -136,19 +151,30 @@ export async function onRequest(context) {
 
       return ok({ message: 'Reserva actualizada' })
     } catch (e) {
+      console.error('[admin/reservations/[id] PATCH] Erro inesperado:', e?.message)
       return serverError('Erro ao actualizar reserva', e.message)
     }
   }
 
   if (request.method === 'DELETE') {
     try {
-      // Cancelar lembrete agendado antes de eliminar o registo
-      if (reservation.resend_lembrete_id) {
-        await cancelScheduledReminder(context, reservation.resend_lembrete_id)
+      const lembreteId = reservation.resend_lembrete_id ?? null
+      console.log(
+        `[admin/reservations/[id] DELETE] A eliminar reserva #${id}.`,
+        `resend_lembrete_id: ${lembreteId ?? '(nenhum)'}`
+      )
+
+      if (lembreteId) {
+        console.log(`[admin/reservations/[id] DELETE] A cancelar lembrete agendado ${lembreteId}…`)
+        await cancelScheduledReminder(context, lembreteId)
+        console.log(`[admin/reservations/[id] DELETE] Lembrete ${lembreteId} cancelado (ou já inactivo).`)
       }
+
       await env.DB.prepare('DELETE FROM reservas WHERE id = ?').bind(id).run()
+      console.log(`[admin/reservations/[id] DELETE] Reserva #${id} eliminada.`)
       return ok({ message: 'Reserva eliminada' })
     } catch (e) {
+      console.error('[admin/reservations/[id] DELETE] Erro inesperado:', e?.message)
       return serverError('Erro ao eliminar reserva', e.message)
     }
   }
