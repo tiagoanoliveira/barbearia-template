@@ -1,6 +1,10 @@
 import { authenticateAdmin } from '../../../utils/auth.js'
 import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from '../../../utils/response.js'
 import { sanitize, isValidDate, isValidTime, isValidId } from '../../../utils/validators.js'
+import {
+  sendReservationCancellation,
+  rescheduleReminder,
+} from '../../../utils/reservationEmails.js'
 
 const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou']
 
@@ -15,12 +19,16 @@ export async function onRequest(context) {
   if (isNaN(id) || id < 1) return badRequest('ID inválido')
 
   const reservation = await env.DB.prepare(
-    `SELECT id, status, data_hora, comentario, nota_privada,
-            cliente_id, cliente_nome, cliente_email,
-            barbeiro_id, barbeiro_nome,
-            servico_id, servico_nome,
-            duracao_efetiva
-     FROM v_reservas_complete WHERE id = ?`
+    `SELECT r.id, r.status, r.data_hora, r.comentario, r.nota_privada,
+            r.resend_lembrete_id,
+            r.cliente_id, r.barbeiro_id, r.servico_id,
+            v.cliente_nome, v.cliente_email,
+            v.barbeiro_nome,
+            v.servico_nome,
+            v.duracao_efetiva AS service_duration
+     FROM reservas r
+     JOIN v_reservas_complete v ON v.id = r.id
+     WHERE r.id = ?`
   ).bind(id).first()
 
   if (!reservation) return notFound('Reserva não encontrada')
@@ -40,28 +48,28 @@ export async function onRequest(context) {
         comentario,
         nota_privada,
         service_duration,
+        motivo,
       } = body
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
-      if (barber_id !== undefined && !isValidId(barber_id))   return badRequest('ID de barbeiro inválido')
-      if (service_id !== undefined && !isValidId(service_id)) return badRequest('ID de serviço inválido')
-      if (data_hora !== undefined) {
+      if (barber_id   !== undefined && !isValidId(barber_id))   return badRequest('ID de barbeiro inválido')
+      if (service_id  !== undefined && !isValidId(service_id))  return badRequest('ID de serviço inválido')
+      if (data_hora   !== undefined) {
         const [d, h] = data_hora.split('T')
-        if (!isValidDate(d) || !isValidTime(h?.slice(0,5))) return badRequest('Data/hora inválida')
+        if (!isValidDate(d) || !isValidTime(h?.slice(0, 5))) return badRequest('Data/hora inválida')
       }
 
       const updates = []
       const vals    = []
 
-      if (status        !== undefined) { updates.push('status = ?');           vals.push(status) }
-      if (notes         !== undefined) { updates.push('comentario = ?');       vals.push(sanitize(notes, 2000)) }
-      if (private_note  !== undefined) { updates.push('nota_privada = ?');     vals.push(sanitize(private_note, 2000)) }
-
-      if (comentario    !== undefined) { updates.push('comentario = ?');       vals.push(sanitize(comentario, 2000)) }
-      if (nota_privada  !== undefined) { updates.push('nota_privada = ?');     vals.push(sanitize(nota_privada, 2000)) }
-      if (barber_id     !== undefined) { updates.push('barbeiro_id = ?');      vals.push(barber_id) }
-      if (service_id    !== undefined) { updates.push('servico_id = ?');       vals.push(service_id) }
-      if (data_hora     !== undefined) { updates.push('data_hora = ?');        vals.push(data_hora) }
+      if (status          !== undefined) { updates.push('status = ?');           vals.push(status) }
+      if (notes           !== undefined) { updates.push('comentario = ?');       vals.push(sanitize(notes, 2000)) }
+      if (private_note    !== undefined) { updates.push('nota_privada = ?');     vals.push(sanitize(private_note, 2000)) }
+      if (comentario      !== undefined) { updates.push('comentario = ?');       vals.push(sanitize(comentario, 2000)) }
+      if (nota_privada    !== undefined) { updates.push('nota_privada = ?');     vals.push(sanitize(nota_privada, 2000)) }
+      if (barber_id       !== undefined) { updates.push('barbeiro_id = ?');      vals.push(barber_id) }
+      if (service_id      !== undefined) { updates.push('servico_id = ?');       vals.push(service_id) }
+      if (data_hora       !== undefined) { updates.push('data_hora = ?');        vals.push(data_hora) }
       if (service_duration !== undefined && Number.isFinite(Number(service_duration))) {
         updates.push('duracao_minutos = ?')
         vals.push(Number(service_duration))
@@ -75,6 +83,57 @@ export async function onRequest(context) {
         `UPDATE reservas SET ${updates.join(', ')} WHERE id = ?`
       ).bind(...vals, id).run()
 
+      // ── Acções de email pós-update ───────────────────────────────────────
+
+      // 1. Cancelamento: enviar email + cancelar lembrete agendado
+      if (status === 'cancelada' && reservation.cliente_email) {
+        sendReservationCancellation(context, {
+          reservaId:        reservation.id,
+          clientEmail:      reservation.cliente_email,
+          clientName:       reservation.cliente_nome,
+          dataHora:         reservation.data_hora,
+          serviceName:      reservation.servico_nome,
+          barberName:       reservation.barbeiro_nome,
+          duracao:          reservation.service_duration,
+          motivo:           motivo ?? null,
+          resendLembreteId: reservation.resend_lembrete_id ?? null,
+        })
+      }
+
+      // 2. Alteração de data/hora, barbeiro ou serviço: reagendar lembrete
+      const changedRelevant = data_hora !== undefined || barber_id !== undefined || service_id !== undefined
+      const notCancelled    = status !== 'cancelada'
+
+      if (changedRelevant && notCancelled && reservation.cliente_email) {
+        // Resolver nome do barbeiro e do serviço actualizados (se mudaram)
+        let newBarberName  = reservation.barbeiro_nome
+        let newServiceName = reservation.servico_nome
+        let newDuration    = reservation.service_duration
+        let newDataHora    = data_hora ?? reservation.data_hora
+
+        if (barber_id !== undefined) {
+          const b = await env.DB.prepare('SELECT nome FROM barbeiros WHERE id = ?').bind(barber_id).first()
+          if (b) newBarberName = b.nome
+        }
+        if (service_id !== undefined) {
+          const s = await env.DB.prepare('SELECT nome, duracao FROM servicos WHERE id = ?').bind(service_id).first()
+          if (s) { newServiceName = s.nome; newDuration = s.duracao ?? newDuration }
+        }
+
+        context.waitUntil(
+          rescheduleReminder(context, {
+            reservaId:     reservation.id,
+            oldLembreteId: reservation.resend_lembrete_id ?? null,
+            clientEmail:   reservation.cliente_email,
+            clientName:    reservation.cliente_nome,
+            dataHora:      newDataHora,
+            serviceName:   newServiceName,
+            barberName:    newBarberName,
+            duracao:       newDuration,
+          })
+        )
+      }
+
       return ok({ message: 'Reserva actualizada' })
     } catch (e) {
       return serverError('Erro ao actualizar reserva', e.message)
@@ -83,6 +142,10 @@ export async function onRequest(context) {
 
   if (request.method === 'DELETE') {
     try {
+      // Cancelar lembrete agendado antes de eliminar o registo
+      if (reservation.resend_lembrete_id) {
+        await cancelScheduledReminder(context, reservation.resend_lembrete_id)
+      }
       await env.DB.prepare('DELETE FROM reservas WHERE id = ?').bind(id).run()
       return ok({ message: 'Reserva eliminada' })
     } catch (e) {

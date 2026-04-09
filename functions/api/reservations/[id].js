@@ -1,5 +1,8 @@
 import { authenticateClient } from '../../utils/auth.js'
-import { sendEmail, buildReservationCancellationEmail } from '../../utils/email.js'
+import {
+  sendReservationCancellation,
+  rescheduleReminder,
+} from '../../utils/reservationEmails.js'
 
 import {
   ok,
@@ -35,6 +38,7 @@ export async function onRequest(context) {
          r.comentario,
          r.historico_edicoes,
          r.duracao_minutos,
+         r.resend_lembrete_id,
          c.nome  AS cliente_nome,
          c.email AS client_email,
          b.nome  AS barbeiro_nome,
@@ -50,6 +54,7 @@ export async function onRequest(context) {
   if (!reservation) return notFound('Reserva não encontrada')
   if (reservation.cliente_id !== auth.clientId) return forbidden()
 
+  // ─── DELETE: cancelar reserva ───────────────────────────────────────────────
   if (request.method === 'DELETE') {
     try {
       if (!['confirmada'].includes(reservation.status)) {
@@ -67,9 +72,7 @@ export async function onRequest(context) {
         const dt      = new Date(reservation.data_hora)
         const dateStr = dt.toLocaleDateString('pt-PT')
         const timeStr = dt.toTimeString().substring(0, 5)
-
         const message = `${reservation.cliente_nome} cancelou a reserva com ${reservation.barbeiro_nome} de ${dateStr} às ${timeStr}`
-
         await insertNotification(env, {
           type: 'cancelled',
           message,
@@ -81,42 +84,18 @@ export async function onRequest(context) {
         console.error('Erro ao criar notificação de cancelamento:', e)
       }
 
-      try {
-        if (reservation.client_email && context.env?.RESEND_API_KEY) {
-          const { html, attachments } = buildReservationCancellationEmail({
-            reservaId:   reservation.id,
-            clientName:  reservation.cliente_nome,
-            clientEmail: reservation.client_email,
-            dataHora:    reservation.data_hora,
-            serviceName: reservation.servico_nome,
-            barberName:  reservation.barbeiro_nome,
-            duracao:     reservation.service_duration ?? reservation.duracao_minutos,
-            motivo:      null, // cancelado pelo próprio cliente
-          })
-
-          context.waitUntil(
-              sendEmail(context, {
-                to:      reservation.client_email,
-                subject: 'Cancelaste a tua reserva – Brooklyn Barbearia',
-                html,
-                attachments,
-              }).catch(err => {
-                console.error(
-                    '[reservations/[id]] Falha ao enviar email de cancelamento (cliente):',
-                    err?.message || err
-                )
-              })
-          )
-        } else {
-          console.warn('[reservations/[id]] Sem email do cliente ou RESEND_API_KEY – email de cancelamento não enviado.', {
-            hasEmail: !!reservation.client_email,
-            key_present: !!context.env?.RESEND_API_KEY,
-            reservationId: reservation.id,
-          })
-        }
-      } catch (err) {
-        console.error('[reservations/[id]] Erro inesperado ao preparar email de cancelamento:', err)
-      }
+      // Email de cancelamento + cancelar lembrete agendado (em background)
+      sendReservationCancellation(context, {
+        reservaId:        reservation.id,
+        clientEmail:      reservation.client_email,
+        clientName:       reservation.cliente_nome,
+        dataHora:         reservation.data_hora,
+        serviceName:      reservation.servico_nome,
+        barberName:       reservation.barbeiro_nome,
+        duracao:          reservation.service_duration ?? reservation.duracao_minutos,
+        motivo:           null,
+        resendLembreteId: reservation.resend_lembrete_id ?? null,
+      })
 
       return ok({ message: 'Reserva cancelada' })
     } catch (e) {
@@ -124,6 +103,7 @@ export async function onRequest(context) {
     }
   }
 
+  // ─── PUT: editar reserva ────────────────────────────────────────────────────
   if (request.method === 'PUT') {
     try {
       const body = await request.json()
@@ -196,25 +176,16 @@ export async function onRequest(context) {
       // Construir objecto de alterações para histórico + notificação
       const changes = {}
       if (reservation.data_hora !== newDataHora) {
-        changes.data_hora = {
-          anterior: reservation.data_hora,
-          novo: newDataHora,
-        }
+        changes.data_hora = { anterior: reservation.data_hora, novo: newDataHora }
       }
       if ((reservation.comentario ?? '') !== sanitizedComment) {
         changes.comentario = true
       }
       if (newBarberId !== reservation.barbeiro_id) {
-        changes.barbeiro = {
-          anterior: reservation.barbeiro_nome,
-          novo: newBarberName,
-        }
+        changes.barbeiro = { anterior: reservation.barbeiro_nome, novo: newBarberName }
       }
       if (newServiceId !== reservation.servico_id) {
-        changes.servico = {
-          anterior: reservation.servico_nome,
-          novo: newServiceName,
-        }
+        changes.servico = { anterior: reservation.servico_nome, novo: newServiceName }
       }
 
       let history = []
@@ -225,11 +196,7 @@ export async function onRequest(context) {
         history = []
       }
 
-      history.push({
-        date: new Date().toISOString(),
-        changed_by: 'client',
-        changes,
-      })
+      history.push({ date: new Date().toISOString(), changed_by: 'client', changes })
 
       await env.DB.prepare(
         `UPDATE reservas
@@ -258,6 +225,23 @@ export async function onRequest(context) {
         })
       } catch (e) {
         console.error('Erro ao criar notificação de edição:', e)
+      }
+
+      // Reagendar lembrete se houve alteração de data/hora, barbeiro ou serviço
+      const needsReschedule = changes.data_hora || changes.barbeiro || changes.servico
+      if (needsReschedule && reservation.client_email) {
+        context.waitUntil(
+          rescheduleReminder(context, {
+            reservaId:      reservation.id,
+            oldLembreteId:  reservation.resend_lembrete_id ?? null,
+            clientEmail:    reservation.client_email,
+            clientName:     reservation.cliente_nome,
+            dataHora:       newDataHora,
+            serviceName:    newServiceName,
+            barberName:     newBarberName,
+            duracao:        newDuration,
+          })
+        )
       }
 
       return ok({ message: 'Reserva atualizada' })
@@ -292,30 +276,23 @@ function buildEditedMessage(clientName, changes) {
   if (changes.barbeiro) {
     parts.push(`barbeiro (${changes.barbeiro.anterior} → ${changes.barbeiro.novo})`)
   }
-
   if (changes.servico) {
     parts.push(`serviço (${changes.servico.anterior} → ${changes.servico.novo})`)
   }
-
   if (changes.data_hora) {
     try {
       const prev = new Date(changes.data_hora.anterior)
       const next = new Date(changes.data_hora.novo)
-
       const prevDate = prev.toLocaleDateString('pt-PT')
       const prevTime = prev.toTimeString().substring(0, 5)
       const nextDate = next.toLocaleDateString('pt-PT')
       const nextTime = next.toTimeString().substring(0, 5)
-
       parts.push(`data/hora (${prevDate} ${prevTime} → ${nextDate} ${nextTime})`)
     } catch {
       parts.push('data/hora')
     }
   }
 
-  if (parts.length === 0) {
-    return `${clientName} alterou a reserva`
-  }
-
+  if (parts.length === 0) return `${clientName} alterou a reserva`
   return `${clientName} alterou: ${parts.join(', ')}`
 }

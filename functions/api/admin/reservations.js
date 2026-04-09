@@ -1,7 +1,7 @@
 import { authenticateAdmin } from '../../utils/auth.js'
 import { ok, created, badRequest, unauthorized, serverError, corsOptions } from '../../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../../utils/validators.js'
-import { buildReservationConfirmationEmail, sendEmail } from '../../utils/email.js'
+import { sendReservationConfirmation } from '../../utils/reservationEmails.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -129,28 +129,18 @@ export async function onRequest(context) {
 
       const reservaId = result.meta.last_row_id
 
+      // Envia email de confirmação + agenda lembrete (apenas se send_email=true e cliente tem email)
       if (send_email && client?.email) {
-        try {
-          const { html, attachments } = buildReservationConfirmationEmail({
-            reservaId,
-            clientName:  client.nome,
-            clientEmail: client.email,
-            dataHora,
-            serviceName: service?.nome ?? 'Serviço',
-            barberName:  barber?.nome  ?? 'Barbeiro',
-            duracao,
-            comentario: notes ?? '',
-          })
-
-          await sendEmail(context, {
-            to:      client.email,
-            subject: `Reserva #${reservaId} confirmada – Brooklyn Barbearia`,
-            html,
-            attachments,
-          })
-        } catch (e) {
-          console.error('Erro ao enviar email de confirmação (admin):', e?.message || e)
-        }
+        sendReservationConfirmation(context, {
+          reservaId,
+          clientEmail: client.email,
+          clientName:  client.nome,
+          dataHora,
+          serviceName: service?.nome ?? 'Serviço',
+          barberName:  barber?.nome  ?? 'Barbeiro',
+          duracao,
+          comentario:  notes ?? '',
+        })
       }
 
       return created({ id: reservaId })

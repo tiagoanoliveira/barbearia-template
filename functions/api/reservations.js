@@ -4,7 +4,7 @@ import {
   conflict, serverError, corsOptions
 } from '../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../utils/validators.js'
-import { sendEmail, buildReservationConfirmationEmail } from '../utils/email.js'
+import { sendReservationConfirmation } from '../utils/reservationEmails.js'
 import { getNowLisboa } from '../utils/time.js'
 
 export async function onRequest(context) {
@@ -61,6 +61,10 @@ export async function onRequest(context) {
       if (conflictClient) return conflict('Já tem uma reserva neste horário')
       if (!barber)        return notFound('Barbeiro não encontrado')
 
+      const client = await env.DB.prepare(
+        'SELECT nome, email FROM clientes WHERE id = ?'
+      ).bind(auth.clientId).first()
+
       const result = await env.DB.prepare(
         `INSERT INTO reservas
            (cliente_id, barbeiro_id, servico_id, data_hora, comentario, duracao_minutos, created_by)
@@ -83,25 +87,17 @@ export async function onRequest(context) {
         finalBarberId
       ).run().catch(() => {})
 
-      // Aguarda envio de email e regista erro detalhado para diagnóstico no Cloudflare Logs
-      context.waitUntil(
-          sendConfirmationEmail(context, {
-            reservationId,
-            clientId:    auth.clientId,
-            barberName:  barber.nome,
-            serviceName: service.nome,
-            duracao:     service.duracao || 60,
-            dataHora,
-          }).catch(err => console.error(
-              '[reservations] Falha ao enviar email de confirmação:',
-              JSON.stringify({
-                message:     err?.message,
-                cause:       err?.cause,
-                key_present: !!context.env?.RESEND_API_KEY,
-                reservationId,
-              })
-          ))
-      )
+      // Envia email de confirmação e agenda lembrete 24h antes (em background)
+      sendReservationConfirmation(context, {
+        reservaId:   reservationId,
+        clientEmail: client?.email ?? null,
+        clientName:  client?.nome  ?? 'Cliente',
+        dataHora,
+        serviceName: service.nome,
+        barberName:  barber.nome,
+        duracao:     service.duracao || 60,
+        comentario:  notes ?? '',
+      })
 
       return created({ id: reservationId, barber_id: finalBarberId, barber_name: barber.nome })
     } catch (e) {
@@ -173,38 +169,4 @@ async function pickBarber(env, date, time, duration) {
   if (afterYest.length === 1) return afterYest[0].id
 
   return afterYest[Math.floor(Math.random() * afterYest.length)].id
-}
-
-async function sendConfirmationEmail(context, { reservationId, clientId, barberName, serviceName, duracao, dataHora }) {
-  const { env } = context
-  if (!env.RESEND_API_KEY) {
-    console.warn('[sendConfirmationEmail] RESEND_API_KEY não definida — email não enviado.')
-    return
-  }
-
-  const client = await env.DB.prepare(
-    'SELECT nome, email FROM clientes WHERE id = ?'
-  ).bind(clientId).first()
-
-  if (!client?.email) {
-    console.warn(`[sendConfirmationEmail] Cliente ${clientId} sem email — email não enviado.`)
-    return
-  }
-
-  const { html, attachments } = buildReservationConfirmationEmail({
-    reservaId:   reservationId,
-    clientName:  client.nome,
-    clientEmail: client.email,
-    dataHora,
-    serviceName,
-    barberName,
-    duracao,
-  })
-
-  await sendEmail(context, {
-    to:      client.email,
-    subject: `Reserva #${reservationId} confirmada – Brooklyn Barbearia`,
-    html,
-    attachments,
-  })
 }
