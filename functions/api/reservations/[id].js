@@ -1,4 +1,6 @@
 import { authenticateClient } from '../../utils/auth.js'
+import { sendEmail, buildReservationCancellationEmail } from '../../utils/email.js'
+
 import {
   ok,
   unauthorized,
@@ -23,24 +25,26 @@ export async function onRequest(context) {
   if (isNaN(id) || id < 1) return badRequest('ID inválido')
 
   const reservation = await env.DB.prepare(
-    `SELECT
-       r.id,
-       r.cliente_id,
-       r.barbeiro_id,
-       r.servico_id,
-       r.data_hora,
-       r.status,
-       r.comentario,
-       r.historico_edicoes,
-       r.duracao_minutos,
-       c.nome AS cliente_nome,
-       b.nome AS barbeiro_nome,
-       s.nome AS servico_nome
-     FROM reservas r
-     JOIN clientes  c ON r.cliente_id  = c.id
-     JOIN barbeiros b ON r.barbeiro_id = b.id
-     JOIN servicos  s ON r.servico_id  = s.id
-    WHERE r.id = ?`
+      `SELECT
+         r.id,
+         r.cliente_id,
+         r.barbeiro_id,
+         r.servico_id,
+         r.data_hora,
+         r.status,
+         r.comentario,
+         r.historico_edicoes,
+         r.duracao_minutos,
+         c.nome  AS cliente_nome,
+         c.email AS client_email,
+         b.nome  AS barbeiro_nome,
+         s.nome  AS servico_nome,
+         s.duracao AS service_duration
+       FROM reservas r
+              JOIN clientes  c ON r.cliente_id  = c.id
+              JOIN barbeiros b ON r.barbeiro_id = b.id
+              JOIN servicos  s ON r.servico_id  = s.id
+       WHERE r.id = ?`
   ).bind(id).first()
 
   if (!reservation) return notFound('Reserva não encontrada')
@@ -75,6 +79,43 @@ export async function onRequest(context) {
         })
       } catch (e) {
         console.error('Erro ao criar notificação de cancelamento:', e)
+      }
+
+      try {
+        if (reservation.client_email && context.env?.RESEND_API_KEY) {
+          const { html, attachments } = buildReservationCancellationEmail({
+            reservaId:   reservation.id,
+            clientName:  reservation.cliente_nome,
+            clientEmail: reservation.client_email,
+            dataHora:    reservation.data_hora,
+            serviceName: reservation.servico_nome,
+            barberName:  reservation.barbeiro_nome,
+            duracao:     reservation.service_duration ?? reservation.duracao_minutos,
+            motivo:      null, // cancelado pelo próprio cliente
+          })
+
+          context.waitUntil(
+              sendEmail(context, {
+                to:      reservation.client_email,
+                subject: 'Cancelaste a tua reserva – Brooklyn Barbearia',
+                html,
+                attachments,
+              }).catch(err => {
+                console.error(
+                    '[reservations/[id]] Falha ao enviar email de cancelamento (cliente):',
+                    err?.message || err
+                )
+              })
+          )
+        } else {
+          console.warn('[reservations/[id]] Sem email do cliente ou RESEND_API_KEY – email de cancelamento não enviado.', {
+            hasEmail: !!reservation.client_email,
+            key_present: !!context.env?.RESEND_API_KEY,
+            reservationId: reservation.id,
+          })
+        }
+      } catch (err) {
+        console.error('[reservations/[id]] Erro inesperado ao preparar email de cancelamento:', err)
       }
 
       return ok({ message: 'Reserva cancelada' })
