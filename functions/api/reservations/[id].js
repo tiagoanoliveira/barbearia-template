@@ -67,7 +67,7 @@ export async function onRequest(context) {
          WHERE id = ?`
       ).bind(id).run()
 
-      // Notificação interna de cancelamento (não falha a request em caso de erro)
+      // Notificação interna
       try {
         const dt      = new Date(reservation.data_hora)
         const dateStr = dt.toLocaleDateString('pt-PT')
@@ -81,24 +81,35 @@ export async function onRequest(context) {
           barberId: reservation.barbeiro_id,
         })
       } catch (e) {
-        console.error('Erro ao criar notificação de cancelamento:', e)
+        console.error('[reservations/[id] DELETE] Erro ao criar notificação:', e)
       }
 
-      // Email de cancelamento + cancelar lembrete agendado (em background)
-      sendReservationCancellation(context, {
-        reservaId:        reservation.id,
-        clientEmail:      reservation.client_email,
-        clientName:       reservation.cliente_nome,
-        dataHora:         reservation.data_hora,
-        serviceName:      reservation.servico_nome,
-        barberName:       reservation.barbeiro_nome,
-        duracao:          reservation.service_duration ?? reservation.duracao_minutos,
-        motivo:           null,
-        resendLembreteId: reservation.resend_lembrete_id ?? null,
-      })
+      const lembreteId = reservation.resend_lembrete_id ?? null
+      console.log(
+        `[reservations/[id] DELETE] Reserva #${id}: client_email=${reservation.client_email},`,
+        `resend_lembrete_id lido da BD=${JSON.stringify(lembreteId)}`
+      )
+
+      // Email de cancelamento + cancelar lembrete (dentro de waitUntil para não ser cortado)
+      context.waitUntil(
+        (async () => {
+          await sendReservationCancellation(context, {
+            reservaId:        reservation.id,
+            clientEmail:      reservation.client_email,
+            clientName:       reservation.cliente_nome,
+            dataHora:         reservation.data_hora,
+            serviceName:      reservation.servico_nome,
+            barberName:       reservation.barbeiro_nome,
+            duracao:          reservation.service_duration ?? reservation.duracao_minutos,
+            motivo:           null,
+            resendLembreteId: lembreteId,
+          })
+        })()
+      )
 
       return ok({ message: 'Reserva cancelada' })
     } catch (e) {
+      console.error('[reservations/[id] DELETE] Erro inesperado:', e?.message)
       return serverError('Erro ao cancelar reserva', e.message)
     }
   }
@@ -132,7 +143,6 @@ export async function onRequest(context) {
       const newDateObj  = new Date(newDataHora)
       if (newDateObj <= now) return badRequest('Não pode reagendar para datas passadas')
 
-      // Se o barbeiro mudou, garantir que existe
       let newBarberName = reservation.barbeiro_nome
       if (newBarberId !== reservation.barbeiro_id) {
         const b = await env.DB.prepare('SELECT id, nome FROM barbeiros WHERE id = ?').bind(newBarberId).first()
@@ -140,7 +150,6 @@ export async function onRequest(context) {
         newBarberName = b.nome
       }
 
-      // Se o serviço mudou, garantir que existe e obter duração
       let newServiceName = reservation.servico_nome
       let newDuration    = reservation.duracao_minutos
       if (newServiceId !== reservation.servico_id) {
@@ -150,7 +159,6 @@ export async function onRequest(context) {
         newDuration    = s.duracao ?? reservation.duracao_minutos
       }
 
-      // Verificar conflitos — barbeiro e cliente
       const [conflictBarber, conflictClient] = await Promise.all([
         env.DB.prepare(
           `SELECT id FROM reservas
@@ -173,7 +181,6 @@ export async function onRequest(context) {
 
       const sanitizedComment = sanitize(notes ?? '', 2000)
 
-      // Construir objecto de alterações para histórico + notificação
       const changes = {}
       if (reservation.data_hora !== newDataHora) {
         changes.data_hora = { anterior: reservation.data_hora, novo: newDataHora }
@@ -213,7 +220,6 @@ export async function onRequest(context) {
         reservation.id,
       ).run()
 
-      // Notificação interna de edição
       try {
         const message = buildEditedMessage(reservation.cliente_nome, changes)
         await insertNotification(env, {
@@ -224,28 +230,39 @@ export async function onRequest(context) {
           barberId: newBarberId,
         })
       } catch (e) {
-        console.error('Erro ao criar notificação de edição:', e)
+        console.error('[reservations/[id] PUT] Erro ao criar notificação:', e)
       }
 
-      // Reagendar lembrete se houve alteração de data/hora, barbeiro ou serviço
       const needsReschedule = changes.data_hora || changes.barbeiro || changes.servico
+      const lembreteId      = reservation.resend_lembrete_id ?? null
+
+      console.log(
+        `[reservations/[id] PUT] Reserva #${id}: needsReschedule=${!!needsReschedule},`,
+        `client_email=${reservation.client_email},`,
+        `resend_lembrete_id lido da BD=${JSON.stringify(lembreteId)}`
+      )
+
       if (needsReschedule && reservation.client_email) {
+        console.log(`[reservations/[id] PUT] Reserva #${id}: a reagendar lembrete…`)
         context.waitUntil(
           rescheduleReminder(context, {
-            reservaId:      reservation.id,
-            oldLembreteId:  reservation.resend_lembrete_id ?? null,
-            clientEmail:    reservation.client_email,
-            clientName:     reservation.cliente_nome,
-            dataHora:       newDataHora,
-            serviceName:    newServiceName,
-            barberName:     newBarberName,
-            duracao:        newDuration,
+            reservaId:     reservation.id,
+            oldLembreteId: lembreteId,
+            clientEmail:   reservation.client_email,
+            clientName:    reservation.cliente_nome,
+            dataHora:      newDataHora,
+            serviceName:   newServiceName,
+            barberName:    newBarberName,
+            duracao:       newDuration,
           })
         )
+      } else if (needsReschedule && !reservation.client_email) {
+        console.warn(`[reservations/[id] PUT] Reserva #${id}: needsReschedule=true mas client_email está vazio — lembrete não reagendado.`)
       }
 
       return ok({ message: 'Reserva atualizada' })
     } catch (e) {
+      console.error('[reservations/[id] PUT] Erro inesperado:', e?.message)
       return serverError('Erro ao editar reserva', e.message)
     }
   }

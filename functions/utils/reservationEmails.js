@@ -3,7 +3,7 @@
  *
  * Expõe 4 funções públicas:
  *   sendReservationConfirmation  – envia email de confirmação e agenda lembrete 24h antes
- *   sendReservationCancellation  – envia email de cancelamento
+ *   sendReservationCancellation  – envia email de cancelamento e cancela lembrete agendado
  *   cancelScheduledReminder      – cancela um email agendado na Resend
  *   rescheduleReminder           – cancela o lembrete antigo e agenda um novo (usado em edições)
  *
@@ -21,18 +21,11 @@ const RESEND_EMAILS_URL = 'https://api.resend.com/emails'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Devolve true se a data da reserva é mais de 24h no futuro
- * (só vale a pena agendar lembrete nesse caso).
- */
 function isMoreThan24hAway(dataHora) {
   const diffMs = new Date(dataHora).getTime() - Date.now()
   return diffMs > 24 * 60 * 60 * 1000
 }
 
-/**
- * Formata a data do lembrete: 24h antes de dataHora, em ISO 8601.
- */
 function reminderSendAt(dataHora) {
   const d = new Date(new Date(dataHora).getTime() - 24 * 60 * 60 * 1000)
   return d.toISOString()
@@ -40,21 +33,6 @@ function reminderSendAt(dataHora) {
 
 // ─── 1. Agendar lembrete (privado) ───────────────────────────────────────────
 
-/**
- * Agenda um email de lembrete via Resend scheduled emails.
- * Devolve o ID do email agendado, ou null em caso de erro.
- *
- * @param {object} context  – Cloudflare Pages context
- * @param {object} params
- * @param {number} params.reservaId
- * @param {string} params.clientEmail
- * @param {string} params.clientName
- * @param {string} params.dataHora    – ISO 8601, hora local Lisboa
- * @param {string} params.serviceName
- * @param {string} params.barberName
- * @param {number} params.duracao     – minutos
- * @returns {Promise<string|null>}
- */
 async function _scheduleReminder(context, { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao }) {
   const key = context.env?.RESEND_API_KEY
   if (!key) {
@@ -63,10 +41,11 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
   }
 
   if (!isMoreThan24hAway(dataHora)) {
-    console.log(`[_scheduleReminder] Reserva #${reservaId} é em menos de 24h — lembrete não agendado.`)
+    console.log(`[_scheduleReminder] Reserva #${reservaId}: dataHora=${dataHora} é em menos de 24h — lembrete não agendado.`)
     return null
   }
 
+  const sendAt = reminderSendAt(dataHora)
   const dt   = new Date(dataHora)
   const data = dt.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const hora = dt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
@@ -74,12 +53,14 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
   const html = buildReminderHtml({ clientName, data, hora, serviceName, barberName, reservaId })
 
   const payload = {
-    from:        'Brooklyn Barbearia <noreply@brooklynbarbearia.pt>',
-    to:          clientEmail,
-    subject:     `Lembrete: reserva amanhã às ${hora} – Brooklyn Barbearia`,
+    from:         'Brooklyn Barbearia <noreply@brooklynbarbearia.pt>',
+    to:           clientEmail,
+    subject:      `Lembrete: reserva amanhã às ${hora} – Brooklyn Barbearia`,
     html,
-    scheduled_at: reminderSendAt(dataHora),
+    scheduled_at: sendAt,
   }
+
+  console.log(`[_scheduleReminder] Reserva #${reservaId}: a agendar lembrete para ${clientEmail}, scheduled_at=${sendAt}`)
 
   try {
     const res  = await fetch(RESEND_EMAILS_URL, {
@@ -90,11 +71,11 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
     const body = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      console.error(`[_scheduleReminder] Resend devolveu ${res.status}:`, JSON.stringify(body))
+      console.error(`[_scheduleReminder] Reserva #${reservaId}: Resend devolveu ${res.status}:`, JSON.stringify(body))
       return null
     }
 
-    console.log(`[_scheduleReminder] Lembrete agendado para reserva #${reservaId}. ID Resend: ${body.id}`)
+    console.log(`[_scheduleReminder] Reserva #${reservaId}: lembrete agendado com sucesso. ID Resend: ${body.id}`)
     return body.id ?? null
   } catch (err) {
     console.error('[_scheduleReminder] Erro de rede:', err?.message || err)
@@ -104,64 +85,49 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
 
 // ─── 2. Cancelar lembrete agendado ───────────────────────────────────────────
 
-/**
- * Cancela um email agendado na Resend dado o seu ID.
- * Não lança excepção — apenas regista erros.
- *
- * @param {object} context
- * @param {string} resendEmailId
- */
 export async function cancelScheduledReminder(context, resendEmailId) {
-  if (!resendEmailId) return
+  console.log(`[cancelScheduledReminder] Chamada com resendEmailId=${JSON.stringify(resendEmailId)}`)
 
-  const key = context.env?.RESEND_API_KEY
-  if (!key) {
-    console.warn('[cancelScheduledReminder] RESEND_API_KEY não definida.')
+  if (!resendEmailId) {
+    console.warn('[cancelScheduledReminder] resendEmailId está vazio/null/undefined — nada a cancelar.')
     return
   }
 
+  const key = context.env?.RESEND_API_KEY
+  if (!key) {
+    console.warn('[cancelScheduledReminder] RESEND_API_KEY não definida — cancelamento impossível.')
+    return
+  }
+
+  const url = `${RESEND_EMAILS_URL}/${resendEmailId}/cancel`
+  console.log(`[cancelScheduledReminder] A chamar POST ${url}`)
+
   try {
-    const res = await fetch(`${RESEND_EMAILS_URL}/${resendEmailId}/cancel`, {
-      method: 'POST',
+    const res     = await fetch(url, {
+      method:  'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     })
+    const rawText = await res.text().catch(() => '')
+
+    console.log(`[cancelScheduledReminder] Resend respondeu com status=${res.status}, body=${rawText}`)
 
     if (res.ok) {
-      console.log(`[cancelScheduledReminder] Email agendado ${resendEmailId} cancelado.`)
+      console.log(`[cancelScheduledReminder] Email agendado ${resendEmailId} cancelado com sucesso.`)
+    } else if (res.status === 422) {
+      // 422 = email já enviado ou já cancelado — não é um erro crítico
+      console.warn(`[cancelScheduledReminder] Email ${resendEmailId} já enviado/cancelado (422) — ignorado. Body: ${rawText}`)
+    } else if (res.status === 404) {
+      console.warn(`[cancelScheduledReminder] Email ${resendEmailId} não encontrado na Resend (404) — pode ter sido enviado ou o ID está errado. Body: ${rawText}`)
     } else {
-      const txt = await res.text().catch(() => '')
-      // 422 significa que o email já foi enviado ou já estava cancelado — não é um erro crítico
-      if (res.status === 422) {
-        console.warn(`[cancelScheduledReminder] Email ${resendEmailId} já enviado/cancelado (422) — ignorado.`)
-      } else {
-        console.error(`[cancelScheduledReminder] Resend devolveu ${res.status}:`, txt)
-      }
+      console.error(`[cancelScheduledReminder] Erro inesperado ao cancelar ${resendEmailId}: status=${res.status}, body=${rawText}`)
     }
   } catch (err) {
-    console.error('[cancelScheduledReminder] Erro de rede:', err?.message || err)
+    console.error(`[cancelScheduledReminder] Excepção de rede ao cancelar ${resendEmailId}:`, err?.message || err)
   }
 }
 
 // ─── 3. Enviar confirmação + agendar lembrete ────────────────────────────────
 
-/**
- * Envia email de confirmação de reserva e, se a reserva for com > 24h de antecedência,
- * agenda um lembrete via Resend.
- *
- * Guarda o ID do lembrete agendado na coluna resend_lembrete_id da tabela reservas.
- * Usa context.waitUntil para não bloquear a resposta HTTP.
- *
- * @param {object} context
- * @param {object} params
- * @param {number} params.reservaId
- * @param {string} params.clientEmail
- * @param {string} params.clientName
- * @param {string} params.dataHora
- * @param {string} params.serviceName
- * @param {string} params.barberName
- * @param {number} params.duracao
- * @param {string} [params.comentario]
- */
 export function sendReservationConfirmation(context, params) {
   const { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao, comentario } = params
 
@@ -170,18 +136,14 @@ export function sendReservationConfirmation(context, params) {
     return
   }
 
+  console.log(`[sendReservationConfirmation] Reserva #${reservaId}: a iniciar envio de confirmação para ${clientEmail}`)
+
   context.waitUntil(
     (async () => {
       // 1. Email de confirmação
       try {
         const { html, attachments } = buildReservationConfirmationEmail({
-          reservaId,
-          clientName,
-          clientEmail,
-          dataHora,
-          serviceName,
-          barberName,
-          duracao,
+          reservaId, clientName, clientEmail, dataHora, serviceName, barberName, duracao,
           comentario: comentario ?? '',
         })
         await sendEmail(context, {
@@ -190,8 +152,9 @@ export function sendReservationConfirmation(context, params) {
           html,
           attachments,
         })
+        console.log(`[sendReservationConfirmation] Reserva #${reservaId}: email de confirmação enviado.`)
       } catch (err) {
-        console.error(`[sendReservationConfirmation] Falha no email de confirmação para reserva #${reservaId}:`, err?.message || err)
+        console.error(`[sendReservationConfirmation] Reserva #${reservaId}: falha no email de confirmação:`, err?.message || err)
       }
 
       // 2. Agendar lembrete 24h antes (se aplicável)
@@ -204,33 +167,19 @@ export function sendReservationConfirmation(context, params) {
           await context.env.DB.prepare(
             'UPDATE reservas SET resend_lembrete_id = ? WHERE id = ?'
           ).bind(lembreteId, reservaId).run()
+          console.log(`[sendReservationConfirmation] Reserva #${reservaId}: resend_lembrete_id=${lembreteId} guardado na BD.`)
+        } else {
+          console.log(`[sendReservationConfirmation] Reserva #${reservaId}: sem lembrete agendado (menos de 24h ou erro).`)
         }
       } catch (err) {
-        console.error(`[sendReservationConfirmation] Falha ao agendar lembrete para reserva #${reservaId}:`, err?.message || err)
+        console.error(`[sendReservationConfirmation] Reserva #${reservaId}: falha ao agendar lembrete:`, err?.message || err)
       }
     })()
   )
 }
 
-// ─── 4. Enviar cancelamento ───────────────────────────────────────────────────
+// ─── 4. Enviar cancelamento + cancelar lembrete ───────────────────────────────
 
-/**
- * Envia email de cancelamento de reserva.
- * Cancela também o lembrete agendado, se existir.
- * Usa context.waitUntil para não bloquear a resposta HTTP.
- *
- * @param {object} context
- * @param {object} params
- * @param {number} params.reservaId
- * @param {string} params.clientEmail
- * @param {string} params.clientName
- * @param {string} params.dataHora
- * @param {string} params.serviceName
- * @param {string} params.barberName
- * @param {number} params.duracao
- * @param {string|null} [params.motivo]
- * @param {string|null} [params.resendLembreteId]  – ID do lembrete agendado a cancelar
- */
 export function sendReservationCancellation(context, params) {
   const { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao, motivo, resendLembreteId } = params
 
@@ -239,27 +188,31 @@ export function sendReservationCancellation(context, params) {
     return
   }
 
+  console.log(
+    `[sendReservationCancellation] Reserva #${reservaId}: clientEmail=${clientEmail},`,
+    `resendLembreteId recebido=${JSON.stringify(resendLembreteId)}`
+  )
+
   context.waitUntil(
     (async () => {
       // 1. Cancelar lembrete agendado (se existir)
       if (resendLembreteId) {
+        console.log(`[sendReservationCancellation] Reserva #${reservaId}: a cancelar lembrete ${resendLembreteId}…`)
         await cancelScheduledReminder(context, resendLembreteId)
-        // Limpar o ID na BD
         await context.env.DB.prepare(
           'UPDATE reservas SET resend_lembrete_id = NULL WHERE id = ?'
-        ).bind(reservaId).run().catch(e => console.error('[sendReservationCancellation] Erro ao limpar resend_lembrete_id:', e?.message))
+        ).bind(reservaId).run().catch(e =>
+          console.error('[sendReservationCancellation] Erro ao limpar resend_lembrete_id:', e?.message)
+        )
+        console.log(`[sendReservationCancellation] Reserva #${reservaId}: resend_lembrete_id limpo na BD.`)
+      } else {
+        console.log(`[sendReservationCancellation] Reserva #${reservaId}: sem lembrete agendado para cancelar.`)
       }
 
       // 2. Email de cancelamento
       try {
         const { html, attachments } = buildReservationCancellationEmail({
-          reservaId,
-          clientName,
-          clientEmail,
-          dataHora,
-          serviceName,
-          barberName,
-          duracao,
+          reservaId, clientName, clientEmail, dataHora, serviceName, barberName, duracao,
           motivo: motivo ?? null,
         })
         await sendEmail(context, {
@@ -268,8 +221,9 @@ export function sendReservationCancellation(context, params) {
           html,
           attachments,
         })
+        console.log(`[sendReservationCancellation] Reserva #${reservaId}: email de cancelamento enviado para ${clientEmail}.`)
       } catch (err) {
-        console.error(`[sendReservationCancellation] Falha no email de cancelamento para reserva #${reservaId}:`, err?.message || err)
+        console.error(`[sendReservationCancellation] Reserva #${reservaId}: falha no email de cancelamento:`, err?.message || err)
       }
     })()
   )
@@ -277,40 +231,37 @@ export function sendReservationCancellation(context, params) {
 
 // ─── 5. Reagendar lembrete (usado em edições) ────────────────────────────────
 
-/**
- * Cancela o lembrete existente (se houver) e agenda um novo com os dados actualizados.
- * Guarda o novo ID na BD.
- * Deve ser chamado com await (ou context.waitUntil) pelo caller.
- *
- * @param {object} context
- * @param {object} params
- * @param {number} params.reservaId
- * @param {string|null} params.oldLembreteId       – ID do lembrete a cancelar
- * @param {string} params.clientEmail
- * @param {string} params.clientName
- * @param {string} params.dataHora                 – nova data/hora
- * @param {string} params.serviceName
- * @param {string} params.barberName
- * @param {number} params.duracao
- */
 export async function rescheduleReminder(context, params) {
   const { reservaId, oldLembreteId, clientEmail, clientName, dataHora, serviceName, barberName, duracao } = params
 
-  // Cancelar o lembrete anterior
+  console.log(
+    `[rescheduleReminder] Reserva #${reservaId}: oldLembreteId=${JSON.stringify(oldLembreteId)},`,
+    `clientEmail=${clientEmail}, nova dataHora=${dataHora}`
+  )
+
+  // 1. Cancelar o lembrete anterior
   if (oldLembreteId) {
+    console.log(`[rescheduleReminder] Reserva #${reservaId}: a cancelar lembrete antigo ${oldLembreteId}…`)
     await cancelScheduledReminder(context, oldLembreteId)
+  } else {
+    console.log(`[rescheduleReminder] Reserva #${reservaId}: sem lembrete anterior para cancelar.`)
   }
 
-  // Agendar novo lembrete
+  // 2. Agendar novo lembrete
   const newLembreteId = await _scheduleReminder(context, {
     reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao,
   })
 
-  // Persistir novo ID (ou NULL se não agendado)
+  // 3. Persistir novo ID (ou NULL se não agendado)
   await context.env.DB.prepare(
     'UPDATE reservas SET resend_lembrete_id = ? WHERE id = ?'
   ).bind(newLembreteId ?? null, reservaId).run().catch(e =>
     console.error('[rescheduleReminder] Erro ao actualizar resend_lembrete_id:', e?.message)
+  )
+
+  console.log(
+    `[rescheduleReminder] Reserva #${reservaId}: resend_lembrete_id actualizado para`,
+    newLembreteId ?? 'NULL (menos de 24h ou erro)'
   )
 }
 
