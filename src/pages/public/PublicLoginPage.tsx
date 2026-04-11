@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { api } from '@/api/client'
@@ -18,6 +18,53 @@ export default function PublicLoginPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Turnstile
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const turnstileRef = useRef<HTMLDivElement | null>(null)
+  const widgetIdRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    function renderWidget() {
+      const ts = (window as any).turnstile
+      if (!ts || !turnstileRef.current || widgetIdRef.current) return
+
+      widgetIdRef.current = ts.render(turnstileRef.current, {
+        sitekey: '0x4AAAAAAC77HIBeGCioAqAq',
+        callback: (token: string) => setTurnstileToken(token),
+      })
+    }
+
+    const existing = document.querySelector('script[data-turnstile-script="1"]') as HTMLScriptElement | null
+    if (existing) {
+      if (existing.getAttribute('data-loaded') === '1') {
+        renderWidget()
+      } else {
+        existing.addEventListener('load', renderWidget)
+      }
+      return () => existing.removeEventListener('load', renderWidget)
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    script.async = true
+    script.defer = true
+    script.setAttribute('data-turnstile-script', '1')
+    script.onload = () => {
+      script.setAttribute('data-loaded', '1')
+      renderWidget()
+    }
+    document.body.appendChild(script)
+
+    return () => {
+      const ts = (window as any).turnstile
+      if (ts && widgetIdRef.current) {
+        ts.remove(widgetIdRef.current)
+      }
+    }
+  }, [])
+
   // Estado para modal de telefone duplicado
   const [phoneExistModal, setPhoneExistModal] = useState(false)
   const [pendingEmail, setPendingEmail] = useState('')
@@ -31,6 +78,11 @@ export default function PublicLoginPage() {
     setError(null)
     setSuccessMsg(null)
 
+    if (!turnstileToken) {
+      setError('Por favor confirme que não é um robô antes de continuar.')
+      return
+    }
+
     if (mode === 'register' && form.password !== form.confirm) {
       setError('As passwords não coincidem.')
       return
@@ -39,11 +91,17 @@ export default function PublicLoginPage() {
     setLoading(true)
     const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register'
     const payload  = mode === 'login'
-      ? { identifier: form.email || form.phone, password: form.password }
-      : { name: form.name, email: form.email, phone: form.phone, password: form.password }
+      ? { identifier: form.email || form.phone, password: form.password, turnstileToken }
+      : { name: form.name, email: form.email, phone: form.phone, password: form.password, turnstileToken }
 
-    const res = await api.post<{ token: string }>(endpoint, payload)
+    const res = await api.post<{ token: string; message?: string; email_pending_verification?: boolean }>(endpoint, payload)
     setLoading(false)
+
+    const ts = (window as any).turnstile
+    if (ts && widgetIdRef.current) {
+      ts.reset(widgetIdRef.current)
+      setTurnstileToken(null)
+    }
 
     if (!res.success || !res.data) {
       // Tentar interpretar erro estruturado (ex: PHONE_EXISTS)
@@ -58,12 +116,25 @@ export default function PublicLoginPage() {
       } catch {
         // não é JSON estruturado — mostrar erro normalmente
       }
-      setError(res.error ?? 'Credenciais inválidas.')
+
+      if (res.error === 'Email já registado') {
+        setError('Esta conta já foi criada. Verifique o email de confirmação que recebeu.')
+      } else {
+        setError(res.error ?? 'Credenciais inválidas.')
+      }
       return
     }
 
-    localStorage.setItem('user_token', res.data.token)
-    navigate(redirectTo)
+    if (mode === 'login') {
+      localStorage.setItem('user_token', res.data.token)
+      navigate(redirectTo)
+      return
+    }
+
+    // Registo: não faz login automático, apenas informa o utilizador
+    setSuccessMsg(res.data.message ?? 'Conta criada! Verifique o seu email para confirmar o registo.')
+    setMode('login')
+    setForm({ name: '', email: form.email, phone: form.phone, password: '', confirm: '' })
   }
 
   const handlePhoneExistConfirm = async () => {
@@ -204,6 +275,8 @@ export default function PublicLoginPage() {
                                 focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
           )}
+
+          <div ref={turnstileRef} className="mt-2" />
 
           {error && (
             <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-xl px-4 py-2.5">
