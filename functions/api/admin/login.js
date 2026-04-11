@@ -1,6 +1,7 @@
 import { verifyPassword } from '../../utils/crypto.js'
 import { signJWT } from '../../utils/jwt.js'
 import { ok, badRequest, serverError, corsOptions } from '../../utils/response.js'
+import { verifyTurnstile } from '../../utils/turnstile.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -8,8 +9,14 @@ export async function onRequest(context) {
   if (request.method !== 'POST') return badRequest('Método não permitido')
 
   try {
-    const { username, password } = await request.json()
+    const { username, password, turnstileToken } = await request.json()
     if (!username || !password) return badRequest('Username e password obrigatórios')
+
+    // Proteção anti-abuso com Turnstile
+    const turn = await verifyTurnstile(context, turnstileToken)
+    if (!turn.success) {
+      return badRequest('Falha na verificação de segurança. Atualize a página e tente novamente.')
+    }
 
     // admin_users usa 'username' (não email) — preservar exactamente o valor guardado
     const admin = await env.DB.prepare(
