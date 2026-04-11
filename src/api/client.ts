@@ -26,6 +26,9 @@ async function request<T>(
   })
 
   if (res.status === 401) {
+    // Respostas 401 são reservadas para endpoints que exigem autenticação.
+    // Endpoints públicos de auth (login, register, forgot-password, etc.)
+    // devolvem 400 em caso de erro de negócio.
     if (tokenKey === 'user_token') {
       // sessão de cliente
       localStorage.removeItem('user_token')
