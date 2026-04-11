@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Scissors, Eye, EyeOff, LogIn } from 'lucide-react'
 import { authApi } from '@/api/auth'
@@ -13,13 +13,72 @@ export default function LoginPage() {
   const [error, setError]       = useState<string | null>(null)
   const [loading, setLoading]   = useState(false)
 
+  // Turnstile
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const turnstileRef = useRef<HTMLDivElement | null>(null)
+  const widgetIdRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    function renderWidget() {
+      const ts = (window as any).turnstile
+      if (!ts || !turnstileRef.current || widgetIdRef.current) return
+
+      widgetIdRef.current = ts.render(turnstileRef.current, {
+        sitekey: '0x4AAAAAAC77HIBeGCioAqAq',
+        callback: (token: string) => setTurnstileToken(token),
+      })
+    }
+
+    const existing = document.querySelector('script[data-turnstile-script="1"]') as HTMLScriptElement | null
+    if (existing) {
+      if (existing.getAttribute('data-loaded') === '1') {
+        renderWidget()
+      } else {
+        existing.addEventListener('load', renderWidget)
+      }
+      return () => existing.removeEventListener('load', renderWidget)
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    script.async = true
+    script.defer = true
+    script.setAttribute('data-turnstile-script', '1')
+    script.onload = () => {
+      script.setAttribute('data-loaded', '1')
+      renderWidget()
+    }
+    document.body.appendChild(script)
+
+    return () => {
+      const ts = (window as any).turnstile
+      if (ts && widgetIdRef.current) {
+        ts.remove(widgetIdRef.current)
+      }
+    }
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    if (!turnstileToken) {
+      setError('Por favor confirme que não é um robô antes de continuar.')
+      return
+    }
+
     setLoading(true)
 
-    const res = await authApi.login({ username, password })
+    const res = await authApi.login({ username, password, turnstileToken })
     setLoading(false)
+
+    const ts = (window as any).turnstile
+    if (ts && widgetIdRef.current) {
+      ts.reset(widgetIdRef.current)
+      setTurnstileToken(null)
+    }
 
     if (!res.success || !res.data) {
       setError(res.error ?? 'Credenciais inválidas.')
@@ -83,6 +142,8 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+
+          <div ref={turnstileRef} className="mt-2" />
 
           {error && (
             <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-xl px-4 py-2.5">
