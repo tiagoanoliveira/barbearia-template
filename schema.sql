@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS clientes (
   next_appointment_date     DATETIME,
   last_appointment_date     DATETIME,
   notas                     TEXT,
-  foto_perfil               TEXT
+  foto_perfil               TEXT,
+  resend_reset_email_id     TEXT,
+  resend_verification_email_id TEXT,
+  resend_email_change_id    TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_email_unique      ON clientes(email);
