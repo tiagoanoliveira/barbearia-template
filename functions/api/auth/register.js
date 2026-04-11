@@ -1,7 +1,8 @@
 import { hashPassword, generateToken } from '../../utils/crypto.js'
-import { created, badRequest, conflict, serverError, corsOptions } from '../../utils/response.js'
+import { created, ok, badRequest, conflict, serverError, corsOptions } from '../../utils/response.js'
 import { sanitize } from '../../utils/validators.js'
 import { sendEmail, buildVerificationEmail } from '../../utils/email.js'
+import { verifyTurnstile } from '../../utils/turnstile.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -9,18 +10,77 @@ export async function onRequest(context) {
   if (request.method !== 'POST') return badRequest('Método não permitido')
 
   try {
-    const { name, email, phone, password } = await request.json()
+    const { name, email, phone, password, turnstileToken } = await request.json()
 
     if (!name || !email || !password) return badRequest('Nome, email e password são obrigatórios')
     if (password.length < 8)          return badRequest('Password mínimo 8 caracteres')
 
+    // Proteção anti-abuso com Turnstile
+    const turn = await verifyTurnstile(context, turnstileToken)
+    if (!turn.success) {
+      return badRequest('Falha na verificação de segurança. Atualize a página e tente novamente.')
+    }
+
     const emailClean = sanitize(email, 200).toLowerCase()
 
-    // Verificar email duplicado
-    const existingEmail = await env.DB.prepare(
-        'SELECT id FROM clientes WHERE email = ?'
+    // Verificar se já existe cliente com este email
+    const existing = await env.DB.prepare(
+      `SELECT id, nome, email_verificado, token_verificacao, token_verificacao_expira, resend_verification_email_id
+       FROM clientes WHERE email = ?`
     ).bind(emailClean).first()
-    if (existingEmail) return conflict('Email já registado')
+
+    if (existing) {
+      // Conta já verificada: não permitir novo registo
+      if (existing.email_verificado) {
+        return conflict('Email já registado')
+      }
+
+      // Conta ainda não verificada
+      const now    = Date.now()
+      const expRaw = existing.token_verificacao_expira
+      const expMs  = expRaw ? Date.parse(expRaw) : 0
+
+      let verifyToken = existing.token_verificacao
+
+      // Token expirado ou inexistente → gerar novo token e atualizar
+      if (!verifyToken || !expMs || expMs <= now) {
+        verifyToken = generateToken()
+        const expires = new Date(now + 86400000).toISOString() // 24h
+
+        await env.DB.prepare(
+          `UPDATE clientes
+             SET token_verificacao = ?, token_verificacao_expira = ?, atualizado_em = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        ).bind(verifyToken, expires, existing.id).run()
+      }
+
+      // Reenviar email de verificação (sem criar nova conta)
+      const { html } = buildVerificationEmail({ clientName: existing.nome, verifyToken })
+
+      try {
+        const resp = await sendEmail(context, {
+          to:      emailClean,
+          subject: 'Confirme o seu email – Brooklyn Barbearia',
+          html,
+        })
+
+        const emailId = resp?.id
+        if (emailId) {
+          await env.DB.prepare(
+            `UPDATE clientes
+               SET resend_verification_email_id = ?, atualizado_em = CURRENT_TIMESTAMP
+             WHERE id = ?`
+          ).bind(emailId, existing.id).run()
+        }
+      } catch (err) {
+        console.error('[register] Erro ao reenviar email de verificação:', err)
+      }
+
+      return ok({
+        message: 'Já existe uma conta por confirmar com este email. Reenviámos o email de verificação.',
+        email_pending_verification: true,
+      })
+    }
 
     // Verificar telemóvel duplicado
     if (phone && sanitize(phone, 30).trim()) {
@@ -43,7 +103,7 @@ export async function onRequest(context) {
     const token   = generateToken()
     const expires = new Date(Date.now() + 86400000).toISOString() // 24h
 
-    await env.DB.prepare(
+    const result = await env.DB.prepare(
         `INSERT INTO clientes
          (nome, email, telefone, password_hash, auth_methods,
           email_verificado, token_verificacao, token_verificacao_expira)
@@ -59,11 +119,24 @@ export async function onRequest(context) {
 
     const { html } = buildVerificationEmail({ clientName: sanitize(name, 100), verifyToken: token })
 
-    sendEmail(context, {
-      to:      emailClean,
-      subject: 'Confirme o seu email – Brooklyn Barbearia',
-      html,
-    }).catch(err => console.error('[register] Erro ao enviar email de verificação:', err))
+    try {
+      const resp = await sendEmail(context, {
+        to:      emailClean,
+        subject: 'Confirme o seu email – Brooklyn Barbearia',
+        html,
+      })
+
+      const emailId = resp?.id
+      if (emailId) {
+        await env.DB.prepare(
+          `UPDATE clientes
+             SET resend_verification_email_id = ?, atualizado_em = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        ).bind(emailId, result.meta.last_row_id).run()
+      }
+    } catch (err) {
+      console.error('[register] Erro ao enviar email de verificação:', err)
+    }
 
     return created({
       message: 'Conta criada! Verifique o seu email para ativar a conta.',
