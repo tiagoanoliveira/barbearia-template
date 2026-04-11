@@ -13,28 +13,60 @@ export async function onRequest(context) {
 
   try {
     const client = await env.DB.prepare(
-      'SELECT id, nome, email, email_verificado FROM clientes WHERE id = ?'
+      `SELECT id, nome, email, email_verificado,
+              token_verificacao, token_verificacao_expira,
+              resend_verification_email_id
+       FROM clientes WHERE id = ?`
     ).bind(auth.clientId).first()
 
     if (!client)               return notFound('Cliente não encontrado')
     if (client.email_verificado) return ok({ message: 'Email já verificado' })
     if (!client.email)          return badRequest('Sem email associado')
 
-    const token   = generateToken()
-    const expires = new Date(Date.now() + 86400000).toISOString() // 24h
+    const now    = Date.now()
+    const expRaw = client.token_verificacao_expira
+    const expMs  = expRaw ? Date.parse(expRaw) : 0
 
-    await env.DB.prepare(
-      `INSERT OR REPLACE INTO email_verification_tokens (cliente_id, token, expires_at)
-       VALUES (?, ?, ?)`
-    ).bind(client.id, token, expires).run()
+    let verifyToken = client.token_verificacao
 
-    const { html } = buildVerificationEmail({ clientName: client.nome, verifyToken: token })
+    // Se o token já expirou ou não existe, gera um novo
+    if (!verifyToken || !expMs || expMs <= now) {
+      verifyToken = generateToken()
+      const expires = new Date(now + 86400000).toISOString() // 24h
 
-    await sendEmail(context, {
-      to:      client.email,
-      subject: 'Verifique o seu email – Brooklyn Barbearia',
-      html,
-    })
+      await env.DB.prepare(
+        `UPDATE clientes
+           SET token_verificacao = ?, token_verificacao_expira = ?,
+               atualizado_em = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      ).bind(verifyToken, expires, client.id).run()
+    }
+
+    const { html } = buildVerificationEmail({ clientName: client.nome, verifyToken })
+
+    try {
+      const resp = await sendEmail(context, {
+        to:      client.email,
+        subject: 'Verifique o seu email – Brooklyn Barbearia',
+        html,
+      })
+
+      const emailId = resp?.id
+      if (emailId) {
+        await env.DB.prepare(
+          `UPDATE clientes
+             SET resend_verification_email_id = ?, atualizado_em = CURRENT_TIMESTAMP
+           WHERE id = ?`
+        ).bind(emailId, client.id).run()
+      }
+    } catch (emailErr) {
+      console.error('[send-verification] Falha ao enviar email de verificação:', {
+        message:     emailErr?.message,
+        key_present: !!context.env?.RESEND_API_KEY,
+        to:          client.email,
+      })
+      // Não bloqueia a resposta – o token foi gravado e o cliente pode tentar de novo
+    }
 
     return ok({ message: 'Email de verificação enviado' })
   } catch (e) {

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { MapPin, Clock, Phone, ChevronDown, ArrowRight, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { api } from '@/api/client'
-import { barberShopConfig } from '@/config/theme'
+import { barberShopConfig, groupWorkingHours } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
 import type { Service, Barber } from '@/types'
 
@@ -112,8 +112,16 @@ export default function HomePage() {
     queryFn: () => api.get<Barber[]>('/api/barbers'),
   })
 
-  const services = servicesRes?.data ?? []
-  const barbers  = barbersRes?.data  ?? []
+  const services     = servicesRes?.data ?? []
+  const barbers      = barbersRes?.data  ?? []
+  const { about }    = barberShopConfig
+  const hourGroups   = groupWorkingHours()
+
+  // Linha de horário compacta para a secção Sobre (ex: "Seg–Sex 10:00–20:00 | Sáb 09:00–18:00")
+  const hoursInline = hourGroups
+    .filter(g => !g.closed)
+    .map(g => `${g.label} ${g.hours}`)
+    .join(' | ')
 
   return (
     <div>
@@ -158,23 +166,26 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <div>
-              <h2 className="text-3xl font-black text-primary-700 mb-6 leading-tight">Bem-vindo à Brooklyn</h2>
-              <p className="text-gray-600 leading-relaxed mb-4">
-                Desde 2018 no coração do Porto, a <strong className="text-gray-900">{barberShopConfig.name}</strong> oferece
-                uma experiência única de cuidado masculino. Combinamos técnicas clássicas com as tendências mais modernas.
-              </p>
-              <p className="text-gray-600 leading-relaxed mb-8">
-                Os nossos barbeiros estão prontos para proporcionar o melhor serviço, num ambiente acolhedor e autêntico.
-              </p>
+              <h2 className="text-3xl font-black text-primary-700 mb-6 leading-tight">{about.title}</h2>
+              {about.paragraphs.map((p, i) => (
+                <p
+                  key={i}
+                  className={`text-gray-600 leading-relaxed ${i < about.paragraphs.length - 1 ? 'mb-4' : 'mb-8'}`}
+                  dangerouslySetInnerHTML={{ __html: p }}
+                />
+              ))}
               <div className="space-y-3">
                 {[
                   { Icon: MapPin, text: barberShopConfig.address },
                   { Icon: Phone, text: barberShopConfig.phone, href: `tel:${barberShopConfig.phone}` },
-                  { Icon: Clock, text: 'Seg–Sex 10h–20h | Sáb 9h–18h' },
+                  ...(hoursInline ? [{ Icon: Clock, text: hoursInline }] : []),
                 ].map(({ Icon, text, href }) => (
                   <div key={text} className="flex items-center gap-3 text-sm text-gray-700">
                     <Icon size={15} className="text-primary-600 flex-shrink-0" />
-                    {href ? <a href={href} className="hover:text-primary-600 transition-colors">{text}</a> : <span>{text}</span>}
+                    {href
+                      ? <a href={href} className="hover:text-primary-600 transition-colors">{text}</a>
+                      : <span>{text}</span>
+                    }
                   </div>
                 ))}
               </div>
@@ -184,10 +195,12 @@ export default function HomePage() {
               <div className="overflow-hidden rounded-3xl shadow-xl" style={{ maxWidth: 350, maxHeight: 350 }}>
                 <img src={aboutImg} alt="Brooklyn Barbearia" className="w-full h-full object-cover" />
               </div>
-              <div className="absolute -bottom-4 bg-secondary-500 rounded-2xl p-4 shadow-xl">
-                <p className="text-white font-bold text-sm">4,8 / 5,0</p>
-                <p className="text-secondary-200 text-xs">+ 300 avaliações</p>
-              </div>
+              {about.rating && (
+                <div className="absolute -bottom-4 bg-secondary-500 rounded-2xl p-4 shadow-xl">
+                  <p className="text-white font-bold text-sm">{about.rating.score}</p>
+                  <p className="text-secondary-200 text-xs">{about.rating.label}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -249,8 +262,8 @@ export default function HomePage() {
               <h2 className="text-4xl font-black text-gray-900 mb-6">Contacto</h2>
               <div className="space-y-5">
                 {[
-                  { Icon: MapPin, title: 'Morada', text: barberShopConfig.address },
-                  { Icon: Clock,  title: 'Horário', lines: ['Segunda a Sexta: 10h–20h', 'Sábado: 9h–18h', 'Domingo: Fechado'] },
+                  { Icon: MapPin, title: 'Morada',   lines: [barberShopConfig.address] },
+                  { Icon: Clock,  title: 'Horário',  lines: hourGroups.map(g => `${g.label}: ${g.hours}`) },
                   { Icon: Phone,  title: 'Telefone', text: barberShopConfig.phone, href: `tel:${barberShopConfig.phone}` },
                 ].map(({ Icon, title, text, href, lines }) => (
                   <div key={title} className="flex items-start gap-3">

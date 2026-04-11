@@ -31,6 +31,22 @@ export const barberShopConfig = {
   siteTitle:       'Brooklyn Barbearia',
   siteDescription: 'Barbearia premium no Porto. Reserva online rápida e fácil.',
 
+  // ─ Secção "Sobre" da HomePage ────────────────────────────────────────────
+  about: {
+    // Título principal da secção Sobre
+    title: 'Bem-vindo à Brooklyn',
+    // Parágrafos de texto (array → cada item é um <p>)
+    paragraphs: [
+      'Desde 2018 no coração do Porto, a <strong>Brooklyn Barbearia</strong> oferece uma experiência única de cuidado masculino. Combinamos técnicas clássicas com as tendências mais modernas.',
+      'Os nossos barbeiros estão prontos para proporcionar o melhor serviço, num ambiente acolhedor e autêntico.',
+    ],
+    // Badge de avaliação (null para ocultar)
+    rating: {
+      score:   '4,8 / 5,0',
+      label:   '+ 300 avaliações',
+    },
+  },
+
   // Horário
   workingHours: {
     monday:    { open: '10:00', close: '20:00', closed: false },
@@ -112,4 +128,67 @@ export const themeConfig = {
 export const serviceRestrictions: Record<number, { allowedDays: number[]; message: string }> = {
   3: { allowedDays: [1, 2, 3, 4], message: 'Desconto estudante disponível de Segunda a Quinta' },
   4: { allowedDays: [1, 2, 3, 4], message: 'Desconto estudante disponível de Segunda a Quinta' },
+}
+
+// ─ Tipo auxiliar ──────────────────────────────────────────────────────────
+type DayKey = keyof typeof barberShopConfig.workingHours
+
+const DAY_LABELS: Record<DayKey, string> = {
+  monday:    'Segunda',
+  tuesday:   'Terça',
+  wednesday: 'Quarta',
+  thursday:  'Quinta',
+  friday:    'Sexta',
+  saturday:  'Sábado',
+  sunday:    'Domingo',
+}
+
+const DAY_ORDER: DayKey[] = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+]
+
+export interface HourGroup {
+  /** Label pronto a apresentar, ex: "Segunda a Sexta", "Sábado", "Domingo" */
+  label:  string
+  /** Horário formatado, ex: "10:00 – 20:00" ou "Fechado" */
+  hours:  string
+  closed: boolean
+}
+
+/**
+ * Agrupa dias consecutivos com o mesmo horário.
+ * Ex: Seg–Sex 10:00–20:00 + Sáb 09:00–18:00 + Dom fechado
+ * → [{label:'Segunda a Sexta', hours:'10:00 – 20:00', closed:false},
+ *    {label:'Sábado',          hours:'09:00 – 18:00', closed:false},
+ *    {label:'Domingo',         hours:'Fechado',        closed:true }]
+ */
+export function groupWorkingHours(): HourGroup[] {
+  const wh = barberShopConfig.workingHours
+
+  const groups: { keys: DayKey[]; open: string; close: string; closed: boolean }[] = []
+
+  for (const key of DAY_ORDER) {
+    const h = wh[key]
+    const last = groups.at(-1)
+
+    const sameAsLast =
+      last &&
+      last.closed === h.closed &&
+      last.open   === h.open   &&
+      last.close  === h.close
+
+    if (sameAsLast) {
+      last.keys.push(key)
+    } else {
+      groups.push({ keys: [key], open: h.open, close: h.close, closed: h.closed })
+    }
+  }
+
+  return groups.map(g => {
+    const first = DAY_LABELS[g.keys[0]]
+    const last  = DAY_LABELS[g.keys.at(-1)!]
+    const label = g.keys.length === 1 ? first : `${first} a ${last}`
+    const hours = g.closed ? 'Fechado' : `${g.open} – ${g.close}`
+    return { label, hours, closed: g.closed }
+  })
 }

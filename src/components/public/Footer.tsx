@@ -1,18 +1,18 @@
 import { Link } from 'react-router-dom'
 import { Scissors, Instagram, Phone, Mail, MapPin, Clock } from 'lucide-react'
-import {barberShopConfig, LOGO_URL} from '@/config/theme'
-import {ROUTES} from "@/config/routes.ts";
+import { barberShopConfig, groupWorkingHours, LOGO_URL } from '@/config/theme'
+import { ROUTES } from '@/config/routes'
 
 export default function Footer() {
-  const year = new Date().getFullYear()
+  const year       = new Date().getFullYear()
+  const hourGroups = groupWorkingHours()
 
   const LogoMark = () => (
-      LOGO_URL
-          ? <img src={LOGO_URL} alt={barberShopConfig.name}
-                 className="w-8 h-8 object-contain" />
-          : <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center">
-            <Scissors size={16} className="text-white" />
-          </div>
+    LOGO_URL
+      ? <img src={LOGO_URL} alt={barberShopConfig.name} className="w-8 h-8 object-contain" />
+      : <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center">
+          <Scissors size={16} className="text-white" />
+        </div>
   )
 
   return (
@@ -60,32 +60,21 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Horário */}
+          {/* Horário — agrupado automaticamente */}
           <div>
             <h4 className="text-white font-semibold text-sm mb-4">
               <Clock size={14} className="inline mr-1.5 text-brand-500" />
               Horário
             </h4>
             <ul className="space-y-1.5 text-sm text-gray-500">
-              {([
-                ['Segunda', 'monday'],
-                ['Terça',   'tuesday'],
-                ['Quarta',  'wednesday'],
-                ['Quinta',  'thursday'],
-                ['Sexta',   'friday'],
-                ['Sábado',  'saturday'],
-                ['Domingo', 'sunday'],
-              ] as const).map(([label, key]) => {
-                const h = barberShopConfig.workingHours[key]
-                return (
-                  <li key={key} className="flex justify-between gap-4">
-                    <span>{label}</span>
-                    <span className={h.closed ? 'text-red-500' : 'text-gray-400'}>
-                      {h.closed ? 'Fechado' : `${h.open} – ${h.close}`}
-                    </span>
-                  </li>
-                )
-              })}
+              {hourGroups.map(g => (
+                <li key={g.label} className="flex justify-between gap-4">
+                  <span>{g.label}</span>
+                  <span className={g.closed ? 'text-red-500' : 'text-gray-400'}>
+                    {g.hours}
+                  </span>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -94,12 +83,12 @@ export default function Footer() {
             <h4 className="text-white font-semibold text-sm mb-4">Informações</h4>
             <ul className="space-y-2 text-sm">
               {[
-                { to: '/faq',              label: 'Perguntas Frequentes' },
-                { to: '/suporte',          label: 'Suporte & Ajuda' },
-                { to: '/condicoes-reserva',label: 'Condições de Reserva' },
-                { to: '/privacidade',      label: 'Política de Privacidade' },
-                { to: '/cookies',          label: 'Política de Cookies' },
-                { to: '/termos',           label: 'Termos e Condições' },
+                { to: '/faq',               label: 'Perguntas Frequentes' },
+                { to: '/suporte',           label: 'Suporte & Ajuda' },
+                { to: '/condicoes-reserva', label: 'Condições de Reserva' },
+                { to: '/privacidade',       label: 'Política de Privacidade' },
+                { to: '/cookies',           label: 'Política de Cookies' },
+                { to: '/termos',            label: 'Termos e Condições' },
               ].map(({ to, label }) => (
                 <li key={to}>
                   <Link to={to} className="text-gray-500 hover:text-gray-300 transition-colors">
