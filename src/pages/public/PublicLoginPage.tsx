@@ -168,7 +168,7 @@ export default function PublicLoginPage() {
         </div>
 
         {/* Social login */}
-        <div className="space-y-3 mb-6 grid grid-cols-2 gap-4">
+        <div className="mb-4 grid grid-cols-2 gap-4">
           <button
             onClick={() => window.location.href = `/api/auth/google?redirect=${encodeURIComponent(redirectTo)}`}
             className="w-full flex items-center justify-center gap-3 py-3 bg-white/5 border
