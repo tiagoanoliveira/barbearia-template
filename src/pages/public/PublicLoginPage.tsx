@@ -155,12 +155,6 @@ export default function PublicLoginPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 pt-24">
       <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-8">
-          <p className="text-gray-500 text-sm mt-1">
-            {mode === 'login' ? 'Bem-vindo de volta!' : 'Criar conta'}
-          </p>
-        </div>
-
         {/* Toggle login/register */}
         <div className="flex bg-white/5 rounded-2xl p-1 mb-6">
           {(['login', 'register'] as Mode[]).map(m => (
@@ -174,7 +168,7 @@ export default function PublicLoginPage() {
         </div>
 
         {/* Social login */}
-        <div className="space-y-3 mb-6 flex gap-4">
+        <div className="space-y-3 mb-6 grid grid-cols-2 gap-4">
           <button
             onClick={() => window.location.href = `/api/auth/google?redirect=${encodeURIComponent(redirectTo)}`}
             className="w-full flex items-center justify-center gap-3 py-3 bg-white/5 border
@@ -276,7 +270,7 @@ export default function PublicLoginPage() {
             </div>
           )}
 
-          <div ref={turnstileRef} className="mt-2" />
+          <div ref={turnstileRef} className="mt-2 flex justify-center" />
 
           {error && (
             <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-xl px-4 py-2.5">
