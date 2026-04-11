@@ -16,16 +16,19 @@ const queryClient = new QueryClient({
   },
 })
 
-const rootStyle = document.documentElement.style
+function initializeThemeColors() {
+  const rootStyle = document.documentElement.style
 
-for (const [scale, color] of Object.entries(themeConfig.primary)) {
-  rootStyle.setProperty(`--color-primary-${scale}`, color)
-  rootStyle.setProperty(`--color-brand-${scale}`, color)
+  for (const [scale, color] of Object.entries(themeConfig.primary)) {
+    rootStyle.setProperty(`--color-primary-${scale}`, color)
+  }
+
+  for (const [scale, color] of Object.entries(themeConfig.secondary)) {
+    rootStyle.setProperty(`--color-secondary-${scale}`, color)
+  }
 }
 
-for (const [scale, color] of Object.entries(themeConfig.secondary)) {
-  rootStyle.setProperty(`--color-secondary-${scale}`, color)
-}
+initializeThemeColors()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
