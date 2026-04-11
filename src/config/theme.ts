@@ -4,10 +4,8 @@
  */
 
 // ─ Logos / Favicon (servidos do repositório via BASE_URL) ─────────────────
-// Estes paths são relativos a src/media/images/logos/
-// Em emails usa-se: `${BASE_URL}/src/media/images/logos/logo-192px.png`
-import logoSrc     from '@/media/images/logos/logo-512px.png'
-import faviconSrc  from '@/media/images/logos/logo-96px.png'
+import logoSrc    from '@/media/images/logos/logo-512px.png'
+import faviconSrc from '@/media/images/logos/logo-96px.png'
 
 export const LOGO_URL    = logoSrc
 export const FAVICON_URL = faviconSrc
@@ -22,29 +20,24 @@ export const barberShopConfig = {
   address:     'Rua do Campo Alegre, 450, Porto',
   instagram:   'https://instagram.com/brooklynbarbearia',
 
-  // Logo e favicon (importados de src/media/images/logos/)
-  // Usar LOGO_URL e FAVICON_URL onde necessário em vez de URLs do R2
   logoUrl:    logoSrc,
   faviconUrl: faviconSrc,
 
-  // Título e descrição para <title> e meta description
   siteTitle:       'Brooklyn Barbearia',
   siteDescription: 'Barbearia premium no Porto. Reserva online rápida e fácil.',
 
   // ─ Secção "Sobre" da HomePage ────────────────────────────────────────────
   about: {
-    // Título principal da secção Sobre
     title: 'Bem-vindo à Brooklyn',
-    // Parágrafos de texto (array → cada item é um <p>)
     paragraphs: [
       'Desde 2018 no coração do Porto, a <strong>Brooklyn Barbearia</strong> oferece uma experiência única de cuidado masculino. Combinamos técnicas clássicas com as tendências mais modernas.',
       'Os nossos barbeiros estão prontos para proporcionar o melhor serviço, num ambiente acolhedor e autêntico.',
     ],
-    // Badge de avaliação (null para ocultar)
+    // null para ocultar o badge de avaliação
     rating: {
-      score:   '4,8 / 5,0',
-      label:   '+ 300 avaliações',
-    },
+      score: '4,8 / 5,0',
+      label: '+ 300 avaliações',
+    } as { score: string; label: string } | null,
   },
 
   // Horário
@@ -58,24 +51,17 @@ export const barberShopConfig = {
     sunday:    { open: '00:00', close: '00:00', closed: true  },
   },
 
-  // Duração padrão dos slots (minutos)
   slotDuration: 30,
 
-  // ─ Personalização visual do site público ────────────────────────────────
-  // Estes valores são usados em toda a homepage, reservas e perfil.
-  // Mudar aqui muda o aspecto em todo o lado.
+  // ─ Personalização visual ─────────────────────────────────────────────────
   theme: {
-    // Navbar: fundo quando se faz scroll (e no menu mobile)
-    navbarBg:      'bg-primary-900 backdrop-blur-md',
-    navbarBorder:  'border-white/5',
-    // Secções da homepage (alternância claro/médio)
-    sectionLight:  'bg-white',
-    sectionMedium: 'bg-gray-50',
-    sectionDark:   'bg-gray-100',
-    // Fundo do processo de reservas (overlay sobre vídeo)
+    navbarBg:       'bg-primary-900 backdrop-blur-md',
+    navbarBorder:   'border-white/5',
+    sectionLight:   'bg-white',
+    sectionMedium:  'bg-gray-50',
+    sectionDark:    'bg-gray-100',
     bookingOverlay: 'bg-black/70',
     bookingCard:    'bg-gray-900/95 border-white/10',
-    // Fundo do painel admin
     adminBg:        'bg-gray-50',
     adminSidebar:   'bg-gray-950',
   },
@@ -83,9 +69,6 @@ export const barberShopConfig = {
 
 /**
  * TEMA DE CORES
- *
- * primary   → verde escuro (botões, links, CTAs)
- * secondary → champanhe/dourado (preços, badges, destaques)
  */
 export const themeConfig = {
   primary: {
@@ -123,14 +106,13 @@ export const themeConfig = {
 
 /**
  * IDs de serviços com restrições de dias da semana
- * 0 = domingo, 1 = segunda, ..., 6 = sábado
  */
 export const serviceRestrictions: Record<number, { allowedDays: number[]; message: string }> = {
   3: { allowedDays: [1, 2, 3, 4], message: 'Desconto estudante disponível de Segunda a Quinta' },
   4: { allowedDays: [1, 2, 3, 4], message: 'Desconto estudante disponível de Segunda a Quinta' },
 }
 
-// ─ Tipo auxiliar ──────────────────────────────────────────────────────────
+// ─ Agrupamento de horários ────────────────────────────────────────────────
 type DayKey = keyof typeof barberShopConfig.workingHours
 
 const DAY_LABELS: Record<DayKey, string> = {
@@ -148,9 +130,7 @@ const DAY_ORDER: DayKey[] = [
 ]
 
 export interface HourGroup {
-  /** Label pronto a apresentar, ex: "Segunda a Sexta", "Sábado", "Domingo" */
   label:  string
-  /** Horário formatado, ex: "10:00 – 20:00" ou "Fechado" */
   hours:  string
   closed: boolean
 }
@@ -158,37 +138,38 @@ export interface HourGroup {
 /**
  * Agrupa dias consecutivos com o mesmo horário.
  * Ex: Seg–Sex 10:00–20:00 + Sáb 09:00–18:00 + Dom fechado
- * → [{label:'Segunda a Sexta', hours:'10:00 – 20:00', closed:false},
- *    {label:'Sábado',          hours:'09:00 – 18:00', closed:false},
- *    {label:'Domingo',         hours:'Fechado',        closed:true }]
+ * → [{label:'Segunda a Sexta', hours:'10:00 – 20:00', closed:false}, ...]
  */
 export function groupWorkingHours(): HourGroup[] {
   const wh = barberShopConfig.workingHours
 
-  const groups: { keys: DayKey[]; open: string; close: string; closed: boolean }[] = []
+  type Group = { keys: DayKey[]; open: string; close: string; closed: boolean }
+  const groups: Group[] = []
 
   for (const key of DAY_ORDER) {
-    const h = wh[key]
-    const last = groups.at(-1)
+    const h    = wh[key]
+    const last = groups.length > 0 ? groups[groups.length - 1] : null
 
     const sameAsLast =
-      last &&
+      last != null &&
       last.closed === h.closed &&
       last.open   === h.open   &&
       last.close  === h.close
 
-    if (sameAsLast) {
+    if (sameAsLast && last) {
       last.keys.push(key)
     } else {
       groups.push({ keys: [key], open: h.open, close: h.close, closed: h.closed })
     }
   }
 
-  return groups.map(g => {
-    const first = DAY_LABELS[g.keys[0]]
-    const last  = DAY_LABELS[g.keys.at(-1)!]
-    const label = g.keys.length === 1 ? first : `${first} a ${last}`
-    const hours = g.closed ? 'Fechado' : `${g.open} – ${g.close}`
+  return groups.map((g): HourGroup => {
+    const firstKey = g.keys[0]
+    const lastKey  = g.keys[g.keys.length - 1]
+    const first    = DAY_LABELS[firstKey]
+    const last     = DAY_LABELS[lastKey]
+    const label    = g.keys.length === 1 ? first : `${first} a ${last}`
+    const hours    = g.closed ? 'Fechado' : `${g.open} – ${g.close}`
     return { label, hours, closed: g.closed }
   })
 }
