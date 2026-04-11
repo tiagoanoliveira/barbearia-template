@@ -32,9 +32,9 @@ CREATE TABLE IF NOT EXISTS clientes (
   last_appointment_date     DATETIME,
   notas                     TEXT,
   foto_perfil               TEXT,
-  resend_reset_email_id     TEXT,
+  resend_reset_email_id        TEXT,
   resend_verification_email_id TEXT,
-  resend_email_change_id    TEXT
+  resend_email_change_id       TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_email_unique      ON clientes(email);
@@ -94,7 +94,9 @@ CREATE TABLE IF NOT EXISTS reservas (
   moloni_document_number TEXT,
   created_by             TEXT CHECK(created_by IN ('online','admin','barbeiro')),
   duracao_minutos        INTEGER DEFAULT NULL,
-  wpp_lembrete           INTEGER DEFAULT 1
+  wpp_lembrete           INTEGER DEFAULT 1,
+  -- ID do email de lembrete agendado na Resend (para poder cancelar / reagendar)
+  resend_lembrete_id     TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_reservas_cliente_data          ON reservas(cliente_id, data_hora);
@@ -104,6 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_reservas_status_data           ON reservas(status
 CREATE INDEX IF NOT EXISTS idx_reservas_disponibilidade       ON reservas(barbeiro_id, data_hora, status);
 CREATE INDEX IF NOT EXISTS idx_reservas_cliente_status_data   ON reservas(cliente_id, status, data_hora);
 CREATE INDEX IF NOT EXISTS idx_reservas_moloni_document       ON reservas(moloni_document_id);
+CREATE INDEX IF NOT EXISTS idx_reservas_resend_lembrete       ON reservas(resend_lembrete_id);
 
 -- ================================================
 -- HORÁRIOS INDISPONÍVEIS
