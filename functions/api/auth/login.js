@@ -1,7 +1,8 @@
 import { verifyPassword } from '../../utils/crypto.js'
 import { signJWT } from '../../utils/jwt.js'
-import { ok, badRequest, unauthorized, serverError, corsOptions } from '../../utils/response.js'
+import { ok, badRequest, serverError, corsOptions } from '../../utils/response.js'
 import { sanitize } from '../../utils/validators.js'
+import { verifyTurnstile } from '../../utils/turnstile.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -13,8 +14,15 @@ export async function onRequest(context) {
 
     const raw      = body.identifier ?? body.email ?? ''
     const password = body.password   ?? ''
+    const turnstileToken = body.turnstileToken ?? ''
 
     if (!raw || !password) return badRequest('Identificador e password são obrigatórios')
+
+    // Proteção anti-abuso com Turnstile
+    const turn = await verifyTurnstile(context, turnstileToken)
+    if (!turn.success) {
+      return badRequest('Falha na verificação de segurança. Atualize a página e tente novamente.')
+    }
 
     const identifier = sanitize(raw, 200).toLowerCase().trim()
 
@@ -41,9 +49,9 @@ export async function onRequest(context) {
 
     // Bloquear login se o email ainda não foi verificado
     if (!client.email_verificado) {
-      return unauthorized(
-          'Por favor verifique o seu email antes de iniciar sessão. ' +
-          'Verifique a caixa de entrada (e spam) do email com que se registou.'
+      return badRequest(
+        'Por favor verifique o seu email antes de iniciar sessão. ' +
+        'Verifique a caixa de entrada (e spam) do email com que se registou.'
       )
     }
 
