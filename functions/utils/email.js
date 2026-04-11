@@ -163,6 +163,39 @@ export async function sendEmail(context, { to, subject, html, attachments = [] }
   }
 }
 
+// Recupera detalhes de um email já enviado (para debug / auditoria)
+export async function retrieveEmail(context, emailId) {
+  const key = context.env?.RESEND_API_KEY
+
+  if (!key || !emailId) {
+    console.warn('[retrieveEmail] Chamada ignorada — falta API key ou emailId')
+    return null
+  }
+
+  try {
+    const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${key}` },
+    })
+
+    const text = await res.text()
+
+    if (!res.ok) {
+      console.error(`[retrieveEmail] Resend devolveu ${res.status}:`, text)
+      return null
+    }
+
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { raw: text }
+    }
+  } catch (err) {
+    console.error('[retrieveEmail] Erro ao chamar API Resend:', err)
+    return null
+  }
+}
+
 // ─── 1. Email de confirmação de reserva ──────────────────────────────────────────────────
 export function buildReservationConfirmationEmail({ reservaId, clientName, clientEmail,
   dataHora, serviceName, barberName, duracao, comentario }) {
