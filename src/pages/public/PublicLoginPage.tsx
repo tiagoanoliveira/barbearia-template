@@ -300,13 +300,6 @@ export default function PublicLoginPage() {
               <><LogIn size={18} />{mode === 'login' ? 'Entrar' : 'Criar conta'}</>
             )}
           </button>
-
-          {mode === 'login' && (
-            <p className="text-center text-xs text-gray-600">
-              Admin?{' '}
-              <Link to="/admin/login" className="text-brand-400 hover:underline">Acesso de administrador</Link>
-            </p>
-          )}
         </form>
       </div>
 
