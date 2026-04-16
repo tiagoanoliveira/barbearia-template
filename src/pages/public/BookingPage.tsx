@@ -39,6 +39,17 @@ const INITIAL: BookingState = {
 const STEP_LABELS = ['Serviço', 'Barbeiro', 'Data & Hora', 'Confirmar']
 const DRAFT_KEY = 'booking_draft_v1'
 
+function getSafeStorage(): Storage | null {
+  if (typeof window === 'undefined') return null
+  const storage = window.localStorage
+  if (!storage) return null
+  return typeof storage.getItem === 'function'
+    && typeof storage.setItem === 'function'
+    && typeof storage.removeItem === 'function'
+    ? storage
+    : null
+}
+
 function serviceAvailableOnDay(serviceId: number, dow: number): boolean {
   const r = serviceRestrictions[serviceId]
   return r ? r.allowedDays.includes(dow) : true
@@ -52,8 +63,9 @@ export default function BookingPage() {
   const [calMonth, setCalMonth] = useState(new Date())
   const [error, setError]       = useState<string | null>(null)
   const [tosChecked, setTosChecked] = useState(true)
+  const storage = getSafeStorage()
 
-  const isLoggedIn = !!localStorage.getItem('user_token')
+  const isLoggedIn = !!storage?.getItem('user_token')
 
   // Muda de passo e faz scroll instantâneo para o topo
   const goToStep = (s: Step) => {
@@ -76,8 +88,9 @@ export default function BookingPage() {
   // Repor rascunho da reserva após login/refresh
   useEffect(() => {
     if (!services.length || !barbers.length) return
+    if (!storage) return
     try {
-      const raw = localStorage.getItem(DRAFT_KEY)
+      const raw = storage.getItem(DRAFT_KEY)
       console.debug('BookingPage: rascunho bruto lido do localStorage', raw)
       if (!raw) return
       const draft = JSON.parse(raw) as BookingDraft
@@ -102,10 +115,11 @@ export default function BookingPage() {
     } catch (e) {
       console.warn('BookingPage: erro ao ler rascunho da reserva', e)
     }
-  }, [services, barbers])
+  }, [services, barbers, storage])
 
   // Guardar rascunho sempre que o estado muda
   useEffect(() => {
+    if (!storage) return
     const draft: BookingDraft = {
       serviceId: booking.service?.id ?? null,
       barberId:  booking.anyBarber ? null : booking.barber?.id ?? null,
@@ -116,12 +130,12 @@ export default function BookingPage() {
       step,
     }
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+      storage.setItem(DRAFT_KEY, JSON.stringify(draft))
       console.debug('BookingPage: rascunho guardado', draft)
     } catch (e) {
       console.warn('BookingPage: não foi possível guardar o rascunho', e)
     }
-  }, [booking, step])
+  }, [booking, step, storage])
 
   // Pré-seleccionar serviço via ?service_id= apenas quando não há rascunho
   useEffect(() => {
@@ -166,7 +180,7 @@ export default function BookingPage() {
         setError(res.error ?? 'Erro ao confirmar reserva.')
         return
       }
-      try { localStorage.removeItem(DRAFT_KEY) } catch {}
+      try { storage?.removeItem(DRAFT_KEY) } catch {}
       navigate('/reservations?confirmed=1')
     },
     onError: (e: Error) => setError(e?.message ?? 'Erro ao confirmar reserva.'),
