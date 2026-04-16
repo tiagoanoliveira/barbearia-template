@@ -20,10 +20,9 @@ export async function authenticateClient(request, env) {
 }
 
 /**
- * Valida JWT de admin (Bearer header)
- * Neste template, o próprio acto de obter um token de admin já garante que
- * o utilizador vem de `admin_users`, por isso aqui apenas verificamos
- * a assinatura e extraímos o id.
+ * Valida JWT de admin (Bearer header).
+ * Vai buscar o registo completo de admin_users para expor role e barbeiro_id
+ * a todos os endpoints que precisem de controlo de acesso por role.
  */
 export async function authenticateAdmin(request, env) {
   const token = extractToken(request)
@@ -34,7 +33,23 @@ export async function authenticateAdmin(request, env) {
 
   try {
     const payload = await verifyJWT(token, env.JWT_ADMIN_SECRET ?? env.JWT_SECRET)
-    return { success: true, adminId: payload.id, payload }
+
+    // Carregar dados completos do utilizador para ter role e barbeiro_id
+    const adminUser = await env.DB.prepare(
+      'SELECT id, username, nome, role, barbeiro_id, ativo FROM admin_users WHERE id = ?'
+    ).bind(payload.id).first()
+
+    if (!adminUser || !adminUser.ativo) {
+      console.warn('authenticateAdmin: utilizador não encontrado ou inativo', payload.id)
+      return { success: false }
+    }
+
+    return {
+      success:  true,
+      adminId:  adminUser.id,
+      user:     adminUser,   // { id, username, nome, role, barbeiro_id, ativo }
+      payload,
+    }
   } catch (e) {
     console.error('authenticateAdmin: token inválido', request.url, e?.message)
     return { success: false }
