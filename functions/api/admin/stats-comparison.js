@@ -1,5 +1,5 @@
-import { authenticateAdmin } from '../../../utils/auth.js'
-import { ok, unauthorized, serverError, corsOptions } from '../../../utils/response.js'
+import { authenticateAdmin } from '../../utils/auth.js'
+import { ok, unauthorized, serverError, corsOptions } from '../../utils/response.js'
 
 export async function onRequest(context) {
   const { request, env } = context
