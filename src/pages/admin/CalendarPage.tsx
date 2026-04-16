@@ -297,6 +297,10 @@ export default function CalendarPage() {
           {/* Linha 1: navegação de data */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
+              <button onClick={() => setSelectedDate(format(new Date(), 'yyyy-MM-dd'))}
+                      className="text-xs px-2 py-1 bg-brand-50 text-brand-700 rounded-lg hover:bg-brand-100 transition-colors">
+                Hoje
+              </button>
               <button onClick={() => changeDate(-1)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
                 <ChevronLeft size={18} className="text-gray-600" />
               </button>
@@ -306,10 +310,6 @@ export default function CalendarPage() {
               </div>
               <button onClick={() => changeDate(1)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
                 <ChevronRight size={18} className="text-gray-600" />
-              </button>
-              <button onClick={() => setSelectedDate(format(new Date(), 'yyyy-MM-dd'))}
-                className="text-xs px-2 py-1 bg-brand-50 text-brand-700 rounded-lg hover:bg-brand-100 transition-colors">
-                Hoje
               </button>
             </div>
             <input type="date" value={dateDisplay} onChange={e => onDateInput(e.target.value)}
