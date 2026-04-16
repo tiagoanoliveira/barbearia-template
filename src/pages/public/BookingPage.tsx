@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
@@ -63,7 +63,7 @@ export default function BookingPage() {
   const [calMonth, setCalMonth] = useState(new Date())
   const [error, setError]       = useState<string | null>(null)
   const [tosChecked, setTosChecked] = useState(true)
-  const storage = getSafeStorage()
+  const storage = useMemo(() => getSafeStorage(), [])
 
   const isLoggedIn = !!storage?.getItem('user_token')
 
