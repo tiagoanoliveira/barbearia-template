@@ -103,11 +103,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
 
         <div className="flex flex-col items-center mb-8">
-          <Link to={ROUTES.ADMIN} className="flex items-center gap-2.5 group flex-shrink-0">
+          <Link to={ROUTES.ADMIN} className="flex items-center gap-2.5 group flex-shrink-0 mb-2">
             <LogoMark />
           </Link>
           <h1 className="text-xl font-bold text-white">{barberShopConfig.name}</h1>
-          <p className="text-gray-500 text-sm mt-1">Painel de administração</p>
+          <p className="text-gray-500 text-sm mt-1">Acesso restrito a barbeiros de excelência 🍻</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

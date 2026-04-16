@@ -88,6 +88,25 @@ export interface DashboardStats {
   unread_notifications: number
 }
 
+export interface TodayBarberStats {
+  barbeiro_id:    number
+  barbeiro_nome:  string
+  barbeiro_color: string
+  confirmadas:    number
+  concluidas:     number
+  canceladas:     number
+  faltas:         number
+}
+
+export interface StatsComparison {
+  periodo:     'A' | 'B'
+  data:        string
+  confirmadas: number
+  concluidas:  number
+  canceladas:  number
+  faltas:      number
+}
+
 // ─── API ─────────────────────────────────────────────────────────────────────
 export interface ApiResponse<T> {
   success: boolean

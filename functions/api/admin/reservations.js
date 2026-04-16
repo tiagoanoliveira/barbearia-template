@@ -10,6 +10,8 @@ export async function onRequest(context) {
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
 
+  const user = auth.user
+
   if (request.method === 'GET') {
     try {
       const url      = new URL(request.url)
@@ -44,6 +46,12 @@ export async function onRequest(context) {
         )
         const like = `%${search}%`
         params.push(like, like, like, like)
+      }
+
+      // Barbeiros só podem ver as suas próprias reservas
+      if (user.role === 'barbeiro' && user.barbeiro_id) {
+        where.push('barbeiro_id = ?')
+        params.push(user.barbeiro_id)
       }
 
       const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
@@ -110,6 +118,11 @@ export async function onRequest(context) {
       if (!isValidId(barber_id))   return badRequest('ID do barbeiro inválido')
       if (!isValidDate(date))      return badRequest('Data inválida')
       if (!isValidTime(time))      return badRequest('Hora inválida')
+
+      // Barbeiro só pode criar reservas para si próprio
+      if (user.role === 'barbeiro' && user.barbeiro_id && user.barbeiro_id !== barber_id) {
+        return unauthorized()
+      }
 
       const dataHora = `${date}T${time}:00`
       const service  = await env.DB.prepare('SELECT duracao, nome FROM servicos WHERE id = ?').bind(service_id).first()

@@ -172,6 +172,25 @@ CREATE INDEX IF NOT EXISTS idx_notifications_unread      ON notifications(is_rea
 CREATE INDEX IF NOT EXISTS idx_notifications_reservation ON notifications(reservation_id, created_at);
 
 -- ================================================
+-- ESTATÍSTICAS DIÁRIAS (cache de stats por barbeiro/dia)
+-- ================================================
+CREATE TABLE IF NOT EXISTS daily_stats (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  data          TEXT    NOT NULL, -- 'YYYY-MM-DD'
+  barbeiro_id   INTEGER NOT NULL REFERENCES barbeiros(id) ON DELETE CASCADE,
+  confirmadas   INTEGER DEFAULT 0,
+  concluidas    INTEGER DEFAULT 0,
+  canceladas    INTEGER DEFAULT 0,
+  faltas        INTEGER DEFAULT 0,
+  atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(data, barbeiro_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_stats_data       ON daily_stats(data);
+CREATE INDEX IF NOT EXISTS idx_daily_stats_barbeiro   ON daily_stats(barbeiro_id, data);
+CREATE INDEX IF NOT EXISTS idx_daily_stats_data_range ON daily_stats(data, barbeiro_id);
+
+-- ================================================
 -- TRIGGERS
 -- ================================================
 CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_increment
@@ -239,6 +258,63 @@ BEGIN
   ),
   atualizado_em = CURRENT_TIMESTAMP
   WHERE id = NEW.cliente_id;
+END;
+
+-- Sincronização de daily_stats
+CREATE TRIGGER IF NOT EXISTS tr_daily_stats_insert
+AFTER INSERT ON reservas FOR EACH ROW
+BEGIN
+  INSERT INTO daily_stats (data, barbeiro_id, confirmadas, concluidas, canceladas, faltas)
+  VALUES (
+    date(NEW.data_hora),
+    NEW.barbeiro_id,
+    CASE WHEN NEW.status = 'confirmada' THEN 1 ELSE 0 END,
+    CASE WHEN NEW.status = 'concluida'  THEN 1 ELSE 0 END,
+    CASE WHEN NEW.status = 'cancelada'  THEN 1 ELSE 0 END,
+    CASE WHEN NEW.status = 'faltou'     THEN 1 ELSE 0 END
+  )
+  ON CONFLICT(data, barbeiro_id) DO UPDATE SET
+    confirmadas   = confirmadas   + CASE WHEN NEW.status = 'confirmada' THEN 1 ELSE 0 END,
+    concluidas    = concluidas    + CASE WHEN NEW.status = 'concluida'  THEN 1 ELSE 0 END,
+    canceladas    = canceladas    + CASE WHEN NEW.status = 'cancelada'  THEN 1 ELSE 0 END,
+    faltas        = faltas        + CASE WHEN NEW.status = 'faltou'     THEN 1 ELSE 0 END,
+    atualizado_em = CURRENT_TIMESTAMP;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tr_daily_stats_status_update
+AFTER UPDATE ON reservas FOR EACH ROW
+WHEN OLD.status != NEW.status
+BEGIN
+  INSERT INTO daily_stats (data, barbeiro_id, confirmadas, concluidas, canceladas, faltas)
+  VALUES (date(OLD.data_hora), OLD.barbeiro_id, 0, 0, 0, 0)
+  ON CONFLICT(data, barbeiro_id) DO UPDATE SET
+    confirmadas   = MAX(0, confirmadas   - CASE WHEN OLD.status = 'confirmada' THEN 1 ELSE 0 END),
+    concluidas    = MAX(0, concluidas    - CASE WHEN OLD.status = 'concluida'  THEN 1 ELSE 0 END),
+    canceladas    = MAX(0, canceladas    - CASE WHEN OLD.status = 'cancelada'  THEN 1 ELSE 0 END),
+    faltas        = MAX(0, faltas        - CASE WHEN OLD.status = 'faltou'     THEN 1 ELSE 0 END),
+    atualizado_em = CURRENT_TIMESTAMP;
+
+  INSERT INTO daily_stats (data, barbeiro_id, confirmadas, concluidas, canceladas, faltas)
+  VALUES (date(NEW.data_hora), NEW.barbeiro_id, 0, 0, 0, 0)
+  ON CONFLICT(data, barbeiro_id) DO UPDATE SET
+    confirmadas   = confirmadas   + CASE WHEN NEW.status = 'confirmada' THEN 1 ELSE 0 END,
+    concluidas    = concluidas    + CASE WHEN NEW.status = 'concluida'  THEN 1 ELSE 0 END,
+    canceladas    = canceladas    + CASE WHEN NEW.status = 'cancelada'  THEN 1 ELSE 0 END,
+    faltas        = faltas        + CASE WHEN NEW.status = 'faltou'     THEN 1 ELSE 0 END,
+    atualizado_em = CURRENT_TIMESTAMP;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tr_daily_stats_delete
+AFTER DELETE ON reservas FOR EACH ROW
+BEGIN
+  INSERT INTO daily_stats (data, barbeiro_id, confirmadas, concluidas, canceladas, faltas)
+  VALUES (date(OLD.data_hora), OLD.barbeiro_id, 0, 0, 0, 0)
+  ON CONFLICT(data, barbeiro_id) DO UPDATE SET
+    confirmadas   = MAX(0, confirmadas   - CASE WHEN OLD.status = 'confirmada' THEN 1 ELSE 0 END),
+    concluidas    = MAX(0, concluidas    - CASE WHEN OLD.status = 'concluida'  THEN 1 ELSE 0 END),
+    canceladas    = MAX(0, canceladas    - CASE WHEN OLD.status = 'cancelada'  THEN 1 ELSE 0 END),
+    faltas        = MAX(0, faltas        - CASE WHEN OLD.status = 'faltou'     THEN 1 ELSE 0 END),
+    atualizado_em = CURRENT_TIMESTAMP;
 END;
 
 -- ================================================

@@ -12,6 +12,8 @@ export async function onRequest(context) {
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
 
+  const user = auth.user
+
   if (request.method === 'GET') {
     try {
       const url      = new URL(request.url)
@@ -22,9 +24,25 @@ export async function onRequest(context) {
       const where  = []
       const params = []
 
-      if (barberId) { where.push('h.barbeiro_id = ?'); params.push(barberId) }
-      if (month)    { where.push("strftime('%Y-%m', h.data_hora_inicio) = ?"); params.push(month) }
-      if (date)     { where.push('date(h.data_hora_inicio) <= ? AND date(h.data_hora_fim) >= ?'); params.push(date, date) }
+      if (barberId) {
+        where.push('h.barbeiro_id = ?')
+        params.push(barberId)
+      }
+
+      // Barbeiros só podem ver as suas próprias indisponibilidades
+      if (user.role === 'barbeiro' && user.barbeiro_id) {
+        where.push('h.barbeiro_id = ?')
+        params.push(user.barbeiro_id)
+      }
+
+      if (month) {
+        where.push("strftime('%Y-%m', h.data_hora_inicio) = ?")
+        params.push(month)
+      }
+      if (date) {
+        where.push('date(h.data_hora_inicio) <= ? AND date(h.data_hora_fim) >= ?')
+        params.push(date, date)
+      }
 
       const { results } = await env.DB.prepare(`
         SELECT
@@ -59,6 +77,11 @@ export async function onRequest(context) {
 
       if (!isValidId(barber_id)) return badRequest('ID do barbeiro inválido')
       if (!start)                return badRequest('Data de início obrigatória')
+
+      // Barbeiro só pode criar indisponibilidades para si próprio
+      if (user.role === 'barbeiro' && user.barbeiro_id && user.barbeiro_id !== barber_id) {
+        return unauthorized()
+      }
 
       const tipo = type && VALID_TYPES.includes(type) ? type : 'folga'
       const rec  = recurrence_type && VALID_RECURRENCE.includes(recurrence_type) ? recurrence_type : 'none'
@@ -99,9 +122,9 @@ export async function onRequest(context) {
               barber_id, s, e,
               is_all_day ? 1 : 0,
               tipo, sanitize(reason ?? '', 200),
-              rec, recurrence_end_date, groupId
-            )
-          )
+              rec, recurrence_end_date, groupId,
+            ),
+          ),
         )
 
         return created({ groupId, count: inserts.length })
@@ -116,7 +139,7 @@ export async function onRequest(context) {
         barber_id, start, end ?? start,
         is_all_day ? 1 : 0,
         tipo, sanitize(reason ?? '', 200),
-        rec, recurrence_end_date ?? null
+        rec, recurrence_end_date ?? null,
       ).run()
 
       return created({ id: r.meta.last_row_id })
