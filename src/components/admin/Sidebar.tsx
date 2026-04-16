@@ -7,6 +7,7 @@ import {
 import { ROUTES } from '@/config/routes'
 import { barberShopConfig, LOGO_URL } from '@/config/theme'
 import { authApi } from '@/api/auth'
+import { useAdminUser } from '@/hooks/useAdminUser'
 
 const navItems = [
   { to: ROUTES.ADMIN_DASHBOARD,    label: 'Dashboard',          icon: LayoutDashboard },
@@ -37,6 +38,11 @@ interface SidebarProps {
 
 export default function Sidebar({ open, expanded, onToggle, onExpand }: SidebarProps) {
   const navigate = useNavigate()
+  const adminUser = useAdminUser()
+  const isBarber = adminUser?.role === 'barbeiro'
+  const visibleNavItems = isBarber
+    ? navItems.filter(item => item.to !== ROUTES.ADMIN_CLIENTS && item.to !== ROUTES.ADMIN_SETTINGS)
+    : navItems
 
   const handleLogout = async () => {
     await authApi.logout()
@@ -110,7 +116,7 @@ function SidebarContent({ expanded, onItemClick, onExpand, onLogout, showClose }
         {expanded && (
           <p className="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600">Menu</p>
         )}
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {visibleNavItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

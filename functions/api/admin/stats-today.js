@@ -10,8 +10,15 @@ export async function onRequest(context) {
 
   try {
     const today = new Date().toISOString().slice(0, 10)
+    const url = new URL(request.url)
+    const requestedBarberId = url.searchParams.get('barbeiro_id')
+    const targetBarberId = auth.user.role === 'barbeiro'
+      ? auth.user.barbeiro_id
+      : (requestedBarberId ? Number(requestedBarberId) : null)
 
-    const { results } = await env.DB.prepare(`
+    const whereBarber = targetBarberId ? 'AND b.id = ?' : ''
+
+    const stmt = env.DB.prepare(`
       SELECT
         ds.barbeiro_id,
         b.nome  AS barbeiro_nome,
@@ -24,8 +31,13 @@ export async function onRequest(context) {
       LEFT JOIN daily_stats ds
         ON ds.barbeiro_id = b.id AND ds.data = ?
       WHERE b.ativo = 1
+        ${whereBarber}
       ORDER BY b.nome
-    `).bind(today).all()
+    `)
+
+    const { results } = targetBarberId
+      ? await stmt.bind(today, targetBarberId).all()
+      : await stmt.bind(today).all()
 
     return ok(results)
   } catch (e) {

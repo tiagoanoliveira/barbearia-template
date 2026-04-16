@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   CalendarCheck, ChevronRight, Plus,
   CheckCircle2, XCircle, AlertCircle, Clock,
+  BarChart3,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
@@ -10,8 +11,16 @@ import {
   ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts'
 import {
-  format, parseISO, subDays, subWeeks,
-  startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths,
+  format,
+  parseISO,
+  subDays,
+  subWeeks,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  eachDayOfInterval,
 } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
@@ -23,177 +32,198 @@ import { StatusBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { ROUTES } from '@/config/routes'
 import type { StatsComparison } from '@/types'
+import { useAdminUser } from '@/hooks/useAdminUser'
 
-// ─── Preset de períodos ───────────────────────────────────────────────────────
-type Preset = 'week' | 'last2weeks' | 'month' | 'last2months' | 'custom'
+type RangePreset = 'week' | 'lastWeek' | 'month' | 'lastMonth' | 'last14' | 'custom'
 
-function getPeriods(
-  preset: Preset,
-  customA?: { start: string; end: string },
-  customB?: { start: string; end: string },
-) {
+type PeriodRange = { start: string; end: string }
+
+type ComparisonForm = {
+  periodAType: RangePreset
+  periodBType: RangePreset
+  periodAStart: string
+  periodAEnd: string
+  periodBStart: string
+  periodBEnd: string
+  barberId?: number
+}
+
+const STATUS_CARDS = [
+  { key: 'concluidas', label: 'Concluídas', icon: CheckCircle2, color: 'text-emerald-600 border-emerald-200', deltaColor: 'text-emerald-600' },
+  { key: 'confirmadas', label: 'Confirmadas', icon: Clock, color: 'text-blue-600 border-blue-200', deltaColor: 'text-blue-600' },
+  { key: 'canceladas', label: 'Canceladas', icon: XCircle, color: 'text-red-600 border-red-200', deltaColor: 'text-red-600' },
+  { key: 'faltas', label: 'Faltas', icon: AlertCircle, color: 'text-amber-600 border-amber-200', deltaColor: 'text-amber-600' },
+] as const
+
+function toIsoDate(date: Date) {
+  return format(date, 'yyyy-MM-dd')
+}
+
+function clampRange(range: PeriodRange): PeriodRange {
+  if (!range.start || !range.end) return range
+  if (range.end < range.start) return { start: range.end, end: range.start }
+  return range
+}
+
+function resolvePresetRange(preset: RangePreset, customStart?: string, customEnd?: string): PeriodRange {
   const today = new Date()
-  const fmt = (d: Date) => format(d, 'yyyy-MM-dd')
 
   switch (preset) {
     case 'week':
       return {
-        A: {
-          start: fmt(startOfWeek(today, { weekStartsOn: 1 })),
-          end: fmt(endOfWeek(today, { weekStartsOn: 1 })),
-        },
-        B: {
-          start: fmt(startOfWeek(subWeeks(today, 1), { weekStartsOn: 1 })),
-          end: fmt(endOfWeek(subWeeks(today, 1), { weekStartsOn: 1 })),
-        },
-        labelA: 'Semana atual',
-        labelB: 'Semana anterior',
+        start: toIsoDate(startOfWeek(today, { weekStartsOn: 1 })),
+        end: toIsoDate(endOfWeek(today, { weekStartsOn: 1 })),
       }
-    case 'last2weeks':
+    case 'lastWeek': {
+      const lastWeek = subWeeks(today, 1)
       return {
-        A: { start: fmt(subDays(today, 13)), end: fmt(today) },
-        B: { start: fmt(subDays(today, 27)), end: fmt(subDays(today, 14)) },
-        labelA: 'Últimos 14 dias',
-        labelB: '14 dias anteriores',
+        start: toIsoDate(startOfWeek(lastWeek, { weekStartsOn: 1 })),
+        end: toIsoDate(endOfWeek(lastWeek, { weekStartsOn: 1 })),
       }
+    }
     case 'month':
       return {
-        A: { start: fmt(startOfMonth(today)), end: fmt(endOfMonth(today)) },
-        B: {
-          start: fmt(startOfMonth(subMonths(today, 1))),
-          end: fmt(endOfMonth(subMonths(today, 1))),
-        },
-        labelA: 'Este mês',
-        labelB: 'Mês anterior',
+        start: toIsoDate(startOfMonth(today)),
+        end: toIsoDate(endOfMonth(today)),
       }
-    case 'last2months':
+    case 'lastMonth': {
+      const lastMonth = subMonths(today, 1)
       return {
-        A: { start: fmt(subDays(today, 29)), end: fmt(today) },
-        B: { start: fmt(subDays(today, 59)), end: fmt(subDays(today, 30)) },
-        labelA: 'Últimos 30 dias',
-        labelB: '30 dias anteriores',
+        start: toIsoDate(startOfMonth(lastMonth)),
+        end: toIsoDate(endOfMonth(lastMonth)),
+      }
+    }
+    case 'last14':
+      return {
+        start: toIsoDate(subDays(today, 13)),
+        end: toIsoDate(today),
       }
     case 'custom':
-      return {
-        A: customA ?? { start: fmt(subDays(today, 6)), end: fmt(today) },
-        B: customB ?? {
-          start: fmt(subDays(today, 13)),
-          end: fmt(subDays(today, 7)),
-        },
-        labelA: 'Período A',
-        labelB: 'Período B',
-      }
+      return clampRange({
+        start: customStart || toIsoDate(subDays(today, 6)),
+        end: customEnd || toIsoDate(today),
+      })
   }
 }
 
-// ─── Componente de stat do barbeiro hoje ─────────────────────────────────────
-function BarberTodayCard({
-  barbeiro_nome,
-  barbeiro_color,
-  confirmadas,
-  concluidas,
-  canceladas,
-  faltas,
-}: {
-  barbeiro_nome: string
-  barbeiro_color: string
-  confirmadas: number
-  concluidas: number
-  canceladas: number
-  faltas: number
-}) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-      <div className="flex items-center gap-2 mb-3">
-        <span
-          className="w-3 h-3 rounded-full flex-shrink-0"
-          style={{ background: barbeiro_color }}
-        />
-        <span className="text-sm font-semibold text-gray-900 truncate">
-          {barbeiro_nome}
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="flex items-center gap-1.5">
-          <Clock size={13} className="text-blue-500" />
-          <span className="text-xs text-gray-500">Confirmadas</span>
-          <span className="ml-auto text-sm font-bold text-gray-800">
-            {confirmadas}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <CheckCircle2 size={13} className="text-emerald-500" />
-          <span className="text-xs text-gray-500">Concluídas</span>
-          <span className="ml-auto text-sm font-bold text-gray-800">
-            {concluidas}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <XCircle size={13} className="text-red-400" />
-          <span className="text-xs text-gray-500">Canceladas</span>
-          <span className="ml-auto text-sm font-bold text-gray-800">
-            {canceladas}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <AlertCircle size={13} className="text-amber-400" />
-          <span className="text-xs text-gray-500">Faltas</span>
-          <span className="ml-auto text-sm font-bold text-gray-800">
-            {faltas}
-          </span>
-        </div>
-      </div>
-    </div>
-  )
+function formatPeriodLabel(type: RangePreset) {
+  switch (type) {
+    case 'week': return 'Esta semana'
+    case 'lastWeek': return 'Semana anterior'
+    case 'month': return 'Este mês'
+    case 'lastMonth': return 'Mês anterior'
+    case 'last14': return 'Últimos 14 dias'
+    case 'custom': return 'Personalizado'
+  }
 }
 
-// ─── Preparar dados para o gráfico de comparação ─────────────────────────────
-function prepareChartData(
-  rows: StatsComparison[],
-  labelA: string,
-  labelB: string,
-) {
+function dateListFromRange(range: PeriodRange) {
+  const safe = clampRange(range)
+  return eachDayOfInterval({
+    start: parseISO(safe.start),
+    end: parseISO(safe.end),
+  }).map(d => format(d, 'yyyy-MM-dd'))
+}
+
+function prepareComparison(rows: StatsComparison[], periodA: PeriodRange, periodB: PeriodRange) {
   const mapA = new Map<string, StatsComparison>()
   const mapB = new Map<string, StatsComparison>()
 
   rows.forEach((r) => {
     if (r.periodo === 'A') mapA.set(r.data, r)
-    else mapB.set(r.data, r)
+    if (r.periodo === 'B') mapB.set(r.data, r)
   })
 
-  const daysA = [...mapA.values()].sort((a, b) => a.data.localeCompare(b.data))
-  const daysB = [...mapB.values()].sort((a, b) => a.data.localeCompare(b.data))
-  const len = Math.max(daysA.length, daysB.length)
+  const aDays = dateListFromRange(periodA)
+  const bDays = dateListFromRange(periodB)
+  const len = Math.max(aDays.length, bDays.length)
 
-  return Array.from({ length: len }, (_, i) => ({
-    dia: `Dia ${i + 1}`,
-    [`${labelA} — Concluídas`]: daysA[i]?.concluidas ?? 0,
-    [`${labelB} — Concluídas`]: daysB[i]?.concluidas ?? 0,
-  }))
+  const chartData = Array.from({ length: len }, (_, i) => {
+    const dayA = aDays[i]
+    const dayB = bDays[i]
+    const rowA = dayA ? mapA.get(dayA) : undefined
+    const rowB = dayB ? mapB.get(dayB) : undefined
+
+    return {
+      x: `${dayA ? format(parseISO(dayA), 'dd/MM') : '—'} · ${dayB ? format(parseISO(dayB), 'dd/MM') : '—'}`,
+      periodoAData: dayA,
+      periodoBData: dayB,
+      periodoAConcluidas: rowA?.concluidas ?? 0,
+      periodoBConcluidas: rowB?.concluidas ?? 0,
+      periodoATotal: (rowA?.confirmadas ?? 0) + (rowA?.concluidas ?? 0) + (rowA?.canceladas ?? 0) + (rowA?.faltas ?? 0),
+      periodoBTotal: (rowB?.confirmadas ?? 0) + (rowB?.concluidas ?? 0) + (rowB?.canceladas ?? 0) + (rowB?.faltas ?? 0),
+    }
+  })
+
+  const totalsA = { confirmadas: 0, concluidas: 0, canceladas: 0, faltas: 0 }
+  const totalsB = { confirmadas: 0, concluidas: 0, canceladas: 0, faltas: 0 }
+
+  aDays.forEach(day => {
+    const row = mapA.get(day)
+    totalsA.confirmadas += row?.confirmadas ?? 0
+    totalsA.concluidas += row?.concluidas ?? 0
+    totalsA.canceladas += row?.canceladas ?? 0
+    totalsA.faltas += row?.faltas ?? 0
+  })
+
+  bDays.forEach(day => {
+    const row = mapB.get(day)
+    totalsB.confirmadas += row?.confirmadas ?? 0
+    totalsB.concluidas += row?.concluidas ?? 0
+    totalsB.canceladas += row?.canceladas ?? 0
+    totalsB.faltas += row?.faltas ?? 0
+  })
+
+  return { chartData, totalsA, totalsB }
 }
 
-// ─── Dashboard principal ──────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const [preset, setPreset] = useState<Preset>('week')
-  const [barbeiro, setBarbeiro] = useState<number | undefined>(undefined)
+  const adminUser = useAdminUser()
+  const isBarber = adminUser?.role === 'barbeiro'
+  const loggedBarberId = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : undefined
 
-  const periods = getPeriods(preset)
+  const [form, setForm] = useState<ComparisonForm>(() => {
+    const defaultA = resolvePresetRange('month')
+    const defaultB = resolvePresetRange('lastMonth')
+    return {
+      periodAType: 'month',
+      periodBType: 'lastMonth',
+      periodAStart: defaultA.start,
+      periodAEnd: defaultA.end,
+      periodBStart: defaultB.start,
+      periodBEnd: defaultB.end,
+      barberId: loggedBarberId,
+    }
+  })
+
+  const [applied, setApplied] = useState<ComparisonForm>(form)
+
+  const periodA = useMemo(
+    () => resolvePresetRange(applied.periodAType, applied.periodAStart, applied.periodAEnd),
+    [applied.periodAType, applied.periodAStart, applied.periodAEnd],
+  )
+  const periodB = useMemo(
+    () => resolvePresetRange(applied.periodBType, applied.periodBStart, applied.periodBEnd),
+    [applied.periodBType, applied.periodBStart, applied.periodBEnd],
+  )
+
+  const effectiveBarberId = loggedBarberId ?? applied.barberId
 
   const { data: todayRes, isLoading: todayLoading } = useQuery({
-    queryKey: ['stats-today'],
-    queryFn: () => dashboardApi.todayByBarber(),
+    queryKey: ['stats-today', effectiveBarberId],
+    queryFn: () => dashboardApi.todayByBarber(effectiveBarberId),
     refetchInterval: 60_000,
   })
 
   const { data: compRes, isLoading: compLoading } = useQuery({
-    queryKey: ['stats-comparison', preset, barbeiro],
+    queryKey: ['stats-comparison', periodA.start, periodA.end, periodB.start, periodB.end, effectiveBarberId],
     queryFn: () =>
       dashboardApi.comparison({
-        periodA_start: periods.A.start,
-        periodA_end: periods.A.end,
-        periodB_start: periods.B.start,
-        periodB_end: periods.B.end,
-        barbeiro_id: barbeiro,
+        periodA_start: periodA.start,
+        periodA_end: periodA.end,
+        periodB_start: periodB.start,
+        periodB_end: periodB.end,
+        barbeiro_id: effectiveBarberId,
       }),
   })
 
@@ -203,27 +233,37 @@ export default function DashboardPage() {
   })
 
   const { data: recentRes, isLoading: recentLoading } = useQuery({
-    queryKey: ['reservations-recent'],
-    queryFn: () => reservationsApi.list({ perPage: 6, page: 1 }),
+    queryKey: ['reservations-recent', effectiveBarberId],
+    queryFn: () => reservationsApi.list({ perPage: 6, page: 1, barberId: effectiveBarberId }),
   })
 
   const todayStats = todayRes?.data ?? []
   const compRows = compRes?.data ?? []
   const barbers = barbersRes?.data ?? []
   const recent = recentRes?.data?.items ?? []
-  const chartData = prepareChartData(compRows, periods.labelA, periods.labelB)
+  const { chartData, totalsA, totalsB } = prepareComparison(compRows, periodA, periodB)
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt })
 
-  const PRESETS: { value: Preset; label: string }[] = [
-    { value: 'week', label: 'Esta semana vs anterior' },
-    { value: 'last2weeks', label: 'Últimos 14 vs 14 anteriores' },
-    { value: 'month', label: 'Este mês vs anterior' },
-    { value: 'last2months', label: 'Últimos 30 vs 30 anteriores' },
+  const presetOptions: { value: RangePreset; label: string }[] = [
+    { value: 'week', label: 'Esta semana' },
+    { value: 'lastWeek', label: 'Semana anterior' },
+    { value: 'month', label: 'Este mês' },
+    { value: 'lastMonth', label: 'Mês anterior' },
+    { value: 'last14', label: 'Últimos 14 dias' },
+    { value: 'custom', label: 'Personalizado' },
   ]
+
+  const updatePeriodType = (period: 'A' | 'B', type: RangePreset) => {
+    const next = resolvePresetRange(type)
+    setForm(prev =>
+      period === 'A'
+        ? { ...prev, periodAType: type, periodAStart: next.start, periodAEnd: next.end }
+        : { ...prev, periodBType: type, periodBStart: next.start, periodBEnd: next.end },
+    )
+  }
 
   return (
     <div className="space-y-6">
-      {/* Greeting */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-gray-500 capitalize">{today}</p>
@@ -234,102 +274,172 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Reservas de hoje por barbeiro */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">
-          Hoje por barbeiro
-        </h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Hoje por barbeiro</h3>
         {todayLoading ? (
-          <div className="flex justify-center py-6">
-            <LoadingSpinner />
-          </div>
+          <div className="flex justify-center py-6"><LoadingSpinner /></div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {todayStats.map((bs: any) => (
-              <BarberTodayCard key={bs.barbeiro_id} {...bs} />
+              <div key={bs.barbeiro_id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: bs.barbeiro_color }} />
+                  <span className="text-sm font-semibold text-gray-900 truncate">{bs.barbeiro_nome}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Clock size={13} className="text-blue-500" />
+                    <span className="text-xs text-gray-500">Confirmadas</span>
+                    <span className="ml-auto text-sm font-bold text-gray-800">{bs.confirmadas}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 size={13} className="text-emerald-500" />
+                    <span className="text-xs text-gray-500">Concluídas</span>
+                    <span className="ml-auto text-sm font-bold text-gray-800">{bs.concluidas}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <XCircle size={13} className="text-red-400" />
+                    <span className="text-xs text-gray-500">Canceladas</span>
+                    <span className="ml-auto text-sm font-bold text-gray-800">{bs.canceladas}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle size={13} className="text-amber-400" />
+                    <span className="text-xs text-gray-500">Faltas</span>
+                    <span className="ml-auto text-sm font-bold text-gray-800">{bs.faltas}</span>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Gráfico de comparação */}
       <Card>
         <CardHeader
-          title="Comparação de períodos"
-          subtitle="Reservas concluídas — período A vs período B"
+          title="Comparar períodos"
+          subtitle="Analisa reservas por estado entre dois períodos"
         />
 
-        {/* Controlos */}
-        <div className="flex flex-wrap gap-3 px-5 pb-4">
-          {/* Preset selector */}
-          <div className="flex flex-wrap gap-1.5">
-            {PRESETS.map((p) => (
-              <button
-                key={p.value}
-                onClick={() => setPreset(p.value)}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                  preset === p.value
-                    ? 'bg-brand-500 text-white border-brand-500'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+        <div className="px-5 pb-4">
+          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3 grid gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 items-end">
+              <div>
+                <label className="label text-xs">Período A</label>
+                <select
+                  className="input text-sm w-full"
+                  value={form.periodAType}
+                  onChange={e => updatePeriodType('A', e.target.value as RangePreset)}
+                >
+                  {presetOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label text-xs">De</label>
+                <input
+                  type="date"
+                  className="input text-sm w-full"
+                  value={form.periodAStart}
+                  onChange={e => setForm(prev => ({ ...prev, periodAType: 'custom', periodAStart: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Até</label>
+                <input
+                  type="date"
+                  className="input text-sm w-full"
+                  value={form.periodAEnd}
+                  onChange={e => setForm(prev => ({ ...prev, periodAType: 'custom', periodAEnd: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Barbeiro</label>
+                <select
+                  className="input text-sm w-full"
+                  value={loggedBarberId ?? form.barberId ?? ''}
+                  onChange={e => setForm(prev => ({ ...prev, barberId: e.target.value ? Number(e.target.value) : undefined }))}
+                  disabled={!!loggedBarberId}
+                >
+                  {!loggedBarberId && <option value="">Todos</option>}
+                  {barbers.map((b: { id: number; name: string }) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-          {/* Filtro barbeiro */}
-          <select
-            value={barbeiro ?? ''}
-            onChange={(e) =>
-              setBarbeiro(e.target.value ? Number(e.target.value) : undefined)
-            }
-            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 ml-auto"
-          >
-            <option value="">Todos os barbeiros</option>
-            {barbers.map((b: { id: number; name: string }) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 items-end">
+              <div>
+                <label className="label text-xs">Período B</label>
+                <select
+                  className="input text-sm w-full"
+                  value={form.periodBType}
+                  onChange={e => updatePeriodType('B', e.target.value as RangePreset)}
+                >
+                  {presetOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label text-xs">De</label>
+                <input
+                  type="date"
+                  className="input text-sm w-full"
+                  value={form.periodBStart}
+                  onChange={e => setForm(prev => ({ ...prev, periodBType: 'custom', periodBStart: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Até</label>
+                <input
+                  type="date"
+                  className="input text-sm w-full"
+                  value={form.periodBEnd}
+                  onChange={e => setForm(prev => ({ ...prev, periodBType: 'custom', periodBEnd: e.target.value }))}
+                />
+              </div>
+              <button className="btn-primary h-10" onClick={() => setApplied(form)}>
+                <BarChart3 size={14} /> Comparar
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Labels dos períodos */}
-        <div className="flex gap-4 px-5 pb-2">
-          <span className="text-xs text-gray-500">
-            <span className="inline-block w-2 h-2 rounded-full bg-brand-500 mr-1" />
-            {periods.labelA}: {periods.A.start} → {periods.A.end}
-          </span>
-          <span className="text-xs text-gray-500">
-            <span className="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1" />
-            {periods.labelB}: {periods.B.start} → {periods.B.end}
-          </span>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 px-5 pb-4">
+          {STATUS_CARDS.map(({ key, label, icon: Icon, color, deltaColor }) => {
+            const aVal = totalsA[key]
+            const bVal = totalsB[key]
+            const delta = aVal - bVal
+            return (
+              <div key={key} className={`rounded-xl border bg-white p-3 ${color}`}>
+                <p className="text-sm font-semibold flex items-center gap-1.5"><Icon size={14} /> {label}</p>
+                <div className="mt-2 flex items-end justify-between">
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">{aVal}</p>
+                    <p className="text-[11px] text-gray-500">{formatPeriodLabel(applied.periodAType)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-semibold text-gray-700">{bVal}</p>
+                    <p className="text-[11px] text-gray-500">{formatPeriodLabel(applied.periodBType)}</p>
+                  </div>
+                </div>
+                <p className={`mt-1 text-xs font-semibold ${deltaColor}`}>{delta >= 0 ? '+' : ''}{delta}</p>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="px-5 pb-3 text-xs text-gray-500 flex flex-wrap gap-3">
+          <span>{formatPeriodLabel(applied.periodAType)}: {periodA.start} → {periodA.end}</span>
+          <span>{formatPeriodLabel(applied.periodBType)}: {periodB.start} → {periodB.end}</span>
         </div>
 
         {compLoading ? (
-          <div className="flex justify-center py-10">
-            <LoadingSpinner />
-          </div>
+          <div className="flex justify-center py-10"><LoadingSpinner /></div>
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart
-              data={chartData}
-              margin={{ top: 4, right: 16, left: -20, bottom: 0 }}
-            >
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={chartData} margin={{ top: 8, right: 16, left: -20, bottom: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-              <XAxis
-                dataKey="dia"
-                tick={{ fontSize: 11, fill: '#9ca3af' }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: '#9ca3af' }}
-                axisLine={false}
-                tickLine={false}
-                allowDecimals={false}
-              />
+              <XAxis dataKey="x" tick={{ fontSize: 10, fill: '#9ca3af' }} angle={-35} textAnchor="end" height={55} />
+              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip
                 contentStyle={{
                   background: '#1f2937',
@@ -338,30 +448,25 @@ export default function DashboardPage() {
                   color: '#f9fafb',
                   fontSize: 12,
                 }}
+                formatter={(value: number) => [value, 'Reservas concluídas']}
+                labelFormatter={(_, payload) => {
+                  const row = payload?.[0]?.payload
+                  if (!row) return ''
+                  return `A: ${row.periodoAData ?? '—'} | B: ${row.periodoBData ?? '—'}`
+                }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar
-                dataKey={`${periods.labelA} — Concluídas`}
-                fill="#d4a017"
-                radius={[4, 4, 0, 0]}
-              />
-              <Bar
-                dataKey={`${periods.labelB} — Concluídas`}
-                fill="#60a5fa"
-                radius={[4, 4, 0, 0]}
-              />
+              <Bar dataKey="periodoAConcluidas" name={formatPeriodLabel(applied.periodAType)} fill="#16a34a" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="periodoBConcluidas" name={formatPeriodLabel(applied.periodBType)} fill="#60a5fa" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
       </Card>
 
-      {/* Reservas recentes */}
       <Card padding="none">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">
-              Reservas recentes
-            </h3>
+            <h3 className="text-sm font-semibold text-gray-900">Reservas recentes</h3>
             <p className="text-xs text-gray-500">As 6 últimas marcações</p>
           </div>
           <Link
@@ -372,9 +477,7 @@ export default function DashboardPage() {
           </Link>
         </div>
         {recentLoading ? (
-          <div className="flex justify-center py-8">
-            <LoadingSpinner />
-          </div>
+          <div className="flex justify-center py-8"><LoadingSpinner /></div>
         ) : (
           <div className="divide-y divide-gray-50">
             {recent.map((r: any) => (
@@ -388,12 +491,8 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {r.client_name}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {r.service_name} · {r.barber_name}
-                  </p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{r.client_name}</p>
+                  <p className="text-xs text-gray-500">{r.service_name} · {r.barber_name}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-xs font-medium text-gray-700">
@@ -404,9 +503,7 @@ export default function DashboardPage() {
               </div>
             ))}
             {recent.length === 0 && (
-              <p className="text-center text-sm text-gray-500 py-8">
-                Sem reservas recentes.
-              </p>
+              <p className="text-center text-sm text-gray-500 py-8">Sem reservas recentes.</p>
             )}
           </div>
         )}

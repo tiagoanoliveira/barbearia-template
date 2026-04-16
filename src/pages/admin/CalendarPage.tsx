@@ -6,7 +6,6 @@ import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
-import { clientsApi } from '@/api/clients'
 import { adminApi } from '@/api/client'
 import { barberShopConfig } from '@/config/theme'
 import { Card } from '@/components/ui/Card'
@@ -18,6 +17,9 @@ import {
   ReservationStatusModal,
 } from '@/components/admin/reservation-modals'
 import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from '@/types'
+import { useAdminUser } from '@/hooks/useAdminUser'
+import { NewReservationForm, ReservationCopyContent } from '@/components/admin/calendar/forms'
+import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
 
 // ─── Horário dinâmico a partir do theme.ts ───────────────────────────────────
 const DAY_KEYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const
@@ -53,8 +55,6 @@ const TIPO_LABEL: Record<UnavailableTipo, string> = {
 const STATUS_BAR_LOCAL: Record<string, string> = {
   confirmada: '#3b82f6', concluida: '#10b981', faltou: '#ef4444', cancelada: '#9ca3af',
 }
-const TIPO_OPTIONS: UnavailableTipo[] = ['folga', 'ferias', 'almoco', 'ausencia', 'outro']
-
 function timeToSlot(iso: string, startH: number) {
   const d = new Date(iso)
   const totalMin = d.getHours() * 60 + d.getMinutes()
@@ -110,10 +110,7 @@ export default function CalendarPage() {
   const qc = useQueryClient()
 
   // ── Utilizador logado ────────────────────────────────────────────────────
-  const adminUser = useMemo(() => {
-    try { const r = localStorage.getItem('admin_user'); return r ? JSON.parse(r) as { role?: string; barbeiro_id?: number } : null }
-    catch { return null }
-  }, [])
+  const adminUser = useAdminUser()
   const isBarber         = adminUser?.role === 'barbeiro'
   const loggedBarberId   = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
 
@@ -124,6 +121,7 @@ export default function CalendarPage() {
   // ── Filtro de barbeiro (apenas 1 coluna) ─────────────────────────────────
   // Se o user é barbeiro, forçar o seu id e não permitir alterar
   const [barberFilterId, setBarberFilterId] = useState<number | null>(loggedBarberId)
+  const effectiveBarberId = loggedBarberId ?? barberFilterId
 
   // ── Horário do dia seleccionado ──────────────────────────────────────────
   const dayConfig = useMemo(() => {
@@ -160,12 +158,12 @@ export default function CalendarPage() {
   const { data: barbersRes }  = useQuery({ queryKey: ['barbers'],   queryFn: () => barbersApi.list() })
   const { data: servicesRes } = useQuery({ queryKey: ['services'],  queryFn: () => adminApi.get<Service[]>('/api/admin/services') })
   const { data: resRes,  isLoading: loadingRes } = useQuery({
-    queryKey: ['cal-reservations', selectedDate],
-    queryFn:  () => reservationsApi.list({ date: selectedDate, perPage: 200 }),
+    queryKey: ['cal-reservations', selectedDate, effectiveBarberId],
+    queryFn:  () => reservationsApi.list({ date: selectedDate, perPage: 200, barberId: effectiveBarberId ?? undefined }),
   })
   const { data: uRes, isLoading: loadingU } = useQuery({
-    queryKey: ['cal-unavail', selectedDate],
-    queryFn:  () => barbersApi.listUnavailable({ date: selectedDate }),
+    queryKey: ['cal-unavail', selectedDate, effectiveBarberId],
+    queryFn:  () => barbersApi.listUnavailable({ date: selectedDate, barberId: effectiveBarberId ?? undefined }),
   })
 
   const allBarbers: Barber[] = barbersRes?.data ?? []
@@ -312,41 +310,24 @@ export default function CalendarPage() {
                 <ChevronRight size={18} className="text-gray-600" />
               </button>
             </div>
-            <input type="date" value={dateDisplay} onChange={e => onDateInput(e.target.value)}
-              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white
-                         focus:outline-none focus:ring-2 focus:ring-brand-400" />
-          </div>
-
-          {/* Linha 2: filtro por barbeiro (oculta se user é barbeiro) */}
-          {!isBarber && allBarbers.length > 1 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-gray-500 mr-1">Barbeiro:</span>
-              <button
-                onClick={() => setBarberFilterId(null)}
-                className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                  barberFilterId === null
-                    ? 'bg-brand-500 text-white border-brand-500'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
-                }`}
+            <div className="flex items-center gap-2">
+              <input type="date" value={dateDisplay} onChange={e => onDateInput(e.target.value)}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white
+                           focus:outline-none focus:ring-2 focus:ring-brand-400" />
+              <select
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white min-w-[160px]
+                           focus:outline-none focus:ring-2 focus:ring-brand-400"
+                value={effectiveBarberId ?? ''}
+                onChange={e => setBarberFilterId(e.target.value ? Number(e.target.value) : null)}
+                disabled={!!loggedBarberId}
               >
-                Todos
-              </button>
-              {allBarbers.sort((a,b) => a.id - b.id).map(b => (
-                <button
-                  key={b.id}
-                  onClick={() => setBarberFilterId(barberFilterId === b.id ? null : b.id)}
-                  className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                    barberFilterId === b.id
-                      ? 'text-white border-transparent'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
-                  }`}
-                  style={barberFilterId === b.id ? { background: b.color ?? '#6b7280', borderColor: b.color ?? '#6b7280' } : {}}
-                >
-                  {b.name}
-                </button>
-              ))}
+                {!loggedBarberId && <option value="">Todos os barbeiros</option>}
+                {allBarbers.sort((a, b) => a.id - b.id).map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
             </div>
-          )}
+          </div>
         </div>
       </Card>
 
@@ -540,27 +521,19 @@ export default function CalendarPage() {
           </>
         }>
         {modal?.type === 'res_copy' ? (
-          <div className="space-y-3 text-sm">
-            <div className="bg-gray-50 rounded-lg p-3 space-y-1">
-              <p><span className="text-gray-500">Cliente:</span> <strong>{modal.source.client_name}</strong></p>
-              <p><span className="text-gray-500">Serviço:</span> <strong>{modal.source.service_name}</strong></p>
-              <p><span className="text-gray-500">Barbeiro:</span> <strong>{modal.source.barber_name}</strong></p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Nova data</label>
-                <input type="date" value={copyDate} onChange={e => setCopyDate(e.target.value)} className="input text-sm w-full" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Hora</label>
-                <input type="time" value={copyTime} onChange={e => setCopyTime(e.target.value)} className="input text-sm w-full" />
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={copyEmail} onChange={e => setCopyEmail(e.target.checked)} />
-              <span>Enviar email de confirmação ao cliente</span>
-            </label>
-          </div>
+          <ReservationCopyContent
+            clientName={modal.source.client_name}
+            serviceName={modal.source.service_name}
+            barberName={modal.source.barber_name}
+            copyDate={copyDate}
+            copyTime={copyTime}
+            copyEmail={copyEmail}
+            onChange={(field, value) => {
+              if (field === 'copyDate' && typeof value === 'string') setCopyDate(value)
+              if (field === 'copyTime' && typeof value === 'string') setCopyTime(value)
+              if (field === 'copyEmail' && typeof value === 'boolean') setCopyEmail(value)
+            }}
+          />
         ) : <></>}
       </Modal>
 
@@ -597,8 +570,9 @@ export default function CalendarPage() {
       <Modal open={modal?.type === 'unavail'} onClose={close}
         title={modal?.type === 'unavail' && modal.isNew ? 'Nova indisponibilidade' : 'Editar indisponibilidade'}>
         {modal?.type === 'unavail' ? (
-          <UnavailableForm form={uForm} barbers={barbers} isNew={modal.isNew}
+          <UnavailableEditorForm form={uForm} barbers={barbers} isNew={modal.isNew}
             error={uError} saving={uSaving}
+            disableBarberSelection={!!loggedBarberId}
             onChange={(k, v) => setUForm(f => ({ ...f, [k]: v }))}
             onSave={handleSaveUnavailable} onCancel={close} />
         ) : <></>}
@@ -616,206 +590,5 @@ function CtxItem({ icon, label, onClick, className = '', loading = false }: {
       <span className="text-base w-5 text-center leading-none">{icon}</span>
       <span>{loading ? 'A guardar...' : label}</span>
     </button>
-  )
-}
-
-function ClientSearch({ value, onChange }: { value?: number; onChange: (id: number, name: string) => void }) {
-  const [q, setQ] = useState('')
-  const [dq, setDq] = useState('')
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [open, setOpen] = useState(false)
-  const onType = (v: string) => {
-    setQ(v); setOpen(true)
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => setDq(v), 350)
-  }
-  const { data } = useQuery({
-    queryKey: ['client-search', dq],
-    queryFn:  () => clientsApi.list({ search: dq, page: 1, perPage: 8 }),
-    enabled:  dq.length >= 1,
-  })
-  const results = data?.data?.items ?? []
-  return (
-    <div className="relative">
-      <input type="text" placeholder="Pesquisar cliente por nome / email / telefone"
-        value={q} onChange={e => onType(e.target.value)}
-        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
-        className="input text-sm w-full" />
-      {open && results.length > 0 && (
-        <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-          {results.map(c => (
-            <li key={c.id} className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer flex justify-between"
-              onMouseDown={() => { onChange(c.id, c.name); setQ(c.name); setOpen(false) }}>
-              <span className="font-medium">{c.name}</span>
-              <span className="text-xs text-gray-400">{c.phone ?? c.email ?? ''}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function NewReservationForm({ barberId, slot, selectedDate, startH, barbers, services, form, saving, onChange, onSave, onCancel }: {
-  barberId: number; slot: number; selectedDate: string; startH: number; barbers: Barber[]; services: Service[]
-  form: Partial<Reservation & { sendEmail: boolean }>
-  saving: boolean
-  onChange: (k: string, v: unknown) => void
-  onSave: () => void; onCancel: () => void
-}) {
-  const iso = slotToISO(selectedDate, slot, startH)
-  const [newClientMode, setNewClientMode] = useState(false)
-  const [newClientName, setNewClientName] = useState('')
-  const [newClientEmail, setNewClientEmail] = useState('')
-  const [newClientPhone, setNewClientPhone] = useState('')
-  const [creatingClient, setCreatingClient] = useState(false)
-
-  const handleCreateClient = async () => {
-    if (!newClientName.trim()) return
-    setCreatingClient(true)
-    try {
-      const res = await clientsApi.create({ name: newClientName.trim(), email: newClientEmail.trim() || undefined, phone: newClientPhone.trim() || undefined })
-      if (res.success && res.data) { onChange('client_id', res.data.id); onChange('client_name', res.data.name); setNewClientMode(false) }
-    } finally { setCreatingClient(false) }
-  }
-
-  return (
-    <div className="space-y-3 text-sm">
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="block text-xs text-gray-500">Cliente <span className="text-red-400">*</span></label>
-          <button type="button" onClick={() => setNewClientMode(v => !v)} className="text-[11px] text-brand-700 hover:text-brand-800">
-            {newClientMode ? 'Escolher existente' : 'Criar novo'}
-          </button>
-        </div>
-        {newClientMode ? (
-          <div className="space-y-2 border rounded-xl p-3 bg-gray-50">
-            <input type="text" placeholder="Nome do cliente" className="input text-sm w-full" value={newClientName} onChange={e => setNewClientName(e.target.value)} />
-            <input type="email" placeholder="Email (opcional)" className="input text-sm w-full" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} />
-            <input type="tel" placeholder="Telefone (opcional)" className="input text-sm w-full" value={newClientPhone} onChange={e => setNewClientPhone(e.target.value)} />
-            <button type="button" onClick={handleCreateClient} disabled={creatingClient || !newClientName.trim()} className="btn-primary w-full text-xs mt-1 disabled:opacity-50">
-              {creatingClient ? 'A criar cliente...' : 'Criar e associar cliente'}
-            </button>
-          </div>
-        ) : (
-          <ClientSearch value={form.client_id} onChange={(id, name) => { onChange('client_id', id); onChange('client_name', name) }} />
-        )}
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
-        <select value={form.barber_id ?? barberId} onChange={e => onChange('barber_id', Number(e.target.value))} className="input text-sm w-full">
-          {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Serviço <span className="text-red-400">*</span></label>
-        <select value={form.service_id ?? ''} onChange={e => onChange('service_id', Number(e.target.value))} className="input text-sm w-full">
-          <option value="">Selecionar serviço</option>
-          {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
-        <input type="datetime-local" value={(form.data_hora ?? iso).substring(0,16)} onChange={e => onChange('data_hora', e.target.value + ':00')} className="input text-sm w-full" />
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Nota (opcional)</label>
-        <textarea rows={2} value={form.comentario ?? ''} onChange={e => onChange('comentario', e.target.value)} placeholder="Observações para o barbeiro..." className="input text-sm w-full resize-none" />
-      </div>
-      <label className="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" checked={!!form.sendEmail} onChange={e => onChange('sendEmail', e.target.checked)} />
-        <span>Enviar email de confirmação ao cliente</span>
-      </label>
-      <div className="flex justify-end gap-2 pt-1">
-        <button onClick={onCancel} className="btn-secondary text-xs">Cancelar</button>
-        <button onClick={onSave} disabled={saving || !form.client_id || !form.service_id} className="btn-primary text-xs disabled:opacity-50">
-          {saving ? 'A criar...' : 'Criar reserva'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-interface UnavailableFormProps {
-  form: Partial<Unavailable> & { recurrence_end_date?: string }
-  barbers: Barber[]; isNew: boolean; error: string | null; saving: boolean
-  onChange: (k: string, v: unknown) => void; onSave: () => void; onCancel: () => void
-}
-function UnavailableForm({ form, barbers, isNew, error, saving, onChange, onSave, onCancel }: UnavailableFormProps) {
-  const fmtLocal = (iso?: string) => iso ? iso.substring(0, 16) : ''
-  return (
-    <div className="space-y-3">
-      {isNew && (
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
-          <select value={form.barbeiro_id ?? ''} onChange={e => onChange('barbeiro_id', Number(e.target.value))} className="input text-sm w-full">
-            <option value="">Selecionar barbeiro</option>
-            {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </div>
-      )}
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Tipo</label>
-        <select value={form.tipo ?? 'folga'} onChange={e => onChange('tipo', e.target.value)} className="input text-sm w-full">
-          {TIPO_OPTIONS.map(t => <option key={t} value={t}>{TIPO_ICON[t]} {TIPO_LABEL[t]}</option>)}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Motivo (opcional)</label>
-        <input type="text" value={form.motivo ?? ''} onChange={e => onChange('motivo', e.target.value)} placeholder="Ex.: consulta médica" className="input text-sm w-full" />
-      </div>
-      <div className="flex items-center gap-2">
-        <input type="checkbox" id="iad" checked={!!form.is_all_day} onChange={e => onChange('is_all_day', e.target.checked ? 1 : 0)} />
-        <label htmlFor="iad" className="text-xs text-gray-600">Dia inteiro</label>
-      </div>
-      {form.is_all_day ? (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Data início</label>
-            <input type="date" value={form.data_hora_inicio?.substring(0,10)??''} onChange={e => onChange('data_hora_inicio', e.target.value+'T00:00:00')} className="input text-xs w-full" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Data fim</label>
-            <input type="date" value={form.data_hora_fim?.substring(0,10)??''} onChange={e => onChange('data_hora_fim', e.target.value+'T23:59:00')} className="input text-xs w-full" />
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Início</label>
-            <input type="datetime-local" value={fmtLocal(form.data_hora_inicio)} onChange={e => onChange('data_hora_inicio', e.target.value+':00')} className="input text-xs w-full" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Fim</label>
-            <input type="datetime-local" value={fmtLocal(form.data_hora_fim)} onChange={e => onChange('data_hora_fim', e.target.value+':00')} className="input text-xs w-full" />
-          </div>
-        </div>
-      )}
-      {isNew && (
-        <>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Recorrência</label>
-            <select value={form.recurrence_type ?? 'none'} onChange={e => onChange('recurrence_type', e.target.value)} className="input text-sm w-full">
-              <option value="none">Sem recorrência</option>
-              <option value="daily">Diária</option>
-              <option value="weekly">Semanal</option>
-            </select>
-          </div>
-          {form.recurrence_type && form.recurrence_type !== 'none' && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Até à data</label>
-              <input type="date" value={form.recurrence_end_date??''} onChange={e => onChange('recurrence_end_date', e.target.value)} className="input text-xs w-full" />
-            </div>
-          )}
-        </>
-      )}
-      {error && <p className="text-xs text-red-500">{error}</p>}
-      <div className="flex justify-end gap-2 pt-1">
-        <button onClick={onCancel} className="btn-secondary text-xs">Cancelar</button>
-        <button onClick={onSave} disabled={saving} className="btn-primary text-xs disabled:opacity-50">
-          {saving ? 'A guardar...' : 'Guardar'}
-        </button>
-      </div>
-    </div>
   )
 }
