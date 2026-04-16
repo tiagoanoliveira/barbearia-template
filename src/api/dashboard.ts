@@ -5,8 +5,10 @@ export const dashboardApi = {
   stats: () => adminApi.get<DashboardStats>('/api/admin/dashboard'),
 
   // Cloudflare Pages Functions: stats-today.js  -> /api/admin/stats-today
-  todayByBarber: () =>
-    adminApi.get<TodayBarberStats[]>('/api/admin/stats-today'),
+  todayByBarber: (barbeiro_id?: number) => {
+    const qs = barbeiro_id != null ? `?barbeiro_id=${barbeiro_id}` : ''
+    return adminApi.get<TodayBarberStats[]>(`/api/admin/stats-today${qs}`)
+  },
 
   // Cloudflare Pages Functions: stats-comparison.js -> /api/admin/stats-comparison
   comparison: (params: {

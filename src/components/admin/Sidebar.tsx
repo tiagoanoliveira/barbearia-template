@@ -7,6 +7,7 @@ import {
 import { ROUTES } from '@/config/routes'
 import { barberShopConfig, LOGO_URL } from '@/config/theme'
 import { authApi } from '@/api/auth'
+import { useAdminUser } from '@/hooks/useAdminUser'
 
 const navItems = [
   { to: ROUTES.ADMIN_DASHBOARD,    label: 'Dashboard',          icon: LayoutDashboard },
@@ -37,6 +38,11 @@ interface SidebarProps {
 
 export default function Sidebar({ open, expanded, onToggle, onExpand }: SidebarProps) {
   const navigate = useNavigate()
+  const adminUser = useAdminUser()
+  const isBarber = adminUser?.role === 'barbeiro'
+  const visibleNavItems = isBarber
+    ? navItems.filter(item => item.to !== ROUTES.ADMIN_CLIENTS && item.to !== ROUTES.ADMIN_SETTINGS)
+    : navItems
 
   const handleLogout = async () => {
     await authApi.logout()
@@ -61,7 +67,14 @@ export default function Sidebar({ open, expanded, onToggle, onExpand }: SidebarP
         `}
         style={{ width: 'var(--sidebar-width)' }}
       >
-        <SidebarContent expanded={true} onItemClick={onToggle} onExpand={onToggle} onLogout={handleLogout} showClose />
+        <SidebarContent
+          expanded={true}
+          visibleNavItems={visibleNavItems}
+          onItemClick={onToggle}
+          onExpand={onToggle}
+          onLogout={handleLogout}
+          showClose
+        />
       </aside>
 
       {/* ── Sidebar desktop (sempre visível, alterna entre expanded e mini) ── */}
@@ -69,15 +82,23 @@ export default function Sidebar({ open, expanded, onToggle, onExpand }: SidebarP
         className="hidden lg:flex flex-col fixed top-0 left-0 h-full z-40 bg-gray-900 text-gray-400 transition-all duration-300"
         style={{ width: expanded ? 'var(--sidebar-width)' : 'var(--sidebar-collapsed-width)' }}
       >
-        <SidebarContent expanded={expanded} onItemClick={() => {}} onExpand={onExpand} onLogout={handleLogout} showClose={false} />
+        <SidebarContent
+          expanded={expanded}
+          visibleNavItems={visibleNavItems}
+          onItemClick={() => {}}
+          onExpand={onExpand}
+          onLogout={handleLogout}
+          showClose={false}
+        />
       </aside>
     </>
   )
 }
 
 // ─── Conteúdo partilhado ────────────────────────────────────────────────────
-function SidebarContent({ expanded, onItemClick, onExpand, onLogout, showClose }: {
+function SidebarContent({ expanded, visibleNavItems, onItemClick, onExpand, onLogout, showClose }: {
   expanded: boolean
+  visibleNavItems: typeof navItems
   onItemClick: () => void
   onExpand: () => void
   onLogout: () => void
@@ -110,7 +131,7 @@ function SidebarContent({ expanded, onItemClick, onExpand, onLogout, showClose }
         {expanded && (
           <p className="px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600">Menu</p>
         )}
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {visibleNavItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

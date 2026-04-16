@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import { ROUTES } from '@/config/routes'
+import { getAdminUser } from '@/hooks/useAdminUser'
 
 const pageTitles: Record<string, { title: string; subtitle?: string }> = {
   '/admin/dashboard':          { title: 'Dashboard',          subtitle: 'Visão geral do negócio' },
@@ -16,6 +17,8 @@ const pageTitles: Record<string, { title: string; subtitle?: string }> = {
 export default function AdminLayout() {
   const location = useLocation()
   const token = localStorage.getItem('admin_token')
+  const adminUser = getAdminUser()
+  const isBarber = adminUser?.role === 'barbeiro'
 
   // mobile: sidebar aberta/fechada
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -26,6 +29,17 @@ export default function AdminLayout() {
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
   if (!token) return <Navigate to={ROUTES.ADMIN_LOGIN} replace />
+
+  if (
+    isBarber
+    && (
+      location.pathname === ROUTES.ADMIN_CLIENTS
+      || location.pathname.startsWith('/admin/clientes/')
+      || location.pathname === ROUTES.ADMIN_SETTINGS
+    )
+  ) {
+    return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
+  }
 
   const pageInfo = pageTitles[location.pathname] ??
     (location.pathname.startsWith('/admin/clientes/')

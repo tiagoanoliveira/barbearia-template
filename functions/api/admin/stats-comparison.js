@@ -14,17 +14,20 @@ export async function onRequest(context) {
     const periodA_end   = url.searchParams.get('periodA_end')
     const periodB_start = url.searchParams.get('periodB_start')
     const periodB_end   = url.searchParams.get('periodB_end')
-    const barbeiro_id   = url.searchParams.get('barbeiro_id')
+    const queryBarberId = url.searchParams.get('barbeiro_id')
+    const effectiveBarberId = auth.user.role === 'barbeiro'
+      ? auth.user.barbeiro_id
+      : (queryBarberId ? Number(queryBarberId) : null)
 
     if (!periodA_start || !periodA_end || !periodB_start || !periodB_end) {
       return ok([])
     }
 
-    const hasBarber = !!barbeiro_id
+    const hasBarber = !!effectiveBarberId
     const barberFilter = hasBarber ? 'AND barbeiro_id = ?' : ''
 
     const params = hasBarber
-      ? [periodA_start, periodA_end, Number(barbeiro_id), periodB_start, periodB_end, Number(barbeiro_id)]
+      ? [periodA_start, periodA_end, Number(effectiveBarberId), periodB_start, periodB_end, Number(effectiveBarberId)]
       : [periodA_start, periodA_end, periodB_start, periodB_end]
 
     const query = `

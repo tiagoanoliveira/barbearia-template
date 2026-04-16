@@ -19,6 +19,7 @@ export async function onRequest(context) {
       const dateFrom = url.searchParams.get('date_from')
       const dateTo   = url.searchParams.get('date_to')
       const status   = url.searchParams.get('status')
+      const barberId = url.searchParams.get('barber_id')
       const search   = url.searchParams.get('search') ?? ''
       const limitRaw = parseInt(url.searchParams.get('limit')  ?? '100')
       const offset   = parseInt(url.searchParams.get('offset') ?? '0')
@@ -33,6 +34,10 @@ export async function onRequest(context) {
       if (dateFrom) { where.push('date(data_hora) >= ?'); params.push(dateFrom) }
       if (dateTo)   { where.push('date(data_hora) <= ?'); params.push(dateTo) }
       if (status)   { where.push('status = ?');           params.push(status) }
+      if (barberId && user.role !== 'barbeiro') {
+        where.push('barbeiro_id = ?')
+        params.push(Number(barberId))
+      }
 
       if (!date && !dateFrom && !dateTo) {
         const today = new Date().toISOString().slice(0, 10)

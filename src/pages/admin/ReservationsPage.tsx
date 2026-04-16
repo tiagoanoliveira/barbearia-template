@@ -12,6 +12,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import { ClipboardList } from 'lucide-react'
 import type { Reservation } from '@/types'
+import { useAdminUser } from '@/hooks/useAdminUser'
 import {
   ReservationDetailModal,
   ReservationEditModal,
@@ -33,11 +34,14 @@ type ModalMode =
   | null
 
 export default function ReservationsPage() {
+  const adminUser = useAdminUser()
+  const isBarber = adminUser?.role === 'barbeiro'
+  const loggedBarberId = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [page,   setPage]   = useState(1)
   const [modal,  setModal]  = useState<ModalMode>(null)
-  const [barberId, setBarberId] = useState<number | 'all'>('all')
+  const [barberId, setBarberId] = useState<number | 'all'>(loggedBarberId ?? 'all')
 
   const today = new Date().toISOString().slice(0, 10)
   const [dateFrom, setDateFrom] = useState(today)
@@ -52,7 +56,7 @@ export default function ReservationsPage() {
       status,
       page,
       perPage: 20,
-      barberId: barberId === 'all' ? undefined : barberId,
+      barberId: loggedBarberId ?? (barberId === 'all' ? undefined : barberId),
       fromDate: dateFrom || undefined,
       toDate:   dateTo   || undefined,
     }),
@@ -96,10 +100,11 @@ export default function ReservationsPage() {
               </label>
               <select
                 className="input text-xs w-full"
-                value={barberId === 'all' ? 'all' : String(barberId)}
+                value={loggedBarberId ?? (barberId === 'all' ? 'all' : String(barberId))}
                 onChange={e => { setBarberId(e.target.value === 'all' ? 'all' : Number(e.target.value)); setPage(1) }}
+                disabled={!!loggedBarberId}
               >
-                <option value="all">Todos os barbeiros</option>
+                {!loggedBarberId && <option value="all">Todos os barbeiros</option>}
                 {barbers.map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}

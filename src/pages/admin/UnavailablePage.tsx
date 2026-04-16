@@ -9,7 +9,9 @@ import { Card } from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import type { Unavailable, UnavailableTipo, RecurrenceType } from '@/types'
+import type { Unavailable, UnavailableTipo } from '@/types'
+import { useAdminUser } from '@/hooks/useAdminUser'
+import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
 
 const TYPE_LABELS: Record<UnavailableTipo, string> = {
   folga:    'Folga',
@@ -33,20 +35,9 @@ const TYPE_COLORS: Record<UnavailableTipo, string> = {
   outro:    'bg-gray-100 text-gray-600',
 }
 
-const TIPO_OPTIONS: UnavailableTipo[] = ['folga', 'ferias', 'almoco', 'ausencia', 'outro']
+type UnavailableFormState = Partial<Unavailable> & { recurrence_end_date?: string }
 
-interface UnavailableForm {
-  barbeiro_id: number
-  data_hora_inicio: string
-  data_hora_fim: string
-  tipo: UnavailableTipo
-  motivo: string
-  is_all_day: number
-  recurrence_type: RecurrenceType
-  recurrence_end_date?: string
-}
-
-const EMPTY_FORM: UnavailableForm = {
+const EMPTY_FORM: UnavailableFormState = {
   barbeiro_id: 0,
   data_hora_inicio: '',
   data_hora_fim: '',
@@ -62,21 +53,24 @@ type GroupDetailState = {
 } | null
 
 export default function UnavailablePage() {
+  const adminUser = useAdminUser()
+  const isBarber = adminUser?.role === 'barbeiro'
+  const loggedBarberId = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
   const qc = useQueryClient()
   const [modal, setModal]           = useState(false)
   const [editTarget, setEditTarget] = useState<Unavailable | null>(null)
-  const [form, setForm]             = useState<UnavailableForm>(EMPTY_FORM)
+  const [form, setForm]             = useState<UnavailableFormState>(EMPTY_FORM)
   const [groupDetail, setGroupDetail] = useState<GroupDetailState>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
 
-  const [filterBarberId, setFilterBarberId] = useState<number | 'all'>('all')
+  const [filterBarberId, setFilterBarberId] = useState<number | 'all'>(loggedBarberId ?? 'all')
   const [filterFrom, setFilterFrom]         = useState('')
   const [filterTo, setFilterTo]             = useState('')
 
   const { data: barbersRes } = useQuery({ queryKey: ['barbers'], queryFn: () => barbersApi.list() })
   const { data: unavailRes, isLoading } = useQuery({
-    queryKey: ['unavailable'],
-    queryFn:  () => barbersApi.listUnavailable(),
+    queryKey: ['unavailable', loggedBarberId],
+    queryFn:  () => barbersApi.listUnavailable({ barberId: loggedBarberId ?? undefined }),
   })
 
   const create = useMutation({
@@ -107,9 +101,10 @@ export default function UnavailablePage() {
     return isAfter(end, now)
   })
 
-  const filteredByBarber = filterBarberId === 'all'
+  const effectiveFilterBarberId = loggedBarberId ?? filterBarberId
+  const filteredByBarber = effectiveFilterBarberId === 'all'
     ? onlyFuture
-    : onlyFuture.filter(u => u.barbeiro_id === filterBarberId)
+    : onlyFuture.filter(u => u.barbeiro_id === effectiveFilterBarberId)
 
   const filteredByDate = filteredByBarber.filter(u => {
     const start = parseISO(u.data_hora_inicio)
@@ -127,10 +122,18 @@ export default function UnavailablePage() {
     groupMap.get(gid)!.push(u)
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const inicio = form.is_all_day ? `${form.data_hora_inicio}T09:00:00` : form.data_hora_inicio
-    const fim    = form.is_all_day ? `${form.data_hora_fim || form.data_hora_inicio}T20:00:00` : form.data_hora_fim
+  const handleSubmit = () => {
+    if (!form.data_hora_inicio) {
+      return
+    }
+    if (!form.data_hora_fim && !form.is_all_day) {
+      return
+    }
+
+    const startDate = form.data_hora_inicio.substring(0, 10)
+    const endDate = (form.data_hora_fim || form.data_hora_inicio).substring(0, 10)
+    const inicio = form.is_all_day ? `${startDate}T09:00:00` : form.data_hora_inicio
+    const fim    = form.is_all_day ? `${endDate}T20:00:00` : form.data_hora_fim
     if (editTarget) {
       update.mutate({ id: editTarget.id, data: { ...form, data_hora_inicio: inicio, data_hora_fim: fim } })
     } else {
@@ -138,13 +141,17 @@ export default function UnavailablePage() {
     }
   }
 
-  const openCreate = () => { setEditTarget(null); setForm(EMPTY_FORM); setModal(true) }
+  const openCreate = () => {
+    setEditTarget(null)
+    setForm(loggedBarberId ? { ...EMPTY_FORM, barbeiro_id: loggedBarberId } : EMPTY_FORM)
+    setModal(true)
+  }
   const openEdit   = (u: Unavailable) => {
     setEditTarget(u)
     setForm({
       barbeiro_id:      u.barbeiro_id,
-      data_hora_inicio: u.data_hora_inicio.substring(0, 10),
-      data_hora_fim:    u.data_hora_fim.substring(0, 10),
+      data_hora_inicio: u.data_hora_inicio,
+      data_hora_fim:    u.data_hora_fim,
       tipo:             u.tipo,
       motivo:           u.motivo ?? '',
       is_all_day:       u.is_all_day ?? 1,
@@ -153,7 +160,7 @@ export default function UnavailablePage() {
     setModal(true)
   }
 
-  const upd = <K extends keyof UnavailableForm>(field: K, value: UnavailableForm[K]) =>
+  const upd = <K extends keyof UnavailableFormState>(field: K, value: UnavailableFormState[K]) =>
     setForm(f => ({ ...f, [field]: value }))
 
   const fmtDate = (iso: string) => { try { return format(parseISO(iso), "d 'de' MMM", { locale: pt }) } catch { return iso } }
@@ -173,10 +180,11 @@ export default function UnavailablePage() {
             </label>
             <select
               className="input text-xs min-w-[160px]"
-              value={filterBarberId === 'all' ? 'all' : String(filterBarberId)}
+              value={effectiveFilterBarberId === 'all' ? 'all' : String(effectiveFilterBarberId)}
               onChange={e => setFilterBarberId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              disabled={!!loggedBarberId}
             >
-              <option value="all">Todos os barbeiros</option>
+              {!loggedBarberId && <option value="all">Todos os barbeiros</option>}
               {barbers.map(b => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
@@ -349,102 +357,17 @@ export default function UnavailablePage() {
         open={modal}
         onClose={() => { setModal(false); setEditTarget(null); setForm(EMPTY_FORM) }}
         title={editTarget ? 'Editar indisponibilidade' : 'Nova indisponibilidade'}
-        footer={
-          <>
-            <button className="btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
-            <button className="btn-primary" form="unavail-form" type="submit"
-              disabled={create.isPending || update.isPending}>
-              {(create.isPending || update.isPending) ? 'A guardar...' : 'Guardar'}
-            </button>
-          </>
-        }
       >
-        <form id="unavail-form" onSubmit={handleSubmit} className="space-y-4">
-          {!editTarget && (
-            <div>
-              <label className="label">Barbeiro</label>
-              <select required className="input" value={form.barbeiro_id || ''}
-                onChange={e => upd('barbeiro_id', Number(e.target.value))}>
-                <option value="">Selecionar barbeiro</option>
-                {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
-          )}
-          <div>
-            <label className="label">Dia inteiro?</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="allday" checked={form.is_all_day === 1}
-                  onChange={() => upd('is_all_day', 1)} /> Sim
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="allday" checked={form.is_all_day === 0}
-                  onChange={() => upd('is_all_day', 0)} /> Não
-              </label>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Data início</label>
-              <input type="date" required className="input" value={form.data_hora_inicio.substring(0, 10)}
-                onChange={e => upd('data_hora_inicio', e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Data fim</label>
-              <input type="date" className="input" value={form.data_hora_fim.substring(0, 10)}
-                min={form.data_hora_inicio.substring(0, 10)}
-                onChange={e => upd('data_hora_fim', e.target.value)} />
-            </div>
-          </div>
-          {form.is_all_day === 0 && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Hora início</label>
-                <input type="time" className="input"
-                  value={form.data_hora_inicio.substring(11, 16)}
-                  onChange={e => upd('data_hora_inicio', `${form.data_hora_inicio.substring(0, 10)}T${e.target.value}:00`)} />
-              </div>
-              <div>
-                <label className="label">Hora fim</label>
-                <input type="time" className="input"
-                  value={form.data_hora_fim.substring(11, 16)}
-                  onChange={e => upd('data_hora_fim', `${form.data_hora_fim.substring(0, 10)}T${e.target.value}:00`)} />
-              </div>
-            </div>
-          )}
-          <div>
-            <label className="label">Tipo</label>
-            <select className="input" value={form.tipo}
-              onChange={e => upd('tipo', e.target.value as UnavailableTipo)}>
-              {TIPO_OPTIONS.map(t => <option key={t} value={t}>{TYPE_ICONS[t]} {TYPE_LABELS[t]}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Motivo <span className="text-gray-400">(opcional)</span></label>
-            <input type="text" className="input" placeholder="Ex: Consulta médica..."
-              value={form.motivo} onChange={e => upd('motivo', e.target.value)} />
-          </div>
-          {!editTarget && (
-            <>
-              <div>
-                <label className="label">Recorrência</label>
-                <select className="input" value={form.recurrence_type}
-                  onChange={e => upd('recurrence_type', e.target.value as RecurrenceType)}>
-                  <option value="none">Sem recorrência</option>
-                  <option value="daily">Diária</option>
-                  <option value="weekly">Semanal</option>
-                </select>
-              </div>
-              {form.recurrence_type !== 'none' && (
-                <div>
-                  <label className="label">Até à data</label>
-                  <input type="date" className="input" value={form.recurrence_end_date ?? ''}
-                    onChange={e => upd('recurrence_end_date', e.target.value)} />
-                </div>
-              )}
-            </>
-          )}
-        </form>
+        <UnavailableEditorForm
+          form={form}
+          barbers={barbers}
+          isNew={!editTarget}
+          disableBarberSelection={!!loggedBarberId}
+          saving={create.isPending || update.isPending}
+          onChange={(k, v) => upd(k as keyof UnavailableFormState, v as UnavailableFormState[keyof UnavailableFormState])}
+          onSave={handleSubmit}
+          onCancel={() => setModal(false)}
+        />
       </Modal>
 
       {/* Modal detalhe do grupo */}

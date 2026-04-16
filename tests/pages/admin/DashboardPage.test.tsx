@@ -1,12 +1,14 @@
 import { screen } from '@testing-library/react'
 import { dashboardApi } from '../../../src/api/dashboard'
 import { reservationsApi } from '../../../src/api/reservations'
+import { barbersApi } from '../../../src/api/barbers'
 import DashboardPage from '../../../src/pages/admin/DashboardPage'
 import { renderWithProviders } from '../../utils/renderWithProviders'
 
 vi.mock('../../../src/api/dashboard', () => ({
   dashboardApi: {
-    stats: vi.fn(),
+    todayByBarber: vi.fn(),
+    comparison: vi.fn(),
   },
 }))
 
@@ -16,11 +18,25 @@ vi.mock('../../../src/api/reservations', () => ({
   },
 }))
 
+vi.mock('../../../src/api/barbers', () => ({
+  barbersApi: {
+    list: vi.fn(),
+  },
+}))
+
 describe('DashboardPage (admin)', () => {
   it('renderiza o dashboard com métricas', () => {
-    vi.mocked(dashboardApi.stats).mockResolvedValue({
+    vi.mocked(dashboardApi.todayByBarber).mockResolvedValue({
       success: true,
-      data: { today: 2, week: 7, month: 21, total_clients: 13, unread_notifications: 1 },
+      data: [{ barbeiro_id: 1, barbeiro_nome: 'Tiago', barbeiro_color: '#000', confirmadas: 1, concluidas: 2, canceladas: 0, faltas: 0 }],
+    })
+    vi.mocked(dashboardApi.comparison).mockResolvedValue({
+      success: true,
+      data: [],
+    })
+    vi.mocked(barbersApi.list).mockResolvedValue({
+      success: true,
+      data: [{ id: 1, name: 'Tiago', active: true }],
     })
     vi.mocked(reservationsApi.list).mockResolvedValue({
       success: true,
