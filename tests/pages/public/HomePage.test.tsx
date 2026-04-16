@@ -1,16 +1,33 @@
-import { render, screen } from '@testing-library/react'
-import { BrowserRouter } from 'react-router-dom'
+import { screen } from '@testing-library/react'
+import { api } from '../../../src/api/client'
 import HomePage from '../../../src/pages/public/HomePage'
+import { renderWithProviders } from '../../utils/renderWithProviders'
 
-const renderWithRouter = (ui: React.ReactNode) => {
-  return render(<BrowserRouter>{ui}</BrowserRouter>)
-}
+vi.mock('../../../src/api/client', () => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    patch: vi.fn(),
+  },
+  adminApi: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    patch: vi.fn(),
+    upload: vi.fn(),
+  },
+}))
 
 describe('HomePage', () => {
-  it('mostra elementos principais da home', () => {
-    renderWithRouter(<HomePage />)
+  it('mostra secções principais da home', () => {
+    vi.mocked(api.get).mockResolvedValue({ success: true, data: [] })
 
-    expect(screen.getByText(/faq/i)).toBeInTheDocument()
-    expect(screen.getByText(/termos/i)).toBeInTheDocument()
+    renderWithProviders(<HomePage />)
+
+    expect(screen.getByRole('heading', { name: /serviços/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /a equipa/i })).toBeInTheDocument()
   })
 })
