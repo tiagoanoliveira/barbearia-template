@@ -13,5 +13,14 @@ export const dashboardApi = {
     periodB_start: string
     periodB_end:   string
     barbeiro_id?:  number
-  }) => adminApi.get<StatsComparison[]>('/api/admin/stats/comparison', { params }),
+  }) => {
+    const qs = new URLSearchParams({
+      periodA_start: params.periodA_start,
+      periodA_end:   params.periodA_end,
+      periodB_start: params.periodB_start,
+      periodB_end:   params.periodB_end,
+      ...(params.barbeiro_id != null ? { barbeiro_id: String(params.barbeiro_id) } : {}),
+    }).toString()
+    return adminApi.get<StatsComparison[]>(`/api/admin/stats/comparison?${qs}`)
+  },
 }
