@@ -143,7 +143,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div ref={turnstileRef} className="mt-2" />
+          <div ref={turnstileRef} className="mt-2 flex justify-center" />
 
           {error && (
             <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-xl px-4 py-2.5">
