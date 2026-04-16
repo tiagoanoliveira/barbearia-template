@@ -24,7 +24,6 @@ function isLoggedIn(): boolean {
   return !!localStorage.getItem('user_token')
 }
 
-// Logo estabilizado fora do componente para evitar re-criações
 const LogoMark = memo(function LogoMark() {
   return LOGO_URL
     ? <img
