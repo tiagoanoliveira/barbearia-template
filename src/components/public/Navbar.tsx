@@ -11,9 +11,22 @@ const navLinks = [
   { to: '/#galeria',  label: 'Galeria'  },
 ]
 
+function getSafeStorage(): Storage | null {
+  if (typeof window === 'undefined') return null
+  const storage = window.localStorage
+  if (!storage) return null
+  return typeof storage.getItem === 'function'
+    && typeof storage.setItem === 'function'
+    && typeof storage.removeItem === 'function'
+    ? storage
+    : null
+}
+
 function getProfilePicture(): string | null {
+  const storage = getSafeStorage()
+  if (!storage) return null
   try {
-    const token = localStorage.getItem('user_token')
+    const token = storage.getItem('user_token')
     if (!token) return null
     const payload = JSON.parse(atob(token.split('.')[1]))
     return payload?.picture ?? null
@@ -21,7 +34,8 @@ function getProfilePicture(): string | null {
 }
 
 function isLoggedIn(): boolean {
-  return !!localStorage.getItem('user_token')
+  const storage = getSafeStorage()
+  return !!storage?.getItem('user_token')
 }
 
 const LogoMark = memo(function LogoMark() {
