@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS servicos (
   duracao    INTEGER DEFAULT 60,
   svg        TEXT    NOT NULL DEFAULT 'null',
   abreviacao TEXT    NOT NULL DEFAULT 'null',
-  color      TEXT    NOT NULL DEFAULT '#0f7e44'
+  color      TEXT    NOT NULL DEFAULT '#000000'
 );
 
 -- ================================================

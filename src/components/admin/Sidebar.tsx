@@ -89,7 +89,7 @@ function SidebarContent({ expanded, onItemClick, onExpand, onLogout, showClose }
       <div className={`flex items-center border-b border-gray-800 transition-all duration-300 ${
         expanded ? 'gap-3 px-4 py-5' : 'justify-center px-0 py-4'
       }`}>
-        <Link to={ROUTES.HOME} className="flex items-center gap-2.5 group flex-shrink-0">
+        <Link to={ROUTES.ADMIN} className="flex items-center gap-2.5 group flex-shrink-0">
           <LogoMark />
         </Link>
         {expanded && (

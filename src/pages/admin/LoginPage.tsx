@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import {Link, useNavigate} from 'react-router-dom'
 import { Scissors, Eye, EyeOff, LogIn } from 'lucide-react'
 import { authApi } from '@/api/auth'
-import { barberShopConfig } from '@/config/theme'
+import {barberShopConfig, LOGO_URL} from '@/config/theme'
 import { ROUTES } from '@/config/routes'
 
 export default function LoginPage() {
@@ -12,6 +12,14 @@ export default function LoginPage() {
   const [showPw, setShowPw]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [loading, setLoading]   = useState(false)
+
+  const LogoMark = () => (
+      LOGO_URL
+          ? <img src={LOGO_URL} alt={barberShopConfig.name} className="w-8 h-8 object-contain flex-shrink-0" />
+          : <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Scissors size={16} className="text-white" />
+          </div>
+  )
 
   // Turnstile
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
@@ -95,9 +103,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
 
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
-            <Scissors size={26} className="text-white" />
-          </div>
+          <Link to={ROUTES.ADMIN} className="flex items-center gap-2.5 group flex-shrink-0">
+            <LogoMark />
+          </Link>
           <h1 className="text-xl font-bold text-white">{barberShopConfig.name}</h1>
           <p className="text-gray-500 text-sm mt-1">Painel de administração</p>
         </div>
