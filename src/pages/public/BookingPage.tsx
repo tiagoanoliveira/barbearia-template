@@ -180,7 +180,11 @@ export default function BookingPage() {
         setError(res.error ?? 'Erro ao confirmar reserva.')
         return
       }
-      try { storage?.removeItem(DRAFT_KEY) } catch {}
+      try {
+        storage?.removeItem(DRAFT_KEY)
+      } catch (e) {
+        console.warn('BookingPage: não foi possível remover o rascunho', e)
+      }
       navigate('/reservations?confirmed=1')
     },
     onError: (e: Error) => setError(e?.message ?? 'Erro ao confirmar reserva.'),
