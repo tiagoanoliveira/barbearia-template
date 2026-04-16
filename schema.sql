@@ -305,22 +305,6 @@ WHERE n.is_read = 0
   AND datetime(n.created_at) > datetime('now', '-7 days')
 ORDER BY n.created_at DESC;
 
--- ================================================
--- SEED: dados de exemplo
--- ================================================
-INSERT OR IGNORE INTO servicos (id, nome, preco, duracao, abreviacao) VALUES
-  (1, 'Corte de Cabelo',    1200, 45, 'CC'),
-  (2, 'Barba',               800, 30, 'BA'),
-  (3, 'Corte + Barba',      1800, 60, 'CB'),
-  (4, 'Corte Máquina',       900, 30, 'CM'),
-  (5, 'Hidratação Capilar', 1500, 30, 'HC'),
-  (6, 'Corte Infantil',      900, 30, 'CI');
-
-INSERT OR IGNORE INTO barbeiros (id, nome, especialidades, ativo) VALUES
-  (1, 'João',  'Corte clássico, Barba', 1),
-  (2, 'Pedro', 'Corte moderno, Fade',   1),
-  (3, 'Tiago', 'Barba, Bigode',         1);
-
 -- Admin por defeito — gerar hash com o script em BACKEND.md antes de usar
 -- INSERT INTO admin_users (username, password_hash, nome, role)
 -- VALUES ('admin', '<hash-aqui>', 'Admin', 'admin');
