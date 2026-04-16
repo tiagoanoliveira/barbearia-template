@@ -17,7 +17,7 @@ vi.mock('../../../src/api/reservations', () => ({
 }))
 
 describe('ReservationsPage (admin)', () => {
-  it('renderiza a listagem de reservas', () => {
+  it('renderiza a listagem de reservas', async () => {
     vi.mocked(barbersApi.list).mockResolvedValue({
       success: true,
       data: [{ id: 1, name: 'Tiago', color: '#000000' }],
@@ -50,6 +50,6 @@ describe('ReservationsPage (admin)', () => {
     renderWithProviders(<ReservationsPage />)
 
     expect(screen.getByPlaceholderText(/pesquisar por cliente, serviço/i)).toBeInTheDocument()
-    expect(screen.getByText('João Silva')).toBeInTheDocument()
+    expect(await screen.findByText('João Silva')).toBeInTheDocument()
   })
 })
