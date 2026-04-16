@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 
 export interface AdminUserSession {
   id?: number
@@ -22,5 +22,17 @@ export function getAdminUser(): AdminUserSession | null {
 }
 
 export function useAdminUser() {
-  return useMemo(() => getAdminUser(), [])
+  const [adminUser, setAdminUser] = useState<AdminUserSession | null>(() => getAdminUser())
+
+  useEffect(() => {
+    const sync = () => setAdminUser(getAdminUser())
+    window.addEventListener('storage', sync)
+    window.addEventListener('focus', sync)
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener('focus', sync)
+    }
+  }, [])
+
+  return adminUser
 }

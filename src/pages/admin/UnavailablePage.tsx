@@ -132,6 +132,13 @@ export default function UnavailablePage() {
   })
 
   const handleSubmit = () => {
+    if (!form.data_hora_inicio) {
+      return
+    }
+    if (!form.data_hora_fim && !form.is_all_day) {
+      return
+    }
+
     const startDate = form.data_hora_inicio.substring(0, 10)
     const endDate = (form.data_hora_fim || form.data_hora_inicio).substring(0, 10)
     const inicio = form.is_all_day ? `${startDate}T09:00:00` : form.data_hora_inicio

@@ -145,7 +145,7 @@ function prepareComparison(rows: StatsComparison[], periodA: PeriodRange, period
     const rowB = dayB ? mapB.get(dayB) : undefined
 
     return {
-      x: `${dayA ? format(parseISO(dayA), 'dd/MM') : '—'} · ${dayB ? format(parseISO(dayB), 'dd/MM') : '—'}`,
+      x: `${dayA ? format(parseISO(dayA), 'dd/MM') : '—'} | ${dayB ? format(parseISO(dayB), 'dd/MM') : '—'}`,
       periodoAData: dayA,
       periodoBData: dayB,
       periodoAConcluidas: rowA?.concluidas ?? 0,

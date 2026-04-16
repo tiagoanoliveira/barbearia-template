@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { clientsApi } from '@/api/clients'
@@ -9,11 +9,15 @@ function slotToISO(dateStr: string, slot: number, startH: number) {
   return `${dateStr}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '00')}:00`
 }
 
-function ClientSearch({ onChange }: { onChange: (id: number, name: string) => void }) {
-  const [q, setQ] = useState('')
+function ClientSearch({ value, onChange }: { value?: string; onChange: (id: number, name: string) => void }) {
+  const [q, setQ] = useState(value ?? '')
   const [dq, setDq] = useState('')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (value) setQ(value)
+  }, [value])
 
   const onType = (v: string) => {
     setQ(v)
@@ -175,7 +179,10 @@ export function NewReservationForm({
             </button>
           </div>
         ) : (
-          <ClientSearch onChange={(id, name) => { onChange('client_id', id); onChange('client_name', name) }} />
+          <ClientSearch
+            value={(form as Partial<Reservation>).client_name}
+            onChange={(id, name) => { onChange('client_id', id); onChange('client_name', name) }}
+          />
         )}
       </div>
       <div>
