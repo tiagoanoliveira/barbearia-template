@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import type { Unavailable, UnavailableTipo, RecurrenceType } from '@/types'
+import type { Unavailable, UnavailableTipo } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
 
@@ -35,18 +35,9 @@ const TYPE_COLORS: Record<UnavailableTipo, string> = {
   outro:    'bg-gray-100 text-gray-600',
 }
 
-interface UnavailableForm {
-  barbeiro_id: number
-  data_hora_inicio: string
-  data_hora_fim: string
-  tipo: UnavailableTipo
-  motivo: string
-  is_all_day: number
-  recurrence_type: RecurrenceType
-  recurrence_end_date?: string
-}
+type UnavailableFormState = Partial<Unavailable> & { recurrence_end_date?: string }
 
-const EMPTY_FORM: UnavailableForm = {
+const EMPTY_FORM: UnavailableFormState = {
   barbeiro_id: 0,
   data_hora_inicio: '',
   data_hora_fim: '',
@@ -68,7 +59,7 @@ export default function UnavailablePage() {
   const qc = useQueryClient()
   const [modal, setModal]           = useState(false)
   const [editTarget, setEditTarget] = useState<Unavailable | null>(null)
-  const [form, setForm]             = useState<UnavailableForm>(EMPTY_FORM)
+  const [form, setForm]             = useState<UnavailableFormState>(EMPTY_FORM)
   const [groupDetail, setGroupDetail] = useState<GroupDetailState>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
 
@@ -169,7 +160,7 @@ export default function UnavailablePage() {
     setModal(true)
   }
 
-  const upd = <K extends keyof UnavailableForm>(field: K, value: UnavailableForm[K]) =>
+  const upd = <K extends keyof UnavailableFormState>(field: K, value: UnavailableFormState[K]) =>
     setForm(f => ({ ...f, [field]: value }))
 
   const fmtDate = (iso: string) => { try { return format(parseISO(iso), "d 'de' MMM", { locale: pt }) } catch { return iso } }
@@ -368,12 +359,12 @@ export default function UnavailablePage() {
         title={editTarget ? 'Editar indisponibilidade' : 'Nova indisponibilidade'}
       >
         <UnavailableEditorForm
-          form={form as unknown as Partial<Unavailable> & { recurrence_end_date?: string }}
+          form={form}
           barbers={barbers}
           isNew={!editTarget}
           disableBarberSelection={!!loggedBarberId}
           saving={create.isPending || update.isPending}
-          onChange={(k, v) => upd(k as keyof UnavailableForm, v as UnavailableForm[keyof UnavailableForm])}
+          onChange={(k, v) => upd(k as keyof UnavailableFormState, v as UnavailableFormState[keyof UnavailableFormState])}
           onSave={handleSubmit}
           onCancel={() => setModal(false)}
         />

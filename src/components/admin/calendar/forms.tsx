@@ -180,7 +180,7 @@ export function NewReservationForm({
           </div>
         ) : (
           <ClientSearch
-            value={(form as Partial<Reservation>).client_name}
+            value={form.client_name}
             onChange={(id, name) => { onChange('client_id', id); onChange('client_name', name) }}
           />
         )}
