@@ -37,10 +37,10 @@ export async function onRequest(context) {
     ])
 
     return ok({
-      today:               todayRes?.count        ?? 0,
-      week:                weekRes?.count         ?? 0,
-      month:               monthRes?.count        ?? 0,
-      total_clients:       totalClients?.count    ?? 0,
+      today:                todayRes?.count       ?? 0,
+      week:                 weekRes?.count        ?? 0,
+      month:                monthRes?.count       ?? 0,
+      total_clients:        totalClients?.count   ?? 0,
       unread_notifications: unreadNotifs?.count   ?? 0,
     })
   } catch (e) {
