@@ -15,9 +15,9 @@ export default function LoginPage() {
 
   const LogoMark = () => (
       LOGO_URL
-          ? <img src={LOGO_URL} alt={barberShopConfig.name} className="w-8 h-8 object-contain flex-shrink-0" />
-          : <div className="w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Scissors size={16} className="text-white" />
+          ? <img src={LOGO_URL} alt={barberShopConfig.name} className="w-16 h-16 object-contain flex-shrink-0" />
+          : <div className="w-16 h-16 bg-primary-500 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Scissors size={32} className="text-white" />
           </div>
   )
 
