@@ -366,7 +366,7 @@ export default function UnavailablePage() {
           isNew={!editTarget}
           disableBarberSelection={!!loggedBarberId}
           saving={create.isPending || update.isPending}
-          onChange={upd}
+          onChange={(k, v) => upd(k as keyof UnavailableForm, v as UnavailableForm[keyof UnavailableForm])}
           onSave={handleSubmit}
           onCancel={() => setModal(false)}
         />

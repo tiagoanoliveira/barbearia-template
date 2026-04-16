@@ -67,7 +67,14 @@ export default function Sidebar({ open, expanded, onToggle, onExpand }: SidebarP
         `}
         style={{ width: 'var(--sidebar-width)' }}
       >
-        <SidebarContent expanded={true} onItemClick={onToggle} onExpand={onToggle} onLogout={handleLogout} showClose />
+        <SidebarContent
+          expanded={true}
+          visibleNavItems={visibleNavItems}
+          onItemClick={onToggle}
+          onExpand={onToggle}
+          onLogout={handleLogout}
+          showClose
+        />
       </aside>
 
       {/* ── Sidebar desktop (sempre visível, alterna entre expanded e mini) ── */}
@@ -75,15 +82,23 @@ export default function Sidebar({ open, expanded, onToggle, onExpand }: SidebarP
         className="hidden lg:flex flex-col fixed top-0 left-0 h-full z-40 bg-gray-900 text-gray-400 transition-all duration-300"
         style={{ width: expanded ? 'var(--sidebar-width)' : 'var(--sidebar-collapsed-width)' }}
       >
-        <SidebarContent expanded={expanded} onItemClick={() => {}} onExpand={onExpand} onLogout={handleLogout} showClose={false} />
+        <SidebarContent
+          expanded={expanded}
+          visibleNavItems={visibleNavItems}
+          onItemClick={() => {}}
+          onExpand={onExpand}
+          onLogout={handleLogout}
+          showClose={false}
+        />
       </aside>
     </>
   )
 }
 
 // ─── Conteúdo partilhado ────────────────────────────────────────────────────
-function SidebarContent({ expanded, onItemClick, onExpand, onLogout, showClose }: {
+function SidebarContent({ expanded, visibleNavItems, onItemClick, onExpand, onLogout, showClose }: {
   expanded: boolean
+  visibleNavItems: typeof navItems
   onItemClick: () => void
   onExpand: () => void
   onLogout: () => void
