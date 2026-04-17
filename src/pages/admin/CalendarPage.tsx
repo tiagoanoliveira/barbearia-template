@@ -191,6 +191,7 @@ export default function CalendarPage() {
   const openCtx = (e: React.MouseEvent, target: ContextTarget) => {
     e.preventDefault(); e.stopPropagation()
     const MENU_WIDTH = 260
+    // Alturas máximas aproximadas por tipo de menu para evitar cortar opções no fundo do ecrã.
     const MENU_HEIGHT_BY_KIND: Record<ContextTarget['kind'], number> = {
       slot: 110,
       unavailable: 110,

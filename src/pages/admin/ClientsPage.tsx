@@ -11,14 +11,16 @@ import EmptyState from '@/components/ui/EmptyState'
 import Modal from '@/components/ui/Modal'
 import type { Client } from '@/types'
 
-function ClientAvatar({ client, size = 8 }: { client: Client; size?: number }) {
+function ClientAvatar({ client, size = 8 }: { client: Client; size?: 8 | 16 }) {
   const sizeClass = size === 16 ? 'w-16 h-16' : 'w-8 h-8'
-  if (client.photo_url) {
+  const [imgError, setImgError] = useState(false)
+  if (client.photo_url && !imgError) {
     return (
       <img
         src={client.photo_url}
         alt={client.name}
         className={`${sizeClass} rounded-xl object-cover flex-shrink-0`}
+        onError={() => setImgError(true)}
       />
     )
   }

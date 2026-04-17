@@ -62,7 +62,7 @@ export async function onRequest(context) {
       }
       if (body.nif !== undefined) {
         const nifRaw = sanitize(String(body.nif ?? ''), 20)
-        if (nifRaw && !/^\d+$/.test(nifRaw)) return badRequest('NIF inválido')
+        if (nifRaw && (!/^\d+$/.test(nifRaw) || nifRaw.length !== 9)) return badRequest('NIF inválido')
         updates.push('nif = ?')
         vals.push(nifRaw ? Number(nifRaw) : null)
       }

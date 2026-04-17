@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { clientsApi } from '@/api/clients'
 import type { Barber, Reservation, Service } from '@/types'
 
+const DEFAULT_SERVICE_DURATION = 60
+
 function slotToISO(dateStr: string, slot: number, startH: number) {
   const t = startH * 60 + slot * 15
   return `${dateStr}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '00')}:00`
@@ -13,7 +15,7 @@ function inferClientDraft(input: string) {
   const value = input.trim()
   if (!value) return { name: '', email: '', phone: '' }
   if (value.includes('@')) return { name: '', email: value, phone: '' }
-  if (/^\+?[\d\s\-()]{6,}$/.test(value)) return { name: '', email: '', phone: value }
+  if (/^\+?[\d\s\-()]*\d[\d\s\-()]{5,}$/.test(value)) return { name: '', email: '', phone: value }
   return { name: value, email: '', phone: '' }
 }
 
@@ -250,7 +252,7 @@ export function NewReservationForm({
           min={5}
           step={5}
           className="input text-sm w-full"
-          value={form.service_duration ?? selectedService?.duration ?? 60}
+          value={form.service_duration ?? selectedService?.duration ?? DEFAULT_SERVICE_DURATION}
           onChange={e => onChange('service_duration', Number(e.target.value))}
         />
       </div>
