@@ -11,8 +11,13 @@ import EmptyState from '@/components/ui/EmptyState'
 import Modal from '@/components/ui/Modal'
 import type { Client } from '@/types'
 
+const CLIENT_AVATAR_SIZE_CLASS: Record<8 | 16, string> = {
+  8: 'w-8 h-8',
+  16: 'w-16 h-16',
+}
+
 function ClientAvatar({ client, size = 8 }: { client: Client; size?: 8 | 16 }) {
-  const sizeClass = size === 16 ? 'w-16 h-16' : 'w-8 h-8'
+  const sizeClass = CLIENT_AVATAR_SIZE_CLASS[size]
   const [imgError, setImgError] = useState(false)
   if (client.photo_url && !imgError) {
     return (

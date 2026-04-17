@@ -5,6 +5,8 @@ import { clientsApi } from '@/api/clients'
 import type { Barber, Reservation, Service } from '@/types'
 
 const DEFAULT_SERVICE_DURATION = 60
+// Aceita formatos comuns (+351 9xx xxx xxx, 91x-xxx-xxx, etc.) exigindo pelo menos um dígito.
+const PHONE_LIKE_PATTERN = /^\+?[\d\s\-()]*\d[\d\s\-()]{5,}$/
 
 function slotToISO(dateStr: string, slot: number, startH: number) {
   const t = startH * 60 + slot * 15
@@ -15,7 +17,7 @@ function inferClientDraft(input: string) {
   const value = input.trim()
   if (!value) return { name: '', email: '', phone: '' }
   if (value.includes('@')) return { name: '', email: value, phone: '' }
-  if (/^\+?[\d\s\-()]*\d[\d\s\-()]{5,}$/.test(value)) return { name: '', email: '', phone: value }
+  if (PHONE_LIKE_PATTERN.test(value)) return { name: '', email: '', phone: value }
   return { name: value, email: '', phone: '' }
 }
 

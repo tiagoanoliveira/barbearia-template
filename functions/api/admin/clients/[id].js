@@ -2,6 +2,8 @@ import { authenticateAdmin } from '../../../utils/auth.js'
 import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from '../../../utils/response.js'
 import { sanitize } from '../../../utils/validators.js'
 
+const NIF_LENGTH = 9
+
 export async function onRequest(context) {
   const { request, env, params } = context
   if (request.method === 'OPTIONS') return corsOptions()
@@ -62,7 +64,7 @@ export async function onRequest(context) {
       }
       if (body.nif !== undefined) {
         const nifRaw = sanitize(String(body.nif ?? ''), 20)
-        if (nifRaw && (!/^\d+$/.test(nifRaw) || nifRaw.length !== 9)) return badRequest('NIF inválido')
+        if (nifRaw && (!/^\d+$/.test(nifRaw) || nifRaw.length !== NIF_LENGTH)) return badRequest('NIF inválido')
         updates.push('nif = ?')
         vals.push(nifRaw ? Number(nifRaw) : null)
       }
