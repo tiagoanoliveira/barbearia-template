@@ -433,8 +433,8 @@ export default function CalendarPage() {
                                 }}
                                 onClick={e => openCtx(e, { kind: 'reservation', reservation: r })}
                               >
-                                <p className="text-[11px] font-semibold leading-tight truncate text-black">{r.client_name}</p>
-                                <p className="text-[10px] leading-tight truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>
+                                <p className="text-[12px] font-semibold leading-tight truncate text-black">{r.client_name}</p>
+                                <p className="text-[11px] leading-tight truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>
                               </div>
                             )
                           })}
