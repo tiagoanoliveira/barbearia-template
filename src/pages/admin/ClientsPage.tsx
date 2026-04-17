@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Search, Users, ChevronRight, Phone, Mail, Star, Pencil } from 'lucide-react'
 import { format, parseISO, formatDistanceToNow } from 'date-fns'
@@ -19,6 +19,7 @@ const CLIENT_AVATAR_SIZE_CLASS: Record<8 | 16, string> = {
 function ClientAvatar({ client, size = 8 }: { client: Client; size?: 8 | 16 }) {
   const sizeClass = CLIENT_AVATAR_SIZE_CLASS[size]
   const [imgError, setImgError] = useState(false)
+  useEffect(() => { setImgError(false) }, [client.photo_url])
   if (client.photo_url && !imgError) {
     return (
       <img
