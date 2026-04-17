@@ -11,3 +11,10 @@ export const isValidId = (id) => {
 
 export const sanitize = (str, maxLen = 500) =>
   typeof str === 'string' ? str.trim().substring(0, maxLen) : ''
+
+export const isValidNif = (value) => {
+  if (value === undefined || value === null) return true
+  const nif = String(value).trim()
+  if (!nif) return true
+  return /^\d{9}$/.test(nif)
+}

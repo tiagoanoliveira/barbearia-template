@@ -21,6 +21,7 @@ export const STATUS_LABEL: Record<string, string> = {
 export const STATUS_COLORS: Record<string, string> = {
   confirmada: '#3b82f6', concluida: '#10b981', cancelada: '#ef4444', faltou: '#6b7280',
 }
+// Na edição é possível alterar diretamente para qualquer estado, incluindo cancelada.
 export const EDIT_STATUSES: ReservationStatus[] = ['confirmada', 'concluida', 'faltou', 'cancelada']
 
 // ─── ReservationDetailModal ───────────────────────────────────────────────────
