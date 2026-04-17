@@ -43,6 +43,7 @@ export interface Reservation {
   client_name: string
   client_phone?: string
   client_email?: string
+  client_photo_url?: string
   barber_id: number
   barber_name: string
   barber_color?: string

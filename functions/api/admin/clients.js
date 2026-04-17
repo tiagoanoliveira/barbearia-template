@@ -49,7 +49,7 @@ export async function onRequest(context) {
            c.reservas_concluidas,
            c.next_appointment_date,
            c.last_appointment_date,
-           c.notas,
+           c.notas       AS notes,
            c.criado_em   AS created_at
          FROM clientes c
          ${whereClause}
@@ -96,7 +96,7 @@ export async function onRequest(context) {
            c.reservas_concluidas,
            c.next_appointment_date,
            c.last_appointment_date,
-           c.notas,
+           c.notas       AS notes,
            c.criado_em   AS created_at
          FROM clientes c
          WHERE c.id = ?`

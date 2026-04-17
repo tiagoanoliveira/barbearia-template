@@ -37,16 +37,7 @@ export async function onRequest(context) {
       `resend_lembrete_id: ${row.resend_lembrete_id ?? '(nenhum)'}`
     )
 
-    // 1. Guardar motivo na nota_privada
-    if (reason) {
-      const nota = row.nota_privada
-        ? `${row.nota_privada}\n[Cancelamento] ${reason}`
-        : `[Cancelamento] ${reason}`
-      await env.DB.prepare('UPDATE reservas SET nota_privada = ? WHERE id = ?')
-        .bind(nota, reservation_id).run()
-    }
-
-    // 2. Cancelar lembrete agendado (se existir)
+    // 1. Cancelar lembrete agendado (se existir)
     if (row.resend_lembrete_id) {
       console.log(`[cancel-email] A cancelar lembrete agendado ${row.resend_lembrete_id}…`)
       await cancelScheduledReminder(context, row.resend_lembrete_id)
@@ -57,7 +48,7 @@ export async function onRequest(context) {
       console.log(`[cancel-email] Reserva #${reservation_id} sem lembrete agendado — nada a cancelar.`)
     }
 
-    // 3. Enviar email de cancelamento ao cliente
+    // 2. Enviar email de cancelamento ao cliente
     if (!row.client_email) {
       console.warn(`[cancel-email] Reserva #${reservation_id} sem email de cliente — email não enviado.`)
       return ok({ message: 'Sem email – não enviado' })

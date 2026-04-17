@@ -4,12 +4,33 @@ import { useQuery } from '@tanstack/react-query'
 import { clientsApi } from '@/api/clients'
 import type { Barber, Reservation, Service } from '@/types'
 
+const DEFAULT_SERVICE_DURATION = 60
+// Aceita formatos comuns (+351 9xx xxx xxx, 91x-xxx-xxx, etc.) exigindo pelo menos um dígito.
+const PHONE_LIKE_PATTERN = /^\+?[\d\s\-()]*\d[\d\s\-()]{5,}$/
+const EMAIL_LIKE_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
 function slotToISO(dateStr: string, slot: number, startH: number) {
   const t = startH * 60 + slot * 15
   return `${dateStr}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '00')}:00`
 }
 
-function ClientSearch({ value, onChange }: { value?: string; onChange: (id: number, name: string) => void }) {
+function inferClientDraft(input: string) {
+  const value = input.trim()
+  if (!value) return { name: '', email: '', phone: '' }
+  if (EMAIL_LIKE_PATTERN.test(value)) return { name: '', email: value, phone: '' }
+  if (PHONE_LIKE_PATTERN.test(value)) return { name: '', email: '', phone: value }
+  return { name: value, email: '', phone: '' }
+}
+
+function ClientSearch({
+  value,
+  onChange,
+  onCreateNew,
+}: {
+  value?: string
+  onChange: (id: number, name: string) => void
+  onCreateNew: (draft: { name: string; email: string; phone: string }) => void
+}) {
   const [q, setQ] = useState(value ?? '')
   const [dq, setDq] = useState('')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -26,13 +47,14 @@ function ClientSearch({ value, onChange }: { value?: string; onChange: (id: numb
     timer.current = setTimeout(() => setDq(v), 350)
   }
 
-  const { data } = useQuery({
+  const { data, isFetching } = useQuery({
     queryKey: ['client-search', dq],
     queryFn: () => clientsApi.list({ search: dq, page: 1, perPage: 8 }),
     enabled: dq.length >= 1,
   })
 
   const results = data?.data?.items ?? []
+  const noResults = dq.trim().length > 0 && !isFetching && results.length === 0
 
   return (
     <div className="relative">
@@ -45,7 +67,7 @@ function ClientSearch({ value, onChange }: { value?: string; onChange: (id: numb
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         className="input text-sm w-full"
       />
-      {open && results.length > 0 && (
+      {open && dq.trim().length > 0 && (results.length > 0 || noResults) && (
         <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
           {results.map(c => (
             <li
@@ -61,6 +83,17 @@ function ClientSearch({ value, onChange }: { value?: string; onChange: (id: numb
               <span className="text-xs text-gray-400">{c.phone ?? c.email ?? ''}</span>
             </li>
           ))}
+          {noResults && (
+            <li
+              className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer"
+              onMouseDown={() => {
+                onCreateNew(inferClientDraft(q))
+                setOpen(false)
+              }}
+            >
+              <span className="font-medium text-brand-700">Criar novo cliente</span>
+            </li>
+          )}
         </ul>
       )}
     </div>
@@ -141,6 +174,8 @@ export function NewReservationForm({
   const [newClientPhone, setNewClientPhone] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
 
+  const selectedService = services.find(s => s.id === (form.service_id ?? 0))
+
   const handleCreateClient = async () => {
     if (!newClientName.trim()) return
     setCreatingClient(true)
@@ -182,6 +217,12 @@ export function NewReservationForm({
           <ClientSearch
             value={form.client_name}
             onChange={(id, name) => { onChange('client_id', id); onChange('client_name', name) }}
+            onCreateNew={({ name, email, phone }) => {
+              setNewClientName(name)
+              setNewClientEmail(email)
+              setNewClientPhone(phone)
+              setNewClientMode(true)
+            }}
           />
         )}
       </div>
@@ -193,10 +234,30 @@ export function NewReservationForm({
       </div>
       <div>
         <label className="block text-xs text-gray-500 mb-1">Serviço <span className="text-red-400">*</span></label>
-        <select value={form.service_id ?? ''} onChange={e => onChange('service_id', Number(e.target.value))} className="input text-sm w-full">
+        <select
+          value={form.service_id ?? ''}
+          onChange={e => {
+            const serviceId = Number(e.target.value)
+            const service = services.find(s => s.id === serviceId)
+            onChange('service_id', serviceId)
+            if (service?.duration) onChange('service_duration', service.duration)
+          }}
+          className="input text-sm w-full"
+        >
           <option value="">Selecionar serviço</option>
           {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
         </select>
+      </div>
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Duração (min)</label>
+        <input
+          type="number"
+          min={5}
+          step={5}
+          className="input text-sm w-full"
+          value={form.service_duration ?? selectedService?.duration ?? DEFAULT_SERVICE_DURATION}
+          onChange={e => onChange('service_duration', Number(e.target.value))}
+        />
       </div>
       <div>
         <label className="block text-xs text-gray-500 mb-1">Data e hora</label>

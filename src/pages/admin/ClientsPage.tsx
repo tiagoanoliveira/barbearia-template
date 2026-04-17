@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Search, Users, ChevronRight, Phone, Mail, Star, Pencil } from 'lucide-react'
 import { format, parseISO, formatDistanceToNow } from 'date-fns'
@@ -11,23 +11,22 @@ import EmptyState from '@/components/ui/EmptyState'
 import Modal from '@/components/ui/Modal'
 import type { Client } from '@/types'
 
-function ClientAvatar({ client, size = 8 }: { client: Client; size?: number }) {
-  const sizeClass = `w-${size} h-${size}`
-  if ((client as unknown as { foto_perfil?: string }).foto_perfil) {
+const CLIENT_AVATAR_SIZE_CLASS: Record<8 | 16, string> = {
+  8: 'w-8 h-8',
+  16: 'w-16 h-16',
+}
+
+function ClientAvatar({ client, size = 8 }: { client: Client; size?: 8 | 16 }) {
+  const sizeClass = CLIENT_AVATAR_SIZE_CLASS[size]
+  const [imgError, setImgError] = useState(false)
+  useEffect(() => { setImgError(false) }, [client.photo_url])
+  if (client.photo_url && !imgError) {
     return (
       <img
-        src={(client as unknown as { foto_perfil: string }).foto_perfil}
+        src={client.photo_url}
         alt={client.name}
         className={`${sizeClass} rounded-xl object-cover flex-shrink-0`}
-        onError={e => {
-          // fallback para inicial se a imagem falhar
-          const target = e.currentTarget
-          target.style.display = 'none'
-          const parent = target.parentElement
-          if (parent) {
-            parent.innerHTML = `<div class="${sizeClass} bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0"><span class="text-brand-700 font-semibold text-xs">${client.name.charAt(0).toUpperCase()}</span></div>`
-          }
-        }}
+        onError={() => setImgError(true)}
       />
     )
   }

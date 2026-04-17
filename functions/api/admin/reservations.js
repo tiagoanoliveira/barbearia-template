@@ -30,24 +30,24 @@ export async function onRequest(context) {
       const where  = []
       const params = []
 
-      if (date)     { where.push('date(data_hora) = ?');  params.push(date) }
-      if (dateFrom) { where.push('date(data_hora) >= ?'); params.push(dateFrom) }
-      if (dateTo)   { where.push('date(data_hora) <= ?'); params.push(dateTo) }
-      if (status)   { where.push('status = ?');           params.push(status) }
+      if (date)     { where.push('date(r.data_hora) = ?');  params.push(date) }
+      if (dateFrom) { where.push('date(r.data_hora) >= ?'); params.push(dateFrom) }
+      if (dateTo)   { where.push('date(r.data_hora) <= ?'); params.push(dateTo) }
+      if (status)   { where.push('r.status = ?');           params.push(status) }
       if (barberId && user.role !== 'barbeiro') {
-        where.push('barbeiro_id = ?')
+        where.push('r.barbeiro_id = ?')
         params.push(Number(barberId))
       }
 
       if (!date && !dateFrom && !dateTo) {
         const today = new Date().toISOString().slice(0, 10)
-        where.push('date(data_hora) >= ?')
+        where.push('date(r.data_hora) >= ?')
         params.push(today)
       }
 
       if (search) {
         where.push(
-          '(cliente_nome LIKE ? OR cliente_email LIKE ? OR cliente_telefone LIKE ? OR servico_nome LIKE ?)',
+          '(r.cliente_nome LIKE ? OR r.cliente_email LIKE ? OR r.cliente_telefone LIKE ? OR r.servico_nome LIKE ?)',
         )
         const like = `%${search}%`
         params.push(like, like, like, like)
@@ -55,14 +55,14 @@ export async function onRequest(context) {
 
       // Barbeiros só podem ver as suas próprias reservas
       if (user.role === 'barbeiro' && user.barbeiro_id) {
-        where.push('barbeiro_id = ?')
+        where.push('r.barbeiro_id = ?')
         params.push(user.barbeiro_id)
       }
 
       const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
       const totalRow = await env.DB.prepare(
-        `SELECT COUNT(*) AS count FROM v_reservas_complete ${whereClause}`,
+        `SELECT COUNT(*) AS count FROM v_reservas_complete r ${whereClause}`,
       ).bind(...params).first()
 
       const total      = totalRow?.count ?? 0
@@ -70,27 +70,29 @@ export async function onRequest(context) {
 
       const { results } = await env.DB.prepare(
         `SELECT
-           id,
-           data_hora,
-           status,
-           comentario,
-           nota_privada,
-           duracao_efetiva      AS service_duration,
-           cliente_id           AS client_id,
-           cliente_nome         AS client_name,
-           cliente_email        AS client_email,
-           cliente_telefone     AS client_phone,
-           cliente_nif          AS client_nif,
-           barbeiro_id          AS barber_id,
-           barbeiro_nome        AS barber_name,
-           barbeiro_color       AS barber_color,
-           servico_id           AS service_id,
-           servico_nome         AS service_name,
-           servico_preco        AS service_price
-         FROM v_reservas_complete
-         ${whereClause}
-         ORDER BY data_hora ASC
-         LIMIT ? OFFSET ?`,
+           r.id,
+           r.data_hora,
+           r.status,
+           r.comentario,
+           r.nota_privada,
+           r.duracao_efetiva      AS service_duration,
+           r.cliente_id           AS client_id,
+           r.cliente_nome         AS client_name,
+           r.cliente_email        AS client_email,
+           r.cliente_telefone     AS client_phone,
+           r.cliente_nif          AS client_nif,
+           r.barbeiro_id          AS barber_id,
+           r.barbeiro_nome        AS barber_name,
+           r.barbeiro_color       AS barber_color,
+           r.servico_id           AS service_id,
+           r.servico_nome         AS service_name,
+           r.servico_preco        AS service_price,
+           c.foto_perfil          AS client_photo_url
+          FROM v_reservas_complete r
+          LEFT JOIN clientes c ON c.id = r.cliente_id
+          ${whereClause}
+          ORDER BY r.data_hora ASC
+          LIMIT ? OFFSET ?`,
       ).bind(...params, limit, offset).all()
 
       return ok({
@@ -116,6 +118,7 @@ export async function onRequest(context) {
         time,
         notes,
         send_email,
+        service_duration,
       } = body
 
       if (!isValidId(client_id))   return badRequest('ID do cliente inválido')
@@ -133,7 +136,9 @@ export async function onRequest(context) {
       const service  = await env.DB.prepare('SELECT duracao, nome FROM servicos WHERE id = ?').bind(service_id).first()
       const barber   = await env.DB.prepare('SELECT nome FROM barbeiros WHERE id = ?').bind(barber_id).first()
       const client   = await env.DB.prepare('SELECT nome, email FROM clientes WHERE id = ?').bind(client_id).first()
-      const duracao  = service?.duracao || 60
+      const customDuration = Number(service_duration)
+      const hasCustomDuration = Number.isFinite(customDuration) && customDuration >= 5
+      const duracao  = hasCustomDuration ? Math.round(customDuration) : (service?.duracao || 60)
 
       const result = await env.DB.prepare(
         `INSERT INTO reservas

@@ -50,10 +50,14 @@ export default function ClientDetailPage() {
       {/* Perfil */}
       <Card>
         <div className="flex items-start gap-5">
-          <div className="flex-shrink-0 w-16 h-16 bg-brand-100 rounded-2xl
-                          flex items-center justify-center text-brand-700 text-2xl font-bold">
-            {client.name.charAt(0).toUpperCase()}
-          </div>
+          {client.photo_url ? (
+            <img src={client.photo_url} alt={client.name} className="flex-shrink-0 w-16 h-16 rounded-2xl object-cover" />
+          ) : (
+            <div className="flex-shrink-0 w-16 h-16 bg-brand-100 rounded-2xl
+                            flex items-center justify-center text-brand-700 text-2xl font-bold">
+              {client.name.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div className="flex-1">
             <h2 className="text-lg font-bold text-gray-900">{client.name}</h2>
             <div className="flex flex-wrap gap-4 mt-2">

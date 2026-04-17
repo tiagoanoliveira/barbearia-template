@@ -190,9 +190,16 @@ export default function CalendarPage() {
 
   const openCtx = (e: React.MouseEvent, target: ContextTarget) => {
     e.preventDefault(); e.stopPropagation()
-    const MENU_HEIGHT = 220, MENU_WIDTH = 260
-    const x = Math.min(e.clientX, window.innerWidth  - MENU_WIDTH  - 8)
-    const y = Math.min(e.clientY, window.innerHeight - MENU_HEIGHT - 8)
+    const MENU_WIDTH = 260
+    // Alturas máximas aproximadas por tipo de menu para evitar cortar opções no fundo do ecrã.
+    const MENU_HEIGHT_BY_KIND: Record<ContextTarget['kind'], number> = {
+      slot: 110,
+      unavailable: 110,
+      reservation: 280,
+    }
+    const menuHeight = MENU_HEIGHT_BY_KIND[target.kind] ?? 220
+    const x = Math.max(8, Math.min(e.clientX, window.innerWidth  - MENU_WIDTH  - 8))
+    const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuHeight - 8))
     setCtx(target); setCtxPos({ x, y })
   }
   const closeCtx = () => setCtx(null)
@@ -433,7 +440,13 @@ export default function CalendarPage() {
                                 }}
                                 onClick={e => openCtx(e, { kind: 'reservation', reservation: r })}
                               >
-                                <p className="text-[12px] font-semibold leading-tight truncate text-black">{r.client_name}</p>
+                                <div className="flex items-center gap-1.5">
+                                  {r.client_photo_url
+                                    ? <img src={r.client_photo_url} alt={r.client_name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
+                                    : <span className="w-4 h-4 rounded-full bg-white/70 text-[9px] font-bold flex items-center justify-center text-black flex-shrink-0">{r.client_name.charAt(0).toUpperCase()}</span>
+                                  }
+                                  <p className="text-[12px] font-semibold leading-tight truncate text-black">{r.client_name}</p>
+                                </div>
                                 <p className="text-[11px] leading-tight truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>
                               </div>
                             )
@@ -551,6 +564,7 @@ export default function CalendarPage() {
                   client_id: newResForm.client_id, service_id: newResForm.service_id,
                   barber_id: newResForm.barber_id, date, time,
                   notes: newResForm.comentario ?? '', send_email: newResForm.sendEmail ?? false,
+                  service_duration: newResForm.service_duration,
                 })
                 qc.invalidateQueries({ queryKey: ['cal-reservations'] }); close()
               } catch {}
