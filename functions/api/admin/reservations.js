@@ -86,8 +86,9 @@ export async function onRequest(context) {
            barbeiro_color       AS barber_color,
            servico_id           AS service_id,
            servico_nome         AS service_name,
-           servico_preco        AS service_price
-         FROM v_reservas_complete
+           servico_preco        AS service_price,
+           (SELECT foto_perfil FROM clientes c WHERE c.id = v_reservas_complete.cliente_id) AS client_photo_url
+          FROM v_reservas_complete
          ${whereClause}
          ORDER BY data_hora ASC
          LIMIT ? OFFSET ?`,
@@ -116,6 +117,7 @@ export async function onRequest(context) {
         time,
         notes,
         send_email,
+        service_duration,
       } = body
 
       if (!isValidId(client_id))   return badRequest('ID do cliente inválido')
@@ -133,7 +135,9 @@ export async function onRequest(context) {
       const service  = await env.DB.prepare('SELECT duracao, nome FROM servicos WHERE id = ?').bind(service_id).first()
       const barber   = await env.DB.prepare('SELECT nome FROM barbeiros WHERE id = ?').bind(barber_id).first()
       const client   = await env.DB.prepare('SELECT nome, email FROM clientes WHERE id = ?').bind(client_id).first()
-      const duracao  = service?.duracao || 60
+      const customDuration = Number(service_duration)
+      const hasCustomDuration = Number.isFinite(customDuration) && customDuration >= 5
+      const duracao  = hasCustomDuration ? Math.round(customDuration) : (service?.duracao || 60)
 
       const result = await env.DB.prepare(
         `INSERT INTO reservas

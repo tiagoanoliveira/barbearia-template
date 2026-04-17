@@ -21,8 +21,7 @@ export const STATUS_LABEL: Record<string, string> = {
 export const STATUS_COLORS: Record<string, string> = {
   confirmada: '#3b82f6', concluida: '#10b981', cancelada: '#ef4444', faltou: '#6b7280',
 }
-// Statuses editáveis na edição (sem cancelada — cancelamento é sempre via modal dedicado)
-export const EDIT_STATUSES = ['confirmada', 'concluida', 'faltou'] as const
+export const EDIT_STATUSES: ReservationStatus[] = ['confirmada', 'concluida', 'faltou', 'cancelada']
 
 // ─── ReservationDetailModal ───────────────────────────────────────────────────
 export function ReservationDetailModal({
@@ -41,6 +40,11 @@ export function ReservationDetailModal({
     <Modal open onClose={onClose} title="Detalhe da reserva">
       <div className="space-y-3 text-sm">
         <Row label="Cliente"  value={r.client_name} />
+        {r.client_photo_url && (
+          <div className="flex justify-end">
+            <img src={r.client_photo_url} alt={r.client_name} className="w-10 h-10 rounded-xl object-cover" />
+          </div>
+        )}
         {r.client_phone && (
           <Row label="Telefone" value={<a href={`tel:${r.client_phone}`} className="text-brand-600">{r.client_phone}</a>} />
         )}
@@ -118,6 +122,7 @@ export function ReservationEditModal({
       await reservationsApi.update(reservation.id, {
         barber_id:        form.barber_id,
         service_id:       form.service_id,
+        status:           form.status,
         data_hora:        form.data_hora,
         comentario:       form.comentario,
         nota_privada:     form.nota_privada,
@@ -147,13 +152,17 @@ export function ReservationEditModal({
           <p className="text-xs text-gray-400 mb-0.5">Cliente</p>
           <p className="font-medium">{reservation.client_name}</p>
         </div>
-        {/* Estado (read-only — muda pelo modal de estado) */}
-        <div className="bg-gray-50 rounded-lg px-3 py-2 flex items-center justify-between">
-          <p className="text-xs text-gray-400">Estado</p>
-          <span className="text-xs px-2 py-1 rounded-full text-white font-medium"
-            style={{ background: STATUS_COLORS[reservation.status] ?? '#888' }}>
-            {STATUS_LABEL[reservation.status] ?? reservation.status}
-          </span>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Estado</label>
+          <select
+            className="input text-sm w-full bg-white text-gray-900"
+            value={form.status ?? reservation.status}
+            onChange={e => upd('status', e.target.value as ReservationStatus)}
+          >
+            {EDIT_STATUSES.map(s => (
+              <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>

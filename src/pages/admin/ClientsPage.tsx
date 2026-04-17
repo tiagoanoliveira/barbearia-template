@@ -12,22 +12,13 @@ import Modal from '@/components/ui/Modal'
 import type { Client } from '@/types'
 
 function ClientAvatar({ client, size = 8 }: { client: Client; size?: number }) {
-  const sizeClass = `w-${size} h-${size}`
-  if ((client as unknown as { foto_perfil?: string }).foto_perfil) {
+  const sizeClass = size === 16 ? 'w-16 h-16' : 'w-8 h-8'
+  if (client.photo_url) {
     return (
       <img
-        src={(client as unknown as { foto_perfil: string }).foto_perfil}
+        src={client.photo_url}
         alt={client.name}
         className={`${sizeClass} rounded-xl object-cover flex-shrink-0`}
-        onError={e => {
-          // fallback para inicial se a imagem falhar
-          const target = e.currentTarget
-          target.style.display = 'none'
-          const parent = target.parentElement
-          if (parent) {
-            parent.innerHTML = `<div class="${sizeClass} bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0"><span class="text-brand-700 font-semibold text-xs">${client.name.charAt(0).toUpperCase()}</span></div>`
-          }
-        }}
       />
     )
   }

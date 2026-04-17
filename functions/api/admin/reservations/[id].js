@@ -24,6 +24,7 @@ export async function onRequest(context) {
             r.resend_lembrete_id,
             r.cliente_id, r.barbeiro_id, r.servico_id,
             v.cliente_nome, v.cliente_email,
+            (SELECT foto_perfil FROM clientes c WHERE c.id = r.cliente_id) AS client_photo_url,
             v.barbeiro_nome,
             v.servico_nome,
             v.duracao_efetiva AS service_duration
