@@ -42,7 +42,7 @@ function getDayConfig(date: Date) {
   }
 }
 
-const SLOT_H        = 16
+const SLOT_H        = 18
 const SLOT_DURATION = 15 // minutos por slot
 const SLOTS_PER_H   = 60 / SLOT_DURATION
 
