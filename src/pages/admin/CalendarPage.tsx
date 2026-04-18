@@ -20,6 +20,7 @@ import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from 
 import { useAdminUser } from '@/hooks/useAdminUser'
 import { NewReservationForm, ReservationCopyContent } from '@/components/admin/calendar/forms'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
+import { UnavailabilityConflictsModal, type UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
 
 // ─── Horário dinâmico a partir do theme.ts ───────────────────────────────────
 const DAY_KEYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const
@@ -73,6 +74,16 @@ function slotToISO(dateStr: string, slot: number, startH: number) {
 function hexToRgba(hex: string, alpha: number) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
   return `rgba(${r},${g},${b},${alpha})`
+}
+function serviceShortLabel(serviceName: string, abreviacao?: string) {
+  const short = (abreviacao ?? '').trim()
+  if (short) return short.toUpperCase()
+  return serviceName
+    .split(' ')
+    .map(part => part.trim().charAt(0))
+    .join('')
+    .slice(0, 5)
+    .toUpperCase() || 'SV'
 }
 
 type ContextTarget =
@@ -143,6 +154,8 @@ export default function CalendarPage() {
   const [uForm, setUForm]     = useState<Partial<Unavailable> & { recurrence_end_date?: string }>({})
   const [uError, setUError]   = useState<string | null>(null)
   const [uSaving, setUSaving] = useState(false)
+  const [uConflicts, setUConflicts] = useState<UnavailabilityConflictReservation[]>([])
+  const [uPendingPayload, setUPendingPayload] = useState<Partial<Unavailable> | null>(null)
 
   const [copyDate, setCopyDate]     = useState('')
   const [copyTime, setCopyTime]     = useState('')
@@ -166,7 +179,7 @@ export default function CalendarPage() {
     queryFn:  () => barbersApi.listUnavailable({ date: selectedDate, barberId: effectiveBarberId ?? undefined }),
   })
 
-  const allBarbers: Barber[] = barbersRes?.data ?? []
+  const allBarbers: Barber[] = (barbersRes?.data ?? []).filter(b => b.active)
   // Barbeiros visíveis na grelha (filtrado por barbeiro logado ou filtro manual)
   const barbers: Barber[] = useMemo(() => {
     const base = loggedBarberId
@@ -231,15 +244,28 @@ export default function CalendarPage() {
     setUSaving(true); setUError(null)
     try {
       const isNew = modal && 'isNew' in modal ? modal.isNew : false
-      const payload = { ...uForm }
+      const payload: Partial<Unavailable> = { ...uForm }
       if (uForm.is_all_day) {
         const dayStart = (uForm.data_hora_inicio ?? `${selectedDate}T00:00:00`).substring(0, 10)
         const dayEnd   = (uForm.data_hora_fim    ?? uForm.data_hora_inicio ?? `${selectedDate}T00:00:00`).substring(0, 10)
         payload.data_hora_inicio = `${dayStart}T${String(OPEN_H).padStart(2,'0')}:00:00`
         payload.data_hora_fim    = `${dayEnd}T${String(CLOSE_H).padStart(2,'0')}:00:00`
       }
-      if (isNew || !uForm.id) await barbersApi.createUnavailable(payload as Unavailable)
-      else                    await barbersApi.updateUnavailable(uForm.id, payload as Unavailable)
+      if (isNew || !uForm.id) {
+        const response = await barbersApi.createUnavailable(payload as Unavailable)
+        if (!response.success) {
+          const conflicts = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
+          if (conflicts.length) {
+            setUConflicts(conflicts)
+            setUPendingPayload(payload)
+            return
+          }
+          throw new Error(response.error ?? 'Erro ao guardar')
+        }
+      } else {
+        const response = await barbersApi.updateUnavailable(uForm.id, payload as Unavailable)
+        if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
+      }
       qc.invalidateQueries({ queryKey: ['cal-unavail'] }); close()
     } catch (e: unknown) { setUError(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setUSaving(false) }
@@ -329,7 +355,7 @@ export default function CalendarPage() {
                 disabled={!!loggedBarberId}
               >
                 {!loggedBarberId && <option value="">Todos os barbeiros</option>}
-                {allBarbers.sort((a, b) => a.id - b.id).map(b => (
+                {[...allBarbers].sort((a, b) => a.id - b.id).map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
@@ -387,32 +413,7 @@ export default function CalendarPage() {
                         ? 'relative border-l border-b-2 border-gray-300'
                         : 'relative border-l border-b border-gray-200'
 
-                      if (blocked) {
-                        const isFirst = blocked.data_hora_inicio === slotToISO(selectedDate, slot, START_H)
-                          || (slot === 0 && new Date(blocked.data_hora_inicio) <= new Date(slotToISO(selectedDate, 0, START_H)))
-                        return (
-                          <div key={key}
-                            className={`${baseCellClasses} cursor-pointer`}
-                            style={{
-                              height: SLOT_H,
-                              backgroundImage: `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.18)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.18)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 12px)`,
-                            }}
-                            onClick={e => openCtx(e, { kind: 'unavailable', unavailable: blocked })}
-                          >
-                            {isFirst && (
-                              <div className="absolute inset-x-1 top-0.5 flex items-center gap-1 z-10">
-                                <span className="text-sm leading-none">{TIPO_ICON[blocked.tipo]}</span>
-                                <span className="text-[10px] font-medium text-gray-700 truncate">
-                                  {TIPO_LABEL[blocked.tipo]}{blocked.motivo ? ` · ${blocked.motivo}` : ''}
-                                  {blocked.recurrence_group_id ? ' 🔁' : ''}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      }
-
-                      if (rList.length === 0) {
+                      if (!blocked && rList.length === 0) {
                         return (
                           <div key={key}
                             className={`${baseCellClasses} hover:brightness-95 transition-all cursor-pointer`}
@@ -422,12 +423,39 @@ export default function CalendarPage() {
                         )
                       }
 
+                      const isFirstBlockedSlot = blocked && (
+                        blocked.data_hora_inicio === slotToISO(selectedDate, slot, START_H)
+                        || (slot === 0 && new Date(blocked.data_hora_inicio) <= new Date(slotToISO(selectedDate, 0, START_H)))
+                      )
+
                       return (
-                        <div key={key} className={baseCellClasses} style={{ height: SLOT_H, background: colBg }}>
+                        <div
+                          key={key}
+                          className={`${baseCellClasses} ${blocked ? 'cursor-pointer' : ''}`}
+                          style={{
+                            height: SLOT_H,
+                            background: blocked ? undefined : colBg,
+                            backgroundImage: blocked
+                              ? `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.18)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.18)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 12px)`
+                              : undefined,
+                          }}
+                          onClick={blocked ? (e => openCtx(e, { kind: 'unavailable', unavailable: blocked })) : undefined}
+                        >
+                          {blocked && isFirstBlockedSlot && (
+                            <div className="absolute inset-x-1 top-0.5 flex items-center gap-1 z-10">
+                              <span className="text-sm leading-none">{TIPO_ICON[blocked.tipo]}</span>
+                              <span className="text-[10px] font-medium text-gray-700 truncate">
+                                {TIPO_LABEL[blocked.tipo]}{blocked.motivo ? ` · ${blocked.motivo}` : ''}
+                                {blocked.recurrence_group_id ? ' 🔁' : ''}
+                              </span>
+                            </div>
+                          )}
                           {rList.map(r => {
                             const service   = services.find(s => s.id === r.service_id)
                             const baseColor = service?.color || b.color || '#888'
                             const dur       = r.service_duration ?? service?.duration ?? 60
+                            const shortLabel = serviceShortLabel(r.service_name, service?.abreviacao)
+                            const compact = dur < 30
                             const heightPx  = Math.max(SLOT_H, Math.round((dur / SLOT_DURATION) * SLOT_H))
                             const barColor2 = STATUS_BAR_LOCAL[r.status] ?? baseColor
                             return (
@@ -440,14 +468,16 @@ export default function CalendarPage() {
                                 }}
                                 onClick={e => openCtx(e, { kind: 'reservation', reservation: r })}
                               >
-                                <div className="flex items-center gap-1.5">
-                                  {r.client_photo_url
-                                    ? <img src={r.client_photo_url} alt={r.client_name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
-                                    : <span className="w-4 h-4 rounded-full bg-white/70 text-[9px] font-bold flex items-center justify-center text-black flex-shrink-0">{r.client_name.charAt(0).toUpperCase()}</span>
-                                  }
-                                  <p className="text-[12px] font-semibold leading-tight truncate text-black">{r.client_name}</p>
-                                </div>
-                                <p className="text-[11px] leading-tight truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>
+                                {compact ? (
+                                  <p className="text-[12px] font-semibold leading-tight truncate text-black whitespace-nowrap">
+                                    {shortLabel} {r.client_name}
+                                  </p>
+                                ) : (
+                                  <>
+                                    <p className="text-[12px] font-semibold leading-tight truncate text-black">{r.client_name}</p>
+                                    <p className="text-[11px] leading-tight truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>
+                                  </>
+                                )}
                               </div>
                             )
                           })}
@@ -586,6 +616,39 @@ export default function CalendarPage() {
             onSave={handleSaveUnavailable} onCancel={close} />
         ) : <></>}
       </Modal>
+
+      <UnavailabilityConflictsModal
+        open={uConflicts.length > 0}
+        reservations={uConflicts}
+        saving={uSaving}
+        onCancel={() => {
+          setUConflicts([])
+          setUPendingPayload(null)
+        }}
+        onConfirm={async ({ selectedIds, reason }) => {
+          if (!uPendingPayload) return
+          setUSaving(true)
+          setUError(null)
+          try {
+            const response = await barbersApi.createUnavailable({
+              ...(uPendingPayload as Unavailable),
+              skip_conflict_check: true,
+              cancel_reservation_ids: selectedIds,
+              cancel_reason: reason,
+            })
+            if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
+            qc.invalidateQueries({ queryKey: ['cal-unavail'] })
+            qc.invalidateQueries({ queryKey: ['cal-reservations'] })
+            setUConflicts([])
+            setUPendingPayload(null)
+            close()
+          } catch (e: unknown) {
+            setUError(e instanceof Error ? e.message : 'Erro ao guardar')
+          } finally {
+            setUSaving(false)
+          }
+        }}
+      />
     </div>
   )
 }

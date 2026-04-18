@@ -16,9 +16,14 @@ export async function onRequest(context) {
   }
 
   if (request.method === 'GET') {
+    const url = new URL(request.url)
+    const includeInactive = url.searchParams.get('include_inactive') === '1'
     const { results } = await env.DB.prepare(
       // foto (não foto_url), especialidades, color — schema original
-      'SELECT id, nome AS name, foto AS photo_url, especialidades, color, ativo AS active FROM barbeiros ORDER BY id'
+      `SELECT id, nome AS name, foto AS photo_url, especialidades, color, ativo AS active
+       FROM barbeiros
+       ${includeInactive ? '' : 'WHERE ativo = 1'}
+       ORDER BY id`
     ).all()
     return ok(results)
   }

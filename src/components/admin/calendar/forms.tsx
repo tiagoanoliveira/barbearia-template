@@ -173,23 +173,30 @@ export function NewReservationForm({
   const [newClientEmail, setNewClientEmail] = useState('')
   const [newClientPhone, setNewClientPhone] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
+  const [newClientError, setNewClientError] = useState<string | null>(null)
 
   const selectedService = services.find(s => s.id === (form.service_id ?? 0))
 
   const handleCreateClient = async () => {
-    if (!newClientName.trim()) return
+    if (!newClientName.trim()) { setNewClientError('Nome do cliente é obrigatório.'); return }
+    if (!newClientPhone.trim()) { setNewClientError('Telefone do cliente é obrigatório.'); return }
     setCreatingClient(true)
+    setNewClientError(null)
     try {
       const res = await clientsApi.create({
         name: newClientName.trim(),
         email: newClientEmail.trim() || undefined,
-        phone: newClientPhone.trim() || undefined,
+        phone: newClientPhone.trim(),
       })
-      if (res.success && res.data) {
-        onChange('client_id', res.data.id)
-        onChange('client_name', res.data.name)
-        setNewClientMode(false)
-      }
+      if (!res.success || !res.data) throw new Error(res.error ?? 'Não foi possível criar o cliente.')
+      onChange('client_id', res.data.id)
+      onChange('client_name', res.data.name)
+      setNewClientMode(false)
+      setNewClientName('')
+      setNewClientEmail('')
+      setNewClientPhone('')
+    } catch (e: unknown) {
+      setNewClientError(e instanceof Error ? e.message : 'Não foi possível criar o cliente.')
     } finally {
       setCreatingClient(false)
     }
@@ -206,10 +213,11 @@ export function NewReservationForm({
         </div>
         {newClientMode ? (
           <div className="space-y-2 border rounded-xl p-3 bg-gray-50">
-            <input type="text" placeholder="Nome do cliente" className="input text-sm w-full" value={newClientName} onChange={e => setNewClientName(e.target.value)} />
+            <input type="text" placeholder="Nome do cliente *" className="input text-sm w-full" value={newClientName} onChange={e => { setNewClientName(e.target.value); setNewClientError(null) }} />
             <input type="email" placeholder="Email (opcional)" className="input text-sm w-full" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} />
-            <input type="tel" placeholder="Telefone (opcional)" className="input text-sm w-full" value={newClientPhone} onChange={e => setNewClientPhone(e.target.value)} />
-            <button type="button" onClick={handleCreateClient} disabled={creatingClient || !newClientName.trim()} className="btn-primary w-full text-xs mt-1 disabled:opacity-50">
+            <input type="tel" placeholder="Telefone *" className="input text-sm w-full" value={newClientPhone} onChange={e => { setNewClientPhone(e.target.value); setNewClientError(null) }} />
+            {newClientError && <p className="text-xs text-red-500">{newClientError}</p>}
+            <button type="button" onClick={handleCreateClient} disabled={creatingClient || !newClientName.trim() || !newClientPhone.trim()} className="btn-primary w-full text-xs mt-1 disabled:opacity-50">
               {creatingClient ? 'A criar cliente...' : 'Criar e associar cliente'}
             </button>
           </div>
