@@ -445,7 +445,7 @@ export default function CalendarPage() {
                           {blocked && isFirstBlockedSlot && (
                             <div className="absolute inset-x-1 top-0.5 flex items-center gap-1 z-10">
                               <span className="text-sm leading-none">{TIPO_ICON[blocked.tipo]}</span>
-                              <span className="text-[10px] font-medium text-gray-700 truncate">
+                              <span className="text-[13px] font-medium text-gray-700 truncate">
                                 {TIPO_LABEL[blocked.tipo]}{blocked.motivo ? ` · ${blocked.motivo}` : ''}
                                 {blocked.recurrence_group_id ? ' 🔁' : ''}
                               </span>
