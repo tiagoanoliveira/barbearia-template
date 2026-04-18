@@ -12,6 +12,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { Unavailable, UnavailableTipo } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
+import { UnavailabilityConflictsModal, type UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
 
 const TYPE_LABELS: Record<UnavailableTipo, string> = {
   folga:    'Folga',
@@ -62,6 +63,10 @@ export default function UnavailablePage() {
   const [form, setForm]             = useState<UnavailableFormState>(EMPTY_FORM)
   const [groupDetail, setGroupDetail] = useState<GroupDetailState>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
+  const [formError, setFormError] = useState<string | null>(null)
+  const [submitSaving, setSubmitSaving] = useState(false)
+  const [pendingCreatePayload, setPendingCreatePayload] = useState<Partial<Unavailable> | null>(null)
+  const [conflictReservations, setConflictReservations] = useState<UnavailabilityConflictReservation[]>([])
 
   const [filterBarberId, setFilterBarberId] = useState<number | 'all'>(loggedBarberId ?? 'all')
   const [filterFrom, setFilterFrom]         = useState('')
@@ -73,16 +78,6 @@ export default function UnavailablePage() {
     queryFn:  () => barbersApi.listUnavailable({ barberId: loggedBarberId ?? undefined }),
   })
 
-  const create = useMutation({
-    mutationFn: (data: Partial<Unavailable> & { recurrence_end_date?: string }) =>
-      barbersApi.createUnavailable(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unavailable'] }); setModal(false); setForm(EMPTY_FORM) },
-  })
-  const update = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Unavailable> }) =>
-      barbersApi.updateUnavailable(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['unavailable'] }); setModal(false); setEditTarget(null) },
-  })
   const remove = useMutation({
     mutationFn: (id: number) => barbersApi.deleteUnavailable(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['unavailable'] }),
@@ -92,7 +87,7 @@ export default function UnavailablePage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['unavailable'] }); setGroupDetail(null) },
   })
 
-  const barbers    = barbersRes?.data ?? []
+  const visibleBarbers = (barbersRes?.data ?? []).filter(b => b.active)
   const allItems: Unavailable[] = (unavailRes?.data ?? []) as unknown as Unavailable[]
 
   const now = startOfDay(new Date())
@@ -122,11 +117,13 @@ export default function UnavailablePage() {
     groupMap.get(gid)!.push(u)
   })
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.data_hora_inicio) {
+      setFormError('Data de início obrigatória.')
       return
     }
     if (!form.data_hora_fim && !form.is_all_day) {
+      setFormError('Data de fim obrigatória.')
       return
     }
 
@@ -134,16 +131,42 @@ export default function UnavailablePage() {
     const endDate = (form.data_hora_fim || form.data_hora_inicio).substring(0, 10)
     const inicio = form.is_all_day ? `${startDate}T09:00:00` : form.data_hora_inicio
     const fim    = form.is_all_day ? `${endDate}T20:00:00` : form.data_hora_fim
-    if (editTarget) {
-      update.mutate({ id: editTarget.id, data: { ...form, data_hora_inicio: inicio, data_hora_fim: fim } })
-    } else {
-      create.mutate({ ...form, data_hora_inicio: inicio, data_hora_fim: fim })
+    setSubmitSaving(true)
+    setFormError(null)
+    try {
+      if (editTarget) {
+        const response = await barbersApi.updateUnavailable(editTarget.id, { ...form, data_hora_inicio: inicio, data_hora_fim: fim })
+        if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
+        qc.invalidateQueries({ queryKey: ['unavailable'] })
+        setModal(false)
+        setEditTarget(null)
+      } else {
+        const payload = { ...form, data_hora_inicio: inicio, data_hora_fim: fim }
+        const response = await barbersApi.createUnavailable(payload)
+        if (!response.success) {
+          const conflicts = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
+          if (conflicts.length) {
+            setConflictReservations(conflicts)
+            setPendingCreatePayload(payload)
+            return
+          }
+          throw new Error(response.error ?? 'Erro ao guardar')
+        }
+        qc.invalidateQueries({ queryKey: ['unavailable'] })
+        setModal(false)
+        setForm(EMPTY_FORM)
+      }
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : 'Erro ao guardar')
+    } finally {
+      setSubmitSaving(false)
     }
   }
 
   const openCreate = () => {
     setEditTarget(null)
     setForm(loggedBarberId ? { ...EMPTY_FORM, barbeiro_id: loggedBarberId } : EMPTY_FORM)
+    setFormError(null)
     setModal(true)
   }
   const openEdit   = (u: Unavailable) => {
@@ -157,6 +180,7 @@ export default function UnavailablePage() {
       is_all_day:       u.is_all_day ?? 1,
       recurrence_type:  'none',
     })
+    setFormError(null)
     setModal(true)
   }
 
@@ -185,9 +209,9 @@ export default function UnavailablePage() {
               disabled={!!loggedBarberId}
             >
               {!loggedBarberId && <option value="all">Todos os barbeiros</option>}
-              {barbers.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
+               {visibleBarbers.map(b => (
+                 <option key={b.id} value={b.id}>{b.name}</option>
+               ))}
             </select>
           </div>
           <div className="flex gap-2 items-end">
@@ -360,15 +384,49 @@ export default function UnavailablePage() {
       >
         <UnavailableEditorForm
           form={form}
-          barbers={barbers}
+          barbers={visibleBarbers}
           isNew={!editTarget}
           disableBarberSelection={!!loggedBarberId}
-          saving={create.isPending || update.isPending}
+          error={formError}
+          saving={submitSaving}
           onChange={(k, v) => upd(k as keyof UnavailableFormState, v as UnavailableFormState[keyof UnavailableFormState])}
-          onSave={handleSubmit}
+          onSave={() => { void handleSubmit() }}
           onCancel={() => setModal(false)}
         />
       </Modal>
+
+      <UnavailabilityConflictsModal
+        open={conflictReservations.length > 0}
+        reservations={conflictReservations}
+        saving={submitSaving}
+        onCancel={() => {
+          setConflictReservations([])
+          setPendingCreatePayload(null)
+        }}
+        onConfirm={async ({ selectedIds, reason }) => {
+          if (!pendingCreatePayload) return
+          setSubmitSaving(true)
+          setFormError(null)
+          try {
+            const response = await barbersApi.createUnavailable({
+              ...pendingCreatePayload,
+              skip_conflict_check: true,
+              cancel_reservation_ids: selectedIds,
+              cancel_reason: reason,
+            })
+            if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
+            qc.invalidateQueries({ queryKey: ['unavailable'] })
+            setModal(false)
+            setForm(EMPTY_FORM)
+            setPendingCreatePayload(null)
+            setConflictReservations([])
+          } catch (e: unknown) {
+            setFormError(e instanceof Error ? e.message : 'Erro ao guardar')
+          } finally {
+            setSubmitSaving(false)
+          }
+        }}
+      />
 
       {/* Modal detalhe do grupo */}
       {groupDetail && (

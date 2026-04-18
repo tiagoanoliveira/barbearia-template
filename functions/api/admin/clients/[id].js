@@ -61,7 +61,7 @@ export async function onRequest(context) {
         vals.push(sanitize(body.phone ?? '', 50) || null)
       }
       if (body.nif !== undefined) {
-        const nifRaw = sanitize(body.nif ?? '', 20)
+        const nifRaw = sanitize(String(body.nif ?? ''), 20)
         if (!isValidNif(nifRaw)) return badRequest('NIF inválido')
         updates.push('nif = ?')
         vals.push(nifRaw ? Number(nifRaw) : null)

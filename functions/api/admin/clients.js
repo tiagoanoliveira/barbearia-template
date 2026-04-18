@@ -77,6 +77,7 @@ export async function onRequest(context) {
       const phone = sanitize(body.phone ?? '', 50)  || null
 
       if (!name) return badRequest('Nome do cliente é obrigatório')
+      if (!phone) return badRequest('Telefone do cliente é obrigatório')
 
       const result = await env.DB.prepare(
         `INSERT INTO clientes (nome, email, telefone, password_hash, email_verificado, criado_em, atualizado_em)

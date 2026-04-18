@@ -24,7 +24,7 @@ export async function onRequest(context) {
     }
 
     const hasBarber = !!effectiveBarberId
-    const barberFilter = hasBarber ? 'AND barbeiro_id = ?' : ''
+    const barberFilter = hasBarber ? 'AND ds.barbeiro_id = ?' : ''
 
     const params = hasBarber
       ? [periodA_start, periodA_end, Number(effectiveBarberId), periodB_start, periodB_end, Number(effectiveBarberId)]
@@ -38,8 +38,10 @@ export async function onRequest(context) {
         SUM(concluidas)  AS concluidas,
         SUM(canceladas)  AS canceladas,
         SUM(faltas)      AS faltas
-      FROM daily_stats
-      WHERE data BETWEEN ? AND ? ${barberFilter}
+      FROM daily_stats ds
+      JOIN barbeiros b ON b.id = ds.barbeiro_id
+      WHERE b.ativo = 1
+        AND data BETWEEN ? AND ? ${barberFilter}
       GROUP BY data
       UNION ALL
       SELECT
@@ -49,8 +51,10 @@ export async function onRequest(context) {
         SUM(concluidas),
         SUM(canceladas),
         SUM(faltas)
-      FROM daily_stats
-      WHERE data BETWEEN ? AND ? ${barberFilter}
+      FROM daily_stats ds
+      JOIN barbeiros b ON b.id = ds.barbeiro_id
+      WHERE b.ativo = 1
+        AND data BETWEEN ? AND ? ${barberFilter}
       GROUP BY data
       ORDER BY periodo, data
     `

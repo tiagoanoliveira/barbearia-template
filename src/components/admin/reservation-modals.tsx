@@ -40,12 +40,19 @@ export function ReservationDetailModal({
   return (
     <Modal open onClose={onClose} title="Detalhe da reserva">
       <div className="space-y-3 text-sm">
-        <Row label="Cliente"  value={r.client_name} />
-        {r.client_photo_url && (
-          <div className="flex justify-end">
-            <img src={r.client_photo_url} alt={r.client_name} className="w-10 h-10 rounded-xl object-cover" />
+        <div className="flex items-center justify-between">
+          <span className="text-gray-500">Cliente</span>
+          <div className="flex items-center gap-2">
+            {r.client_photo_url ? (
+              <img src={r.client_photo_url} alt={r.client_name} className="w-9 h-9 rounded-xl object-cover" />
+            ) : (
+              <span className="w-9 h-9 rounded-xl bg-gray-100 text-xs font-semibold flex items-center justify-center text-gray-700">
+                {r.client_name.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span className="font-medium">{r.client_name}</span>
           </div>
-        )}
+        </div>
         {r.client_phone && (
           <Row label="Telefone" value={<a href={`tel:${r.client_phone}`} className="text-brand-600">{r.client_phone}</a>} />
         )}

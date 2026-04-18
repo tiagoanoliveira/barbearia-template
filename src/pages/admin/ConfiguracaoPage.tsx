@@ -326,7 +326,7 @@ const emptyBarber = (): BarberForm => ({ name: '', especialidades: '', color: '#
 
 function BarbeirosSection() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => adminApi.get<Barber[]>('/api/admin/barbers') })
+  const { data, isLoading } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => adminApi.get<Barber[]>('/api/admin/barbers?include_inactive=1') })
   const barbers: Barber[] = (data?.data as unknown as Barber[]) ?? []
 
   const [form, setForm]         = useState<BarberForm | null>(null)
@@ -460,7 +460,7 @@ function AdminUsersSection() {
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['admin-users-list'], queryFn: () => adminApi.get<AdminUser[]>('/api/admin/admin-users') })
   const users: AdminUser[] = (data?.data as unknown as AdminUser[]) ?? []
-  const { data: barbersData } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => adminApi.get<Barber[]>('/api/admin/barbers') })
+  const { data: barbersData } = useQuery({ queryKey: ['admin-barbers-cfg'], queryFn: () => adminApi.get<Barber[]>('/api/admin/barbers?include_inactive=1') })
   const barbers: Barber[] = (barbersData?.data as unknown as Barber[]) ?? []
 
   const [form, setForm]         = useState<AdminUserForm | null>(null)
