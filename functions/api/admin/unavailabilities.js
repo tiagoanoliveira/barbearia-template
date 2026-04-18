@@ -200,9 +200,10 @@ export async function onRequest(context) {
         }
       }
 
-      const selectedReservationIds = Array.isArray(cancel_reservation_ids)
-        ? [...new Set(cancel_reservation_ids.map(Number).filter(id => Number.isFinite(id) && id > 0))]
-        : []
+      const rawReservationIds = Array.isArray(cancel_reservation_ids) ? cancel_reservation_ids.map(Number) : []
+      const hasInvalidIds = rawReservationIds.some(id => !isValidId(id))
+      if (hasInvalidIds) return badRequest('Existem reservas inválidas na seleção.')
+      const selectedReservationIds = [...new Set(rawReservationIds)]
       const cancelReason = sanitize(cancel_reason ?? '', 1000)
       if (selectedReservationIds.length && !cancelReason) {
         return badRequest('O motivo de cancelamento é obrigatório.')
@@ -225,17 +226,21 @@ export async function onRequest(context) {
           toCancel.map(r => updateStmt.bind(buildCancellationPrivateNote(r.nota_privada, cancelReason), r.id))
         )
         toCancel.forEach(r => {
-          sendReservationCancellation(context, {
-            reservaId: r.id,
-            clientEmail: r.client_email,
-            clientName: r.client_name,
-            dataHora: r.data_hora,
-            serviceName: r.service_name,
-            barberName: r.barber_name,
-            duracao: r.service_duration,
-            motivo: cancelReason,
-            resendLembreteId: r.resend_lembrete_id ?? null,
-          })
+          try {
+            sendReservationCancellation(context, {
+              reservaId: r.id,
+              clientEmail: r.client_email,
+              clientName: r.client_name,
+              dataHora: r.data_hora,
+              serviceName: r.service_name,
+              barberName: r.barber_name,
+              duracao: r.service_duration,
+              motivo: cancelReason,
+              resendLembreteId: r.resend_lembrete_id ?? null,
+            })
+          } catch (err) {
+            console.error('Falha ao agendar email de cancelamento de reserva:', err?.message ?? err)
+          }
         })
         cancelledReservations = toCancel.map(r => r.id)
       }

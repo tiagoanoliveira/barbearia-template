@@ -174,12 +174,15 @@ export function NewReservationForm({
   const [newClientPhone, setNewClientPhone] = useState('')
   const [creatingClient, setCreatingClient] = useState(false)
   const [newClientError, setNewClientError] = useState<string | null>(null)
+  const canCreateNewClient = newClientName.trim().length > 0 && newClientPhone.trim().length > 0
 
   const selectedService = services.find(s => s.id === (form.service_id ?? 0))
 
   const handleCreateClient = async () => {
-    if (!newClientName.trim()) { setNewClientError('Nome do cliente é obrigatório.'); return }
-    if (!newClientPhone.trim()) { setNewClientError('Telefone do cliente é obrigatório.'); return }
+    if (!canCreateNewClient) {
+      setNewClientError(!newClientName.trim() ? 'Nome do cliente é obrigatório.' : 'Telefone do cliente é obrigatório.')
+      return
+    }
     setCreatingClient(true)
     setNewClientError(null)
     try {
@@ -213,11 +216,27 @@ export function NewReservationForm({
         </div>
         {newClientMode ? (
           <div className="space-y-2 border rounded-xl p-3 bg-gray-50">
-            <input type="text" placeholder="Nome do cliente *" className="input text-sm w-full" value={newClientName} onChange={e => { setNewClientName(e.target.value); setNewClientError(null) }} />
+            <input
+              type="text"
+              placeholder="Nome do cliente *"
+              className="input text-sm w-full"
+              value={newClientName}
+              onChange={e => { setNewClientName(e.target.value); setNewClientError(null) }}
+              required
+              aria-required="true"
+            />
             <input type="email" placeholder="Email (opcional)" className="input text-sm w-full" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} />
-            <input type="tel" placeholder="Telefone *" className="input text-sm w-full" value={newClientPhone} onChange={e => { setNewClientPhone(e.target.value); setNewClientError(null) }} />
+            <input
+              type="tel"
+              placeholder="Telefone *"
+              className="input text-sm w-full"
+              value={newClientPhone}
+              onChange={e => { setNewClientPhone(e.target.value); setNewClientError(null) }}
+              required
+              aria-required="true"
+            />
             {newClientError && <p className="text-xs text-red-500">{newClientError}</p>}
-            <button type="button" onClick={handleCreateClient} disabled={creatingClient || !newClientName.trim() || !newClientPhone.trim()} className="btn-primary w-full text-xs mt-1 disabled:opacity-50">
+            <button type="button" onClick={handleCreateClient} disabled={creatingClient || !canCreateNewClient} className="btn-primary w-full text-xs mt-1 disabled:opacity-50">
               {creatingClient ? 'A criar cliente...' : 'Criar e associar cliente'}
             </button>
           </div>

@@ -75,8 +75,8 @@ function hexToRgba(hex: string, alpha: number) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
   return `rgba(${r},${g},${b},${alpha})`
 }
-function serviceShortLabel(serviceName: string, abreviacao?: string) {
-  const short = (abreviacao ?? '').trim()
+function serviceShortLabel(serviceName: string, abbreviation?: string) {
+  const short = (abbreviation ?? '').trim()
   if (short) return short.toUpperCase()
   return serviceName
     .split(' ')
@@ -179,16 +179,17 @@ export default function CalendarPage() {
     queryFn:  () => barbersApi.listUnavailable({ date: selectedDate, barberId: effectiveBarberId ?? undefined }),
   })
 
-  const allBarbers: Barber[] = (barbersRes?.data ?? []).filter(b => b.active)
+  const activeBarbers: Barber[] = (barbersRes?.data ?? []).filter(b => b.active)
+  const sortedActiveBarbers = useMemo(() => [...activeBarbers].sort((a, b) => a.id - b.id), [activeBarbers])
   // Barbeiros visíveis na grelha (filtrado por barbeiro logado ou filtro manual)
   const barbers: Barber[] = useMemo(() => {
     const base = loggedBarberId
-      ? allBarbers.filter(b => b.id === loggedBarberId)
+      ? activeBarbers.filter(b => b.id === loggedBarberId)
       : barberFilterId
-        ? allBarbers.filter(b => b.id === barberFilterId)
-        : [...allBarbers]
+        ? activeBarbers.filter(b => b.id === barberFilterId)
+        : [...activeBarbers]
     return base.sort((a, b) => a.id - b.id)
-  }, [allBarbers, loggedBarberId, barberFilterId])
+  }, [activeBarbers, loggedBarberId, barberFilterId])
 
   const services: Service[]         = (servicesRes?.data as unknown as Service[]) ?? []
   const reservations: Reservation[] = resRes?.data?.items ?? []
@@ -355,7 +356,7 @@ export default function CalendarPage() {
                 disabled={!!loggedBarberId}
               >
                 {!loggedBarberId && <option value="">Todos os barbeiros</option>}
-                {[...allBarbers].sort((a, b) => a.id - b.id).map(b => (
+                {sortedActiveBarbers.map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>

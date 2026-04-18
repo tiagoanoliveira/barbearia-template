@@ -28,6 +28,14 @@ export function UnavailabilityConflictsModal({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (open) {
+      setSelectedIds(allIds)
+      setReason('')
+      setError(null)
+    }
+  }, [open, allIds])
+
   const toggle = (id: number) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
@@ -70,7 +78,7 @@ export function UnavailabilityConflictsModal({
           onClick={() => setSelectedIds(allSelected ? [] : allIds)}
           disabled={saving}
         >
-          {allSelected ? 'Desmarcar todas' : 'Selecionar Todas'}
+          {allSelected ? 'Desmarcar todas' : 'Selecionar todas'}
         </button>
 
         <div className="border border-gray-200 rounded-xl max-h-72 overflow-y-auto divide-y divide-gray-100">
@@ -94,8 +102,9 @@ export function UnavailabilityConflictsModal({
         </div>
 
         <div>
-          <label className="block text-xs text-gray-600 mb-1.5 font-medium">Motivo do Cancelamento <span className="text-red-500">*</span></label>
+          <label htmlFor="unavailability-cancel-reason" className="block text-xs text-gray-600 mb-1.5 font-medium">Motivo do Cancelamento <span className="text-red-500">*</span></label>
           <textarea
+            id="unavailability-cancel-reason"
             rows={3}
             className={`input text-sm w-full resize-none ${error ? 'border-red-400' : ''}`}
             value={reason}
@@ -109,10 +118,3 @@ export function UnavailabilityConflictsModal({
     </Modal>
   )
 }
-  useEffect(() => {
-    if (open) {
-      setSelectedIds(allIds)
-      setReason('')
-      setError(null)
-    }
-  }, [open, allIds])

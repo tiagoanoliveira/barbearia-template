@@ -87,7 +87,7 @@ export default function UnavailablePage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['unavailable'] }); setGroupDetail(null) },
   })
 
-  const barbers    = (barbersRes?.data ?? []).filter(b => b.active)
+  const visibleBarbers = (barbersRes?.data ?? []).filter(b => b.active)
   const allItems: Unavailable[] = (unavailRes?.data ?? []) as unknown as Unavailable[]
 
   const now = startOfDay(new Date())
@@ -209,9 +209,9 @@ export default function UnavailablePage() {
               disabled={!!loggedBarberId}
             >
               {!loggedBarberId && <option value="all">Todos os barbeiros</option>}
-              {barbers.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
+               {visibleBarbers.map(b => (
+                 <option key={b.id} value={b.id}>{b.name}</option>
+               ))}
             </select>
           </div>
           <div className="flex gap-2 items-end">
@@ -384,7 +384,7 @@ export default function UnavailablePage() {
       >
         <UnavailableEditorForm
           form={form}
-          barbers={barbers}
+          barbers={visibleBarbers}
           isNew={!editTarget}
           disableBarberSelection={!!loggedBarberId}
           error={formError}
