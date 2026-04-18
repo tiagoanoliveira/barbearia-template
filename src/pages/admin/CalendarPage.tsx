@@ -475,9 +475,8 @@ export default function CalendarPage() {
                                   </p>
                                 ) : (
                                   <>
-                                    <p className="text-[12px] font-semibold leading-tight truncate text-black">{r.client_name}</p>
-                                    <p className="text-[11px] leading-tight truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>
-                                  </>
+                                    <p className="text-[13px] font-semibold leading-4 truncate text-black">{r.client_name}</p>
+                                    <p className="text-[12px] leading-4 truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>                                  </>
                                 )}
                               </div>
                             )
