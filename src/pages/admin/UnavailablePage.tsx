@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Pencil, CalendarOff, Eye, ChevronDown, ChevronUp, Filter } from 'lucide-react'
 import { format, parseISO, isAfter, startOfDay } from 'date-fns'
@@ -60,6 +60,7 @@ export default function UnavailablePage() {
   const qc = useQueryClient()
   const [modal, setModal]           = useState(false)
   const [editTarget, setEditTarget] = useState<Unavailable | null>(null)
+  const [editGroupId, setEditGroupId] = useState<string | null>(null)
   const [form, setForm]             = useState<UnavailableFormState>(EMPTY_FORM)
   const [groupDetail, setGroupDetail] = useState<GroupDetailState>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
@@ -134,7 +135,22 @@ export default function UnavailablePage() {
     setSubmitSaving(true)
     setFormError(null)
     try {
-      if (editTarget) {
+      if (editGroupId) {
+        const response = await barbersApi.updateGroup(editGroupId, {
+          barber_id: form.barbeiro_id,
+          start: inicio,
+          end: fim,
+          is_all_day: !!form.is_all_day,
+          type: form.tipo,
+          reason: form.motivo,
+          recurrence_type: form.recurrence_type ?? 'none',
+          recurrence_end_date: form.recurrence_end_date,
+        })
+        if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
+        qc.invalidateQueries({ queryKey: ['unavailable'] })
+        setModal(false)
+        setEditGroupId(null)
+      } else if (editTarget) {
         const response = await barbersApi.updateUnavailable(editTarget.id, { ...form, data_hora_inicio: inicio, data_hora_fim: fim })
         if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
         qc.invalidateQueries({ queryKey: ['unavailable'] })
@@ -145,6 +161,11 @@ export default function UnavailablePage() {
         const response = await barbersApi.createUnavailable(payload)
         if (!response.success) {
           const conflicts = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
+          console.debug('[UnavailablePage] createUnavailable returned unsuccessfully', {
+            payload,
+            error: response.error,
+            conflicts: conflicts.length,
+          })
           if (conflicts.length) {
             setConflictReservations(conflicts)
             setPendingCreatePayload(payload)
@@ -165,12 +186,14 @@ export default function UnavailablePage() {
 
   const openCreate = () => {
     setEditTarget(null)
+    setEditGroupId(null)
     setForm(loggedBarberId ? { ...EMPTY_FORM, barbeiro_id: loggedBarberId } : EMPTY_FORM)
     setFormError(null)
     setModal(true)
   }
   const openEdit   = (u: Unavailable) => {
     setEditTarget(u)
+    setEditGroupId(null)
     setForm({
       barbeiro_id:      u.barbeiro_id,
       data_hora_inicio: u.data_hora_inicio,
@@ -178,7 +201,27 @@ export default function UnavailablePage() {
       tipo:             u.tipo,
       motivo:           u.motivo ?? '',
       is_all_day:       u.is_all_day ?? 1,
-      recurrence_type:  'none',
+      recurrence_type:  u.recurrence_type ?? 'none',
+      recurrence_end_date: u.recurrence_end_date,
+    })
+    setFormError(null)
+    setModal(true)
+  }
+  const openEditGroup = (groupId: string, items: Unavailable[]) => {
+    const sortedItems = [...items].sort((a, b) => a.data_hora_inicio.localeCompare(b.data_hora_inicio))
+    const upcoming = sortedItems.find(i => new Date(i.data_hora_inicio).getTime() >= Date.now()) ?? sortedItems[0]
+    if (!upcoming) return
+    setEditTarget(null)
+    setEditGroupId(groupId)
+    setForm({
+      barbeiro_id: upcoming.barbeiro_id,
+      data_hora_inicio: upcoming.data_hora_inicio,
+      data_hora_fim: upcoming.data_hora_fim,
+      tipo: upcoming.tipo,
+      motivo: upcoming.motivo ?? '',
+      is_all_day: upcoming.is_all_day ?? 1,
+      recurrence_type: upcoming.recurrence_type ?? 'none',
+      recurrence_end_date: upcoming.recurrence_end_date,
     })
     setFormError(null)
     setModal(true)
@@ -193,6 +236,15 @@ export default function UnavailablePage() {
   const toggleExpand = (gid: string) => setExpanded(prev => {
     const n = new Set(prev); n.has(gid) ? n.delete(gid) : n.add(gid); return n
   })
+
+  useEffect(() => {
+    if (conflictReservations.length > 0) {
+      console.debug('[UnavailablePage] opening conflicts modal', {
+        conflicts: conflictReservations.length,
+        pendingPayload: pendingCreatePayload,
+      })
+    }
+  }, [conflictReservations, pendingCreatePayload])
 
   return (
     <div className="space-y-4">
@@ -281,6 +333,11 @@ export default function UnavailablePage() {
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                             title="Ver detalhes"
                           ><Eye size={14} /></button>
+                          <button
+                            onClick={() => openEditGroup(gid, sorted)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"
+                            title="Editar recorrência"
+                          ><Pencil size={14} /></button>
                           <button
                             onClick={() => toggleExpand(gid)}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
@@ -379,13 +436,14 @@ export default function UnavailablePage() {
       {/* Modal criar / editar */}
       <Modal
         open={modal}
-        onClose={() => { setModal(false); setEditTarget(null); setForm(EMPTY_FORM) }}
-        title={editTarget ? 'Editar indisponibilidade' : 'Nova indisponibilidade'}
+        onClose={() => { setModal(false); setEditTarget(null); setEditGroupId(null); setForm(EMPTY_FORM) }}
+        title={editGroupId ? 'Editar recorrência' : editTarget ? 'Editar indisponibilidade' : 'Nova indisponibilidade'}
       >
         <UnavailableEditorForm
           form={form}
           barbers={visibleBarbers}
-          isNew={!editTarget}
+          isNew={!editTarget && !editGroupId}
+          showRecurrenceFields={!!editGroupId}
           disableBarberSelection={!!loggedBarberId}
           error={formError}
           saving={submitSaving}
@@ -441,6 +499,13 @@ export default function UnavailablePage() {
                 onClick={() => { if (window.confirm('Eliminar todo o grupo?')) removeGroup.mutate(groupDetail.group_id) }}
                 disabled={removeGroup.isPending}
               >🗑️ Eliminar tudo</button>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  openEditGroup(groupDetail.group_id, groupDetail.items)
+                  setGroupDetail(null)
+                }}
+              >✏️ Editar regras</button>
               <button className="btn-secondary" onClick={() => setGroupDetail(null)}>Fechar</button>
             </>
           }

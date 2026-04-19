@@ -24,6 +24,13 @@ export const STATUS_COLORS: Record<string, string> = {
 // Na edição é possível alterar diretamente para qualquer estado, incluindo cancelada.
 export const EDIT_STATUSES: ReservationStatus[] = ['confirmada', 'concluida', 'faltou', 'cancelada']
 
+function hasMeaningfulComment(comment?: string) {
+  if (!comment) return false
+  const trimmed = comment.trim()
+  if (!trimmed) return false
+  return !/^\[\s*\]$/.test(trimmed)
+}
+
 // ─── ReservationDetailModal ───────────────────────────────────────────────────
 export function ReservationDetailModal({
   reservation, onClose, onEdit, onChangeStatus, onCancel,
@@ -50,7 +57,11 @@ export function ReservationDetailModal({
                 {r.client_name.charAt(0).toUpperCase()}
               </span>
             )}
-            <span className="font-medium">{r.client_name}</span>
+            <span className="font-medium">
+              {r.created_by === 'online' && <span className="text-blue-600 mr-0.5">@</span>}
+              {hasMeaningfulComment(r.comentario) && <span className="mr-0.5">💬</span>}
+              {r.client_name}
+            </span>
           </div>
         </div>
         {r.client_phone && (
@@ -64,7 +75,7 @@ export function ReservationDetailModal({
             {STATUS_LABEL[r.status] ?? r.status}
           </span>
         } />
-        {r.comentario   && <NoteBox label="Notas do cliente" text={r.comentario}   bg="gray" />}
+        {hasMeaningfulComment(r.comentario) && <NoteBox label="Notas do cliente" text={r.comentario ?? ''}   bg="gray" />}
         {r.nota_privada && <NoteBox label="Nota privada"     text={r.nota_privada} bg="amber" />}
         <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2">
           {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
