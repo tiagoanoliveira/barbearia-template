@@ -1,5 +1,16 @@
 import { adminApi } from './client'
 import type { Barber, Unavailable, ApiResponse } from '@/types'
+import type { UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
+
+export interface CreateUnavailableConflictResponse {
+  success: false
+  error: string
+  data: { conflicts: UnavailabilityConflictReservation[] }
+}
+
+export type CreateUnavailableResult =
+  | ApiResponse<Unavailable>
+  | CreateUnavailableConflictResponse
 
 export const barbersApi = {
   list: (options?: { includeInactive?: boolean }) =>
@@ -20,25 +31,51 @@ export const barbersApi = {
     return adminApi.get<Unavailable[]>(`/api/admin/unavailabilities${q ? `?${q}` : ''}`)
   },
 
-  createUnavailable: (data: Partial<Unavailable> & {
+  createUnavailable: async (data: Partial<Unavailable> & {
     cancel_reservation_ids?: number[]
     cancel_reason?: string
     skip_conflict_check?: boolean
-  }) => {
+  }): Promise<CreateUnavailableResult> => {
     const payload = {
-      barber_id:           data.barbeiro_id,
-      start:               data.data_hora_inicio,
-      end:                 data.data_hora_fim,
-      is_all_day:          !!data.is_all_day,
-      type:                data.tipo,
-      reason:              data.motivo,
-      recurrence_type:     data.recurrence_type,
-      recurrence_end_date: data.recurrence_end_date,
+      barber_id:              data.barbeiro_id,
+      start:                  data.data_hora_inicio,
+      end:                    data.data_hora_fim,
+      is_all_day:             !!data.is_all_day,
+      type:                   data.tipo,
+      reason:                 data.motivo,
+      recurrence_type:        data.recurrence_type,
+      recurrence_end_date:    data.recurrence_end_date,
       cancel_reservation_ids: data.cancel_reservation_ids,
       cancel_reason:          data.cancel_reason,
       skip_conflict_check:    data.skip_conflict_check,
     }
-    return adminApi.post<Unavailable>('/api/admin/unavailabilities', payload)
+
+    const token = localStorage.getItem('admin_token')
+    const res = await fetch('/api/admin/unavailabilities', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    })
+
+    // 409 = conflitos com reservas existentes — não é um erro fatal, devolver os dados
+    if (res.status === 409) {
+      const json = await res.json() as { success: false; error: string; data: { conflicts: UnavailabilityConflictReservation[] } }
+      return json
+    }
+
+    if (res.status === 401) {
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_user')
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+        window.location.href = '/admin/login'
+      }
+      return { success: false, error: 'Sessão expirada' }
+    }
+
+    return res.json() as Promise<ApiResponse<Unavailable>>
   },
 
   updateUnavailable: (id: number, data: Partial<Unavailable>) => {
