@@ -55,23 +55,46 @@ type GroupDetailState = {
 
 /** Extrai conflitos do corpo de uma resposta 409, com segurança de tipos. */
 function extractConflicts(raw: unknown): UnavailabilityConflictReservation[] {
-  if (
-    raw !== null &&
-    typeof raw === 'object' &&
-    'success' in raw && (raw as Record<string, unknown>).success === false &&
-    'data' in raw
-  ) {
-    const data = (raw as Record<string, unknown>).data
-    if (
-      data !== null &&
-      typeof data === 'object' &&
-      'conflicts' in data &&
-      Array.isArray((data as Record<string, unknown>).conflicts)
-    ) {
-      return (data as { conflicts: UnavailabilityConflictReservation[] }).conflicts
-    }
+  console.log('[extractConflicts] raw recebido:', JSON.stringify(raw))
+
+  if (raw === null || typeof raw !== 'object') {
+    console.warn('[extractConflicts] raw não é objecto:', typeof raw)
+    return []
   }
-  return []
+
+  const obj = raw as Record<string, unknown>
+  console.log('[extractConflicts] keys:', Object.keys(obj))
+  console.log('[extractConflicts] success:', obj.success, '| tem data:', 'data' in obj)
+
+  if (obj.success !== false) {
+    console.log('[extractConflicts] success não é false, sem conflitos')
+    return []
+  }
+
+  if (!('data' in obj)) {
+    console.warn('[extractConflicts] sem campo data na resposta')
+    return []
+  }
+
+  const data = obj.data
+  console.log('[extractConflicts] data:', JSON.stringify(data))
+
+  if (data === null || typeof data !== 'object') {
+    console.warn('[extractConflicts] data não é objecto')
+    return []
+  }
+
+  const dataObj = data as Record<string, unknown>
+  console.log('[extractConflicts] data keys:', Object.keys(dataObj))
+  console.log('[extractConflicts] tem conflicts:', 'conflicts' in dataObj, '| é array:', Array.isArray(dataObj.conflicts))
+
+  if (!('conflicts' in dataObj) || !Array.isArray(dataObj.conflicts)) {
+    console.warn('[extractConflicts] campo conflicts em falta ou não é array')
+    return []
+  }
+
+  console.log('[extractConflicts] conflitos encontrados:', dataObj.conflicts.length)
+  return dataObj.conflicts as UnavailabilityConflictReservation[]
 }
 
 export default function UnavailablePage() {
@@ -140,6 +163,8 @@ export default function UnavailablePage() {
   })
 
   const handleSubmit = async () => {
+    console.log('[handleSubmit] início, form:', JSON.stringify(form))
+
     if (!form.data_hora_inicio) {
       setFormError('Data de início obrigatória.')
       return
@@ -153,6 +178,10 @@ export default function UnavailablePage() {
     const endDate = (form.data_hora_fim || form.data_hora_inicio).substring(0, 10)
     const inicio = form.is_all_day ? `${startDate}T09:00:00` : form.data_hora_inicio
     const fim    = form.is_all_day ? `${endDate}T20:00:00` : form.data_hora_fim
+
+    console.log('[handleSubmit] inicio:', inicio, '| fim:', fim, '| is_all_day:', form.is_all_day)
+    console.log('[handleSubmit] editGroupId:', editGroupId, '| editTarget:', editTarget?.id ?? null)
+
     setSubmitSaving(true)
     setFormError(null)
     try {
@@ -179,11 +208,22 @@ export default function UnavailablePage() {
         setEditTarget(null)
       } else {
         const payload = { ...form, data_hora_inicio: inicio, data_hora_fim: fim }
-        const raw = await barbersApi.createUnavailable(payload)
+        console.log('[handleSubmit] payload enviado para createUnavailable:', JSON.stringify(payload))
 
-        // Tentar extrair conflitos do corpo 409
+        let raw: unknown
+        try {
+          raw = await barbersApi.createUnavailable(payload)
+          console.log('[handleSubmit] resposta raw da API:', JSON.stringify(raw))
+        } catch (fetchErr) {
+          console.error('[handleSubmit] EXCEPÇÃO ao chamar createUnavailable:', fetchErr)
+          throw fetchErr
+        }
+
         const conflicts = extractConflicts(raw)
+        console.log('[handleSubmit] conflitos extraídos:', conflicts.length)
+
         if (conflicts.length > 0) {
+          console.log('[handleSubmit] abrindo modal de conflitos')
           setConflictReservations(conflicts)
           setPendingCreatePayload(payload)
           return
@@ -191,12 +231,14 @@ export default function UnavailablePage() {
 
         // Resposta normal de sucesso ou erro de negócio
         const response = raw as { success: boolean; error?: string }
+        console.log('[handleSubmit] response.success:', response.success)
         if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
         qc.invalidateQueries({ queryKey: ['unavailable'] })
         setModal(false)
         setForm(EMPTY_FORM)
       }
     } catch (e: unknown) {
+      console.error('[handleSubmit] EXCEPÇÃO no bloco catch principal:', e)
       setFormError(e instanceof Error ? e.message : 'Erro ao guardar')
     } finally {
       setSubmitSaving(false)
@@ -258,7 +300,7 @@ export default function UnavailablePage() {
 
   useEffect(() => {
     if (conflictReservations.length > 0) {
-      console.debug('[UnavailablePage] modal de conflitos aberto', conflictReservations.length, 'reservas')
+      console.log('[UnavailablePage] modal de conflitos aberto com', conflictReservations.length, 'reservas')
     }
   }, [conflictReservations])
 
