@@ -53,6 +53,27 @@ type GroupDetailState = {
   items: Unavailable[]
 } | null
 
+/** Extrai conflitos do corpo de uma resposta 409, com segurança de tipos. */
+function extractConflicts(raw: unknown): UnavailabilityConflictReservation[] {
+  if (
+    raw !== null &&
+    typeof raw === 'object' &&
+    'success' in raw && (raw as Record<string, unknown>).success === false &&
+    'data' in raw
+  ) {
+    const data = (raw as Record<string, unknown>).data
+    if (
+      data !== null &&
+      typeof data === 'object' &&
+      'conflicts' in data &&
+      Array.isArray((data as Record<string, unknown>).conflicts)
+    ) {
+      return (data as { conflicts: UnavailabilityConflictReservation[] }).conflicts
+    }
+  }
+  return []
+}
+
 export default function UnavailablePage() {
   const adminUser = useAdminUser()
   const isBarber = adminUser?.role === 'barbeiro'
@@ -158,18 +179,18 @@ export default function UnavailablePage() {
         setEditTarget(null)
       } else {
         const payload = { ...form, data_hora_inicio: inicio, data_hora_fim: fim }
-        const response = await barbersApi.createUnavailable(payload)
+        const raw = await barbersApi.createUnavailable(payload)
 
-        // Conflitos: a API retornou 409 com lista de reservas sobrepostas
-        if (!response.success && 'data' in response && response.data && 'conflicts' in response.data) {
-          const conflicts = response.data.conflicts ?? []
-          if (conflicts.length > 0) {
-            setConflictReservations(conflicts)
-            setPendingCreatePayload(payload)
-            return
-          }
+        // Tentar extrair conflitos do corpo 409
+        const conflicts = extractConflicts(raw)
+        if (conflicts.length > 0) {
+          setConflictReservations(conflicts)
+          setPendingCreatePayload(payload)
+          return
         }
 
+        // Resposta normal de sucesso ou erro de negócio
+        const response = raw as { success: boolean; error?: string }
         if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
         qc.invalidateQueries({ queryKey: ['unavailable'] })
         setModal(false)
@@ -237,12 +258,9 @@ export default function UnavailablePage() {
 
   useEffect(() => {
     if (conflictReservations.length > 0) {
-      console.debug('[UnavailablePage] opening conflicts modal', {
-        conflicts: conflictReservations.length,
-        pendingPayload: pendingCreatePayload,
-      })
+      console.debug('[UnavailablePage] modal de conflitos aberto', conflictReservations.length, 'reservas')
     }
-  }, [conflictReservations, pendingCreatePayload])
+  }, [conflictReservations])
 
   return (
     <div className="space-y-4">
@@ -464,12 +482,13 @@ export default function UnavailablePage() {
           setSubmitSaving(true)
           setFormError(null)
           try {
-            const response = await barbersApi.createUnavailable({
+            const raw = await barbersApi.createUnavailable({
               ...pendingCreatePayload,
               skip_conflict_check: true,
               cancel_reservation_ids: selectedIds,
               cancel_reason: reason,
             })
+            const response = raw as { success: boolean; error?: string }
             if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
             qc.invalidateQueries({ queryKey: ['unavailable'] })
             setModal(false)
