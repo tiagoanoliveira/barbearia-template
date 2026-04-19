@@ -40,6 +40,7 @@ export function UnavailabilityConflictsModal({
     () => reservations.length > 0 && reservations.every(r => selected.has(r.id)),
     [reservations, selected]
   )
+  const hasSelectedReservations = selected.size > 0
 
   const toggleOne = (id: number) => {
     setSelected(prev => {
@@ -119,7 +120,7 @@ export function UnavailabilityConflictsModal({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Motivo do cancelamento {selected.size > 0 ? '*' : ''}
+            Motivo do cancelamento {hasSelectedReservations ? '*' : ''}
           </label>
           <textarea
             rows={3}

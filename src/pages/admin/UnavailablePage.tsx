@@ -53,6 +53,11 @@ type GroupDetailState = {
   items: Unavailable[]
 } | null
 
+function extractUnavailabilityConflicts(data: unknown): UnavailabilityConflictReservation[] {
+  const maybe = data as { conflicts?: UnavailabilityConflictReservation[] } | undefined
+  return Array.isArray(maybe?.conflicts) ? maybe.conflicts : []
+}
+
 export default function UnavailablePage() {
   const adminUser = useAdminUser()
   const isBarber = adminUser?.role === 'barbeiro'
@@ -152,7 +157,7 @@ export default function UnavailablePage() {
         const payload = { ...form, data_hora_inicio: inicio, data_hora_fim: fim }
         const response = await barbersApi.createUnavailable(payload)
         if (!response.success) {
-          const conflictList = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
+          const conflictList = extractUnavailabilityConflicts(response.data)
           if (conflictList.length > 0) {
             setConflicts(conflictList)
             setPendingCreatePayload(payload)

@@ -230,7 +230,7 @@ export async function onRequest(context) {
         }, 409)
       }
 
-      let cancelledReservations = 0
+      let cancelledCount = 0
       if (skip_conflict_check && Array.isArray(cancel_reservation_ids) && cancel_reservation_ids.length > 0) {
         const validIds = new Set(
           cancel_reservation_ids
@@ -238,7 +238,7 @@ export async function onRequest(context) {
             .filter(id => Number.isInteger(id) && id > 0)
         )
         const selectedConflicts = conflicts.filter(conflict => validIds.has(Number(conflict.id)))
-        cancelledReservations = await cancelSelectedReservations(context, selectedConflicts, cancel_reason)
+        cancelledCount = await cancelSelectedReservations(context, selectedConflicts, cancel_reason)
       }
 
       if (rec !== 'none' && recurrence_end_date) {
@@ -254,7 +254,7 @@ export async function onRequest(context) {
             stmt.bind(barber_id, s, e, is_all_day ? 1 : 0, tipo, sanitize(reason ?? '', 200), rec, recurrence_end_date, groupId)
           )
         )
-        return created({ groupId, count: occurrences.length, cancelled_reservations: cancelledReservations })
+        return created({ groupId, count: occurrences.length, cancelled_reservations: cancelledCount })
       }
 
       const r = await env.DB.prepare(`
@@ -268,7 +268,7 @@ export async function onRequest(context) {
         rec, recurrence_end_date ?? null,
       ).run()
 
-      return created({ id: r.meta.last_row_id, cancelled_reservations: cancelledReservations })
+      return created({ id: r.meta.last_row_id, cancelled_reservations: cancelledCount })
     } catch (e) {
       return serverError('Erro ao criar indisponibilidade', e.message)
     }
