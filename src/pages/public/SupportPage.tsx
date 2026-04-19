@@ -5,7 +5,7 @@ export default function SupportPage() {
     <iframe
       title="Suporte"
       src={barberShopConfig.supportIframeSrc}
-      className="w-full h-dvh border-0"
+      className="w-full h-dvh border-0 mt-2.5"
       loading="lazy"
     />
   )
