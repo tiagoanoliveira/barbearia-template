@@ -1,6 +1,12 @@
 import { adminApi } from './client'
 import type { Barber, Unavailable, ApiResponse } from '@/types'
 
+type UnavailabilityCreatePayload = Partial<Unavailable> & {
+  skip_conflict_check?: boolean
+  cancel_reservation_ids?: number[]
+  cancel_reason?: string
+}
+
 export const barbersApi = {
   list: (options?: { includeInactive?: boolean }) =>
     adminApi.get<Barber[]>(`/api/admin/barbers${options?.includeInactive ? '?include_inactive=1' : ''}`),
@@ -19,7 +25,7 @@ export const barbersApi = {
     return adminApi.get<Unavailable[]>(`/api/admin/unavailabilities${q ? `?${q}` : ''}`)
   },
 
-  createUnavailable: (data: Partial<Unavailable>) => {
+  createUnavailable: (data: UnavailabilityCreatePayload) => {
     const payload = {
       barber_id:           data.barbeiro_id,
       start:               data.data_hora_inicio,
@@ -29,6 +35,9 @@ export const barbersApi = {
       reason:              data.motivo,
       recurrence_type:     data.recurrence_type,
       recurrence_end_date: data.recurrence_end_date,
+      skip_conflict_check: !!data.skip_conflict_check,
+      cancel_reservation_ids: data.cancel_reservation_ids ?? [],
+      cancel_reason: data.cancel_reason,
     }
     return adminApi.post<Unavailable>('/api/admin/unavailabilities', payload)
   },
