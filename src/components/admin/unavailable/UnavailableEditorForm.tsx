@@ -12,6 +12,7 @@ export interface UnavailableEditorFormProps {
   form: Partial<Unavailable> & { recurrence_end_date?: string }
   barbers: Barber[]
   isNew: boolean
+  showRecurrenceFields?: boolean
   error?: string | null
   saving?: boolean
   disableBarberSelection?: boolean
@@ -24,6 +25,7 @@ export function UnavailableEditorForm({
   form,
   barbers,
   isNew,
+  showRecurrenceFields,
   error,
   saving,
   disableBarberSelection,
@@ -32,6 +34,7 @@ export function UnavailableEditorForm({
   onCancel,
 }: UnavailableEditorFormProps) {
   const fmtLocal = (iso?: string) => iso ? iso.substring(0, 16) : ''
+  const shouldShowRecurrence = isNew || !!showRecurrenceFields
 
   return (
     <div className="space-y-3">
@@ -86,7 +89,7 @@ export function UnavailableEditorForm({
           </div>
         </div>
       )}
-      {isNew && (
+      {shouldShowRecurrence && (
         <>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Recorrência</label>

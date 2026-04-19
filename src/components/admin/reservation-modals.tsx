@@ -10,6 +10,7 @@ import { barbersApi } from '@/api/barbers'
 import { adminApi } from '@/api/client'
 import Modal from '@/components/ui/Modal'
 import type { Reservation, ReservationStatus, Service } from '@/types'
+import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
 // ─── Constantes partilhadas ───────────────────────────────────────────────────
 export const STATUS_LABEL: Record<string, string> = {
@@ -50,7 +51,11 @@ export function ReservationDetailModal({
                 {r.client_name.charAt(0).toUpperCase()}
               </span>
             )}
-            <span className="font-medium">{r.client_name}</span>
+            <span className="font-medium">
+              {r.created_by === 'online' && <span className="text-blue-600 mr-0.5">@</span>}
+              {hasMeaningfulReservationComment(r.comentario) && <span className="mr-0.5">💬</span>}
+              {r.client_name}
+            </span>
           </div>
         </div>
         {r.client_phone && (
@@ -64,7 +69,7 @@ export function ReservationDetailModal({
             {STATUS_LABEL[r.status] ?? r.status}
           </span>
         } />
-        {r.comentario   && <NoteBox label="Notas do cliente" text={r.comentario}   bg="gray" />}
+        {hasMeaningfulReservationComment(r.comentario) && <NoteBox label="Notas do cliente" text={r.comentario ?? ''}   bg="gray" />}
         {r.nota_privada && <NoteBox label="Nota privada"     text={r.nota_privada} bg="amber" />}
         <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2">
           {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (

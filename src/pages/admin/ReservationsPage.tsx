@@ -13,6 +13,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { ClipboardList } from 'lucide-react'
 import type { Reservation } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
+import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 import {
   ReservationDetailModal,
   ReservationEditModal,
@@ -159,7 +160,11 @@ export default function ReservationsPage() {
                           <span className="text-brand-700 text-xs font-bold">{r.client_name.charAt(0)}</span>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{r.client_name}</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {r.created_by === 'online' && <span className="text-blue-600 mr-0.5">@</span>}
+                            {hasMeaningfulReservationComment(r.comentario) && <span className="mr-0.5">💬</span>}
+                            {r.client_name}
+                          </p>
                           {r.client_phone && <p className="text-xs text-gray-500">{r.client_phone}</p>}
                         </div>
                       </div>

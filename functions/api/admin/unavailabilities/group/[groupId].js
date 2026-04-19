@@ -7,6 +7,39 @@ import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from
 import { sanitize } from '../../../../utils/validators.js'
 
 const VALID_TYPES = ['folga', 'almoco', 'ferias', 'ausencia', 'outro']
+const VALID_RECURRENCE = ['none', 'daily', 'weekly']
+const MAX_RECURRENCE_OCCURRENCES = 365
+
+function normalizeOccurrence(start, end) {
+  return {
+    start: String(start).replace('Z', '').split('.')[0],
+    end:   String(end).replace('Z', '').split('.')[0],
+  }
+}
+
+function buildOccurrences({ start, end, recurrence_type, recurrence_end_date }) {
+  if (recurrence_type !== 'none' && recurrence_end_date) {
+    const startDate = new Date(start)
+    const endDate = new Date(end ?? start)
+    const stopDate = new Date(recurrence_end_date)
+    const diffMs = endDate.getTime() - startDate.getTime()
+    const inserts = []
+    let cursor = new Date(startDate)
+
+    while (cursor <= stopDate) {
+      const recStart = new Date(cursor)
+      const recEnd = new Date(cursor.getTime() + diffMs)
+      inserts.push(normalizeOccurrence(recStart.toISOString(), recEnd.toISOString()))
+      if (recurrence_type === 'daily') cursor.setDate(cursor.getDate() + 1)
+      else if (recurrence_type === 'weekly') cursor.setDate(cursor.getDate() + 7)
+      else break
+      if (inserts.length > MAX_RECURRENCE_OCCURRENCES) break
+    }
+    return inserts
+  }
+
+  return [normalizeOccurrence(start, end ?? start)]
+}
 
 export async function onRequest(context) {
   const { request, env, params } = context
@@ -38,18 +71,63 @@ export async function onRequest(context) {
   if (request.method === 'PUT') {
     try {
       const body = await request.json()
-      const { type, reason } = body
+      const { barber_id, start, end, is_all_day, type, reason, recurrence_type, recurrence_end_date } = body
 
       const tipo = type && VALID_TYPES.includes(type) ? type : 'folga'
+      const rec = recurrence_type && VALID_RECURRENCE.includes(recurrence_type) ? recurrence_type : 'none'
+      if (!start || !end) return badRequest('Datas de início e fim são obrigatórias para editar recorrência.')
+      if (new Date(end) <= new Date(start)) return badRequest('Data de fim inválida.')
 
-      // Só actualiza tipo e motivo — não mexe nas datas individuais de cada ocorrência
+      const nowIso = new Date().toISOString().replace('Z', '').split('.')[0]
+      const groupItems = await env.DB.prepare(
+        `SELECT id, barbeiro_id, data_hora_inicio, data_hora_fim
+           FROM horarios_indisponiveis
+          WHERE recurrence_group_id = ?
+          ORDER BY data_hora_inicio ASC`
+      ).bind(groupId).all()
+
+      const rows = groupItems?.results ?? []
+      if (!rows.length) return notFound('Grupo não encontrado')
+      const defaultBarberId = rows[0].barbeiro_id
+      const nextBarberId = Number(barber_id ?? defaultBarberId)
+      const occurrenceRows = buildOccurrences({
+        start,
+        end,
+        recurrence_type: rec,
+        recurrence_end_date,
+      }).filter(o => o.start >= nowIso)
+
       await env.DB.prepare(
-        `UPDATE horarios_indisponiveis
-            SET tipo = ?, motivo = ?
-          WHERE recurrence_group_id = ?`
-      ).bind(tipo, sanitize(reason ?? '', 200), groupId).run()
+        `DELETE FROM horarios_indisponiveis
+          WHERE recurrence_group_id = ?
+            AND data_hora_inicio >= ?`
+      ).bind(groupId, nowIso).run()
 
-      return ok({ message: 'Grupo actualizado' })
+      if (occurrenceRows.length) {
+        const stmt = env.DB.prepare(`
+          INSERT INTO horarios_indisponiveis
+            (barbeiro_id, data_hora_inicio, data_hora_fim, is_all_day, tipo, motivo, recurrence_type, recurrence_end_date, recurrence_group_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        await env.DB.batch(
+          occurrenceRows.map(({ start: s, end: e }) => stmt.bind(
+            nextBarberId,
+            s,
+            e,
+            is_all_day ? 1 : 0,
+            tipo,
+            sanitize(reason ?? '', 200),
+            rec,
+            recurrence_end_date ?? null,
+            groupId,
+          ))
+        )
+      }
+
+      return ok({
+        message: 'Grupo actualizado',
+        replaced_future_occurrences: occurrenceRows.length,
+      })
     } catch (e) {
       return serverError('Erro ao actualizar grupo', e.message)
     }

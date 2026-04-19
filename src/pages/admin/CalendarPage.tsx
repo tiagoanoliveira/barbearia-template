@@ -21,6 +21,8 @@ import { useAdminUser } from '@/hooks/useAdminUser'
 import { NewReservationForm, ReservationCopyContent } from '@/components/admin/calendar/forms'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
 import { UnavailabilityConflictsModal, type UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
+import { ClientDetailModal } from '@/components/admin/client-detail-modal'
+import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
 // ─── Horário dinâmico a partir do theme.ts ───────────────────────────────────
 const DAY_KEYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const
@@ -98,6 +100,7 @@ type CalModal =
   | { type: 'res_copy';    source: Reservation }
   | { type: 'res_new';     barberId: number; slot: number }
   | { type: 'unavail';     data: Partial<Unavailable>; isNew: boolean }
+  | { type: 'client_detail'; clientId: number; initialClientName: string; initialClientPhone?: string; initialClientEmail?: string }
   | null
 
 function useDebouncedDate(initial: string, delay = 600) {
@@ -123,6 +126,7 @@ export default function CalendarPage() {
   // ── Utilizador logado ────────────────────────────────────────────────────
   const adminUser = useAdminUser()
   const isBarber         = adminUser?.role === 'barbeiro'
+  const isAdmin          = adminUser?.role === 'admin'
   const loggedBarberId   = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
 
   // ── Data seleccionada ────────────────────────────────────────────────────
@@ -256,6 +260,11 @@ export default function CalendarPage() {
         const response = await barbersApi.createUnavailable(payload as Unavailable)
         if (!response.success) {
           const conflicts = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
+          console.debug('[CalendarPage] createUnavailable returned unsuccessfully', {
+            payload,
+            error: response.error,
+            conflicts: conflicts.length,
+          })
           if (conflicts.length) {
             setUConflicts(conflicts)
             setUPendingPayload(payload)
@@ -318,6 +327,15 @@ export default function CalendarPage() {
     const slotEnd = slotToISO(selectedDate, slot + 1, START_H)
     return barberU.find(u => u.data_hora_inicio < slotEnd && u.data_hora_fim > slotISO) ?? null
   }
+
+  useEffect(() => {
+    if (uConflicts.length > 0) {
+      console.debug('[CalendarPage] opening conflicts modal', {
+        conflicts: uConflicts.length,
+        pendingPayload: uPendingPayload,
+      })
+    }
+  }, [uConflicts, uPendingPayload])
 
   if (isLoading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
 
@@ -471,11 +489,18 @@ export default function CalendarPage() {
                               >
                                 {compact ? (
                                   <p className="text-[12px] font-semibold leading-tight truncate text-black whitespace-nowrap">
-                                    {shortLabel} {r.client_name}
+                                    {shortLabel}{' '}
+                                    {r.created_by === 'online' && <span className="text-blue-700 font-bold mr-0.5">@</span>}
+                                    {hasMeaningfulReservationComment(r.comentario) && <span className="mr-0.5">💬</span>}
+                                    {r.client_name}
                                   </p>
                                 ) : (
                                   <>
-                                    <p className="text-[13px] font-semibold leading-4 truncate text-black">{r.client_name}</p>
+                                    <p className="text-[13px] font-semibold leading-4 truncate text-black">
+                                      {r.created_by === 'online' && <span className="text-blue-700 font-bold mr-0.5">@</span>}
+                                      {hasMeaningfulReservationComment(r.comentario) && <span className="mr-0.5">💬</span>}
+                                      {r.client_name}
+                                    </p>
                                     <p className="text-[12px] leading-4 truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>                                  </>
                                 )}
                               </div>
@@ -507,6 +532,22 @@ export default function CalendarPage() {
             return (
               <>
                 <CtxItem icon="👁️" label="Ver Reserva"   onClick={() => { setModal({ type: 'res_detail', r }); closeCtx() }} />
+                {isAdmin && (
+                  <CtxItem
+                    icon="🧑"
+                    label="Ver cliente"
+                    onClick={() => {
+                      setModal({
+                        type: 'client_detail',
+                        clientId: r.client_id,
+                        initialClientName: r.client_name,
+                        initialClientPhone: r.client_phone,
+                        initialClientEmail: r.client_email,
+                      })
+                      closeCtx()
+                    }}
+                  />
+                )}
                 <CtxItem icon="✏️" label="Editar Reserva" onClick={() => { setModal({ type: 'res_edit',   r }); closeCtx() }} />
                 <CtxItem icon="📋" label="Copiar Reserva" onClick={() => { setCopyDate(selectedDate); setCopyTime(format(new Date(r.data_hora),'HH:mm')); setCopyEmail(true); setModal({ type: 'res_copy', source: r }); closeCtx() }} />
                 <div className="border-t border-gray-100 my-1" />
@@ -543,6 +584,18 @@ export default function CalendarPage() {
       )}
       {modal?.type === 'res_edit' && (
         <ReservationEditModal reservation={modal.r} invalidateKey="cal-reservations" onClose={close} />
+      )}
+      {modal?.type === 'client_detail' && (
+        <ClientDetailModal
+          clientId={modal.clientId}
+          initialClient={modal.initialClientName ? {
+            id: modal.clientId,
+            name: modal.initialClientName,
+            phone: modal.initialClientPhone,
+            email: modal.initialClientEmail,
+          } : null}
+          onClose={close}
+        />
       )}
       {modal?.type === 'res_status' && (
         <ReservationStatusModal reservation={modal.r} action={modal.action} invalidateKey="cal-reservations" onClose={close} />
