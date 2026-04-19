@@ -159,20 +159,18 @@ export default function UnavailablePage() {
       } else {
         const payload = { ...form, data_hora_inicio: inicio, data_hora_fim: fim }
         const response = await barbersApi.createUnavailable(payload)
-        if (!response.success) {
-          const conflicts = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
-          console.debug('[UnavailablePage] createUnavailable returned unsuccessfully', {
-            payload,
-            error: response.error,
-            conflicts: conflicts.length,
-          })
-          if (conflicts.length) {
+
+        // Conflitos: a API retornou 409 com lista de reservas sobrepostas
+        if (!response.success && 'data' in response && response.data && 'conflicts' in response.data) {
+          const conflicts = response.data.conflicts ?? []
+          if (conflicts.length > 0) {
             setConflictReservations(conflicts)
             setPendingCreatePayload(payload)
             return
           }
-          throw new Error(response.error ?? 'Erro ao guardar')
         }
+
+        if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
         qc.invalidateQueries({ queryKey: ['unavailable'] })
         setModal(false)
         setForm(EMPTY_FORM)
