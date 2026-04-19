@@ -1,10 +1,5 @@
 import { adminApi } from './client'
 import type { Barber, Unavailable, ApiResponse } from '@/types'
-import type { UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
-
-export interface ConflictData {
-  conflicts: UnavailabilityConflictReservation[]
-}
 
 export const barbersApi = {
   list: (options?: { includeInactive?: boolean }) =>
@@ -16,7 +11,6 @@ export const barbersApi = {
   delete: (id: number) =>
     adminApi.delete<ApiResponse<null>>(`/api/admin/barbers/${id}`),
 
-  // Indisponibilidades
   listUnavailable: (params?: { barberId?: number; date?: string }) => {
     const qs = new URLSearchParams()
     if (params?.barberId) qs.append('barber_id', String(params.barberId))
@@ -25,11 +19,7 @@ export const barbersApi = {
     return adminApi.get<Unavailable[]>(`/api/admin/unavailabilities${q ? `?${q}` : ''}`)
   },
 
-  createUnavailable: (data: Partial<Unavailable> & {
-    cancel_reservation_ids?: number[]
-    cancel_reason?: string
-    skip_conflict_check?: boolean
-  }) => {
+  createUnavailable: (data: Partial<Unavailable>) => {
     const payload = {
       barber_id:           data.barbeiro_id,
       start:               data.data_hora_inicio,
@@ -39,13 +29,8 @@ export const barbersApi = {
       reason:              data.motivo,
       recurrence_type:     data.recurrence_type,
       recurrence_end_date: data.recurrence_end_date,
-      cancel_reservation_ids: data.cancel_reservation_ids,
-      cancel_reason:          data.cancel_reason,
-      skip_conflict_check:    data.skip_conflict_check,
     }
-    // Usamos unknown para que o handleSubmit possa inspecionar
-    // o campo `data.conflicts` presente na resposta 409 sem erros de TypeScript.
-    return adminApi.post<unknown>('/api/admin/unavailabilities', payload)
+    return adminApi.post<Unavailable>('/api/admin/unavailabilities', payload)
   },
 
   updateUnavailable: (id: number, data: Partial<Unavailable>) => {

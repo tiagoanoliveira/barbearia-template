@@ -12,7 +12,6 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { Unavailable, UnavailableTipo } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
-import { UnavailabilityConflictsModal, type UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
 
 const TYPE_LABELS: Record<UnavailableTipo, string> = {
   folga:    'Folga',
@@ -53,65 +52,19 @@ type GroupDetailState = {
   items: Unavailable[]
 } | null
 
-/** Extrai conflitos do corpo de uma resposta 409, com segurança de tipos. */
-function extractConflicts(raw: unknown): UnavailabilityConflictReservation[] {
-  console.log('[extractConflicts] raw recebido:', JSON.stringify(raw))
-
-  if (raw === null || typeof raw !== 'object') {
-    console.warn('[extractConflicts] raw não é objecto:', typeof raw)
-    return []
-  }
-
-  const obj = raw as Record<string, unknown>
-  console.log('[extractConflicts] keys:', Object.keys(obj))
-  console.log('[extractConflicts] success:', obj.success, '| tem data:', 'data' in obj)
-
-  if (obj.success !== false) {
-    console.log('[extractConflicts] success não é false, sem conflitos')
-    return []
-  }
-
-  if (!('data' in obj)) {
-    console.warn('[extractConflicts] sem campo data na resposta')
-    return []
-  }
-
-  const data = obj.data
-  console.log('[extractConflicts] data:', JSON.stringify(data))
-
-  if (data === null || typeof data !== 'object') {
-    console.warn('[extractConflicts] data não é objecto')
-    return []
-  }
-
-  const dataObj = data as Record<string, unknown>
-  console.log('[extractConflicts] data keys:', Object.keys(dataObj))
-  console.log('[extractConflicts] tem conflicts:', 'conflicts' in dataObj, '| é array:', Array.isArray(dataObj.conflicts))
-
-  if (!('conflicts' in dataObj) || !Array.isArray(dataObj.conflicts)) {
-    console.warn('[extractConflicts] campo conflicts em falta ou não é array')
-    return []
-  }
-
-  console.log('[extractConflicts] conflitos encontrados:', dataObj.conflicts.length)
-  return dataObj.conflicts as UnavailabilityConflictReservation[]
-}
-
 export default function UnavailablePage() {
   const adminUser = useAdminUser()
   const isBarber = adminUser?.role === 'barbeiro'
   const loggedBarberId = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
   const qc = useQueryClient()
-  const [modal, setModal]           = useState(false)
-  const [editTarget, setEditTarget] = useState<Unavailable | null>(null)
+  const [modal, setModal]             = useState(false)
+  const [editTarget, setEditTarget]   = useState<Unavailable | null>(null)
   const [editGroupId, setEditGroupId] = useState<string | null>(null)
-  const [form, setForm]             = useState<UnavailableFormState>(EMPTY_FORM)
+  const [form, setForm]               = useState<UnavailableFormState>(EMPTY_FORM)
   const [groupDetail, setGroupDetail] = useState<GroupDetailState>(null)
-  const [expanded, setExpanded]     = useState<Set<string>>(new Set())
-  const [formError, setFormError] = useState<string | null>(null)
+  const [expanded, setExpanded]       = useState<Set<string>>(new Set())
+  const [formError, setFormError]     = useState<string | null>(null)
   const [submitSaving, setSubmitSaving] = useState(false)
-  const [pendingCreatePayload, setPendingCreatePayload] = useState<Partial<Unavailable> | null>(null)
-  const [conflictReservations, setConflictReservations] = useState<UnavailabilityConflictReservation[]>([])
 
   const [filterBarberId, setFilterBarberId] = useState<number | 'all'>(loggedBarberId ?? 'all')
   const [filterFrom, setFilterFrom]         = useState('')
@@ -136,10 +89,7 @@ export default function UnavailablePage() {
   const allItems: Unavailable[] = (unavailRes?.data ?? []) as unknown as Unavailable[]
 
   const now = startOfDay(new Date())
-  const onlyFuture = allItems.filter(u => {
-    const end = parseISO(u.data_hora_fim)
-    return isAfter(end, now)
-  })
+  const onlyFuture = allItems.filter(u => isAfter(parseISO(u.data_hora_fim), now))
 
   const effectiveFilterBarberId = loggedBarberId ?? filterBarberId
   const filteredByBarber = effectiveFilterBarberId === 'all'
@@ -150,7 +100,7 @@ export default function UnavailablePage() {
     const start = parseISO(u.data_hora_inicio)
     const end   = parseISO(u.data_hora_fim)
     if (filterFrom && start < parseISO(filterFrom + 'T00:00:00')) return false
-    if (filterTo && end   > parseISO(filterTo + 'T23:59:59'))     return false
+    if (filterTo   && end   > parseISO(filterTo   + 'T23:59:59')) return false
     return true
   })
 
@@ -163,24 +113,13 @@ export default function UnavailablePage() {
   })
 
   const handleSubmit = async () => {
-    console.log('[handleSubmit] início, form:', JSON.stringify(form))
-
-    if (!form.data_hora_inicio) {
-      setFormError('Data de início obrigatória.')
-      return
-    }
-    if (!form.data_hora_fim && !form.is_all_day) {
-      setFormError('Data de fim obrigatória.')
-      return
-    }
+    if (!form.data_hora_inicio) { setFormError('Data de início obrigatória.'); return }
+    if (!form.data_hora_fim && !form.is_all_day) { setFormError('Data de fim obrigatória.'); return }
 
     const startDate = form.data_hora_inicio.substring(0, 10)
-    const endDate = (form.data_hora_fim || form.data_hora_inicio).substring(0, 10)
-    const inicio = form.is_all_day ? `${startDate}T09:00:00` : form.data_hora_inicio
-    const fim    = form.is_all_day ? `${endDate}T20:00:00` : form.data_hora_fim
-
-    console.log('[handleSubmit] inicio:', inicio, '| fim:', fim, '| is_all_day:', form.is_all_day)
-    console.log('[handleSubmit] editGroupId:', editGroupId, '| editTarget:', editTarget?.id ?? null)
+    const endDate   = (form.data_hora_fim || form.data_hora_inicio).substring(0, 10)
+    const inicio    = form.is_all_day ? `${startDate}T09:00:00` : form.data_hora_inicio
+    const fim       = form.is_all_day ? `${endDate}T20:00:00`   : form.data_hora_fim
 
     setSubmitSaving(true)
     setFormError(null)
@@ -207,38 +146,13 @@ export default function UnavailablePage() {
         setModal(false)
         setEditTarget(null)
       } else {
-        const payload = { ...form, data_hora_inicio: inicio, data_hora_fim: fim }
-        console.log('[handleSubmit] payload enviado para createUnavailable:', JSON.stringify(payload))
-
-        let raw: unknown
-        try {
-          raw = await barbersApi.createUnavailable(payload)
-          console.log('[handleSubmit] resposta raw da API:', JSON.stringify(raw))
-        } catch (fetchErr) {
-          console.error('[handleSubmit] EXCEPÇÃO ao chamar createUnavailable:', fetchErr)
-          throw fetchErr
-        }
-
-        const conflicts = extractConflicts(raw)
-        console.log('[handleSubmit] conflitos extraídos:', conflicts.length)
-
-        if (conflicts.length > 0) {
-          console.log('[handleSubmit] abrindo modal de conflitos')
-          setConflictReservations(conflicts)
-          setPendingCreatePayload(payload)
-          return
-        }
-
-        // Resposta normal de sucesso ou erro de negócio
-        const response = raw as { success: boolean; error?: string }
-        console.log('[handleSubmit] response.success:', response.success)
+        const response = await barbersApi.createUnavailable({ ...form, data_hora_inicio: inicio, data_hora_fim: fim })
         if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
         qc.invalidateQueries({ queryKey: ['unavailable'] })
         setModal(false)
         setForm(EMPTY_FORM)
       }
     } catch (e: unknown) {
-      console.error('[handleSubmit] EXCEPÇÃO no bloco catch principal:', e)
       setFormError(e instanceof Error ? e.message : 'Erro ao guardar')
     } finally {
       setSubmitSaving(false)
@@ -252,36 +166,36 @@ export default function UnavailablePage() {
     setFormError(null)
     setModal(true)
   }
-  const openEdit   = (u: Unavailable) => {
+  const openEdit = (u: Unavailable) => {
     setEditTarget(u)
     setEditGroupId(null)
     setForm({
-      barbeiro_id:      u.barbeiro_id,
-      data_hora_inicio: u.data_hora_inicio,
-      data_hora_fim:    u.data_hora_fim,
-      tipo:             u.tipo,
-      motivo:           u.motivo ?? '',
-      is_all_day:       u.is_all_day ?? 1,
-      recurrence_type:  u.recurrence_type ?? 'none',
+      barbeiro_id:         u.barbeiro_id,
+      data_hora_inicio:    u.data_hora_inicio,
+      data_hora_fim:       u.data_hora_fim,
+      tipo:                u.tipo,
+      motivo:              u.motivo ?? '',
+      is_all_day:          u.is_all_day ?? 1,
+      recurrence_type:     u.recurrence_type ?? 'none',
       recurrence_end_date: u.recurrence_end_date,
     })
     setFormError(null)
     setModal(true)
   }
   const openEditGroup = (groupId: string, items: Unavailable[]) => {
-    const sortedItems = [...items].sort((a, b) => a.data_hora_inicio.localeCompare(b.data_hora_inicio))
-    const upcoming = sortedItems.find(i => new Date(i.data_hora_inicio).getTime() >= Date.now()) ?? sortedItems[0]
+    const sorted   = [...items].sort((a, b) => a.data_hora_inicio.localeCompare(b.data_hora_inicio))
+    const upcoming = sorted.find(i => new Date(i.data_hora_inicio).getTime() >= Date.now()) ?? sorted[0]
     if (!upcoming) return
     setEditTarget(null)
     setEditGroupId(groupId)
     setForm({
-      barbeiro_id: upcoming.barbeiro_id,
-      data_hora_inicio: upcoming.data_hora_inicio,
-      data_hora_fim: upcoming.data_hora_fim,
-      tipo: upcoming.tipo,
-      motivo: upcoming.motivo ?? '',
-      is_all_day: upcoming.is_all_day ?? 1,
-      recurrence_type: upcoming.recurrence_type ?? 'none',
+      barbeiro_id:         upcoming.barbeiro_id,
+      data_hora_inicio:    upcoming.data_hora_inicio,
+      data_hora_fim:       upcoming.data_hora_fim,
+      tipo:                upcoming.tipo,
+      motivo:              upcoming.motivo ?? '',
+      is_all_day:          upcoming.is_all_day ?? 1,
+      recurrence_type:     upcoming.recurrence_type ?? 'none',
       recurrence_end_date: upcoming.recurrence_end_date,
     })
     setFormError(null)
@@ -298,12 +212,6 @@ export default function UnavailablePage() {
     const n = new Set(prev); n.has(gid) ? n.delete(gid) : n.add(gid); return n
   })
 
-  useEffect(() => {
-    if (conflictReservations.length > 0) {
-      console.log('[UnavailablePage] modal de conflitos aberto com', conflictReservations.length, 'reservas')
-    }
-  }, [conflictReservations])
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end sm:justify-between">
@@ -319,29 +227,19 @@ export default function UnavailablePage() {
               disabled={!!loggedBarberId}
             >
               {!loggedBarberId && <option value="all">Todos os barbeiros</option>}
-               {visibleBarbers.map(b => (
-                 <option key={b.id} value={b.id}>{b.name}</option>
-               ))}
+              {visibleBarbers.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
             </select>
           </div>
           <div className="flex gap-2 items-end">
             <div>
               <label className="label text-xs">A partir de</label>
-              <input
-                type="date"
-                className="input text-xs"
-                value={filterFrom}
-                onChange={e => setFilterFrom(e.target.value)}
-              />
+              <input type="date" className="input text-xs" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} />
             </div>
             <div>
               <label className="label text-xs">Até</label>
-              <input
-                type="date"
-                className="input text-xs"
-                value={filterTo}
-                onChange={e => setFilterTo(e.target.value)}
-              />
+              <input type="date" className="input text-xs" value={filterTo} onChange={e => setFilterTo(e.target.value)} />
             </div>
           </div>
         </div>
@@ -366,15 +264,14 @@ export default function UnavailablePage() {
       ) : (
         <div className="space-y-6">
 
-          {/* GRUPOS */}
           {groupMap.size > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Recorrências</h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {Array.from(groupMap.entries()).map(([gid, items]) => {
-                  const first   = items[0]
-                  const isOpen  = expanded.has(gid)
-                  const sorted  = [...items].sort((a,b) => a.data_hora_inicio.localeCompare(b.data_hora_inicio))
+                  const first  = items[0]
+                  const isOpen = expanded.has(gid)
+                  const sorted = [...items].sort((a, b) => a.data_hora_inicio.localeCompare(b.data_hora_inicio))
                   return (
                     <Card key={gid} padding="md" className="border-l-4" style={{ borderColor: '#d4a017' }}>
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -386,57 +283,30 @@ export default function UnavailablePage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => setGroupDetail({ group_id: gid, items: sorted })}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                            title="Ver detalhes"
-                          ><Eye size={14} /></button>
-                          <button
-                            onClick={() => openEditGroup(gid, sorted)}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"
-                            title="Editar recorrência"
-                          ><Pencil size={14} /></button>
-                          <button
-                            onClick={() => toggleExpand(gid)}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                          >{isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
+                          <button onClick={() => setGroupDetail({ group_id: gid, items: sorted })} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Ver detalhes"><Eye size={14} /></button>
+                          <button onClick={() => openEditGroup(gid, sorted)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors" title="Editar recorrência"><Pencil size={14} /></button>
+                          <button onClick={() => toggleExpand(gid)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
                         </div>
                       </div>
                       <p className="text-xs text-gray-600 font-medium">{items.length} ocorrências</p>
                       {first.motivo && <p className="text-xs text-gray-500 mt-1 italic">{first.motivo}</p>}
-
                       {isOpen && (
                         <div className="mt-3 space-y-1 border-t border-gray-100 pt-2">
                           {sorted.map(u => (
                             <div key={u.id} className="flex items-center justify-between rounded-lg px-2 py-1.5 bg-gray-50">
                               <div>
-                                <span className="text-xs font-medium text-brand-700 capitalize">
-                                  {fmtDate(u.data_hora_inicio)}
-                                </span>
-                                {!u.is_all_day && (
-                                  <span className="text-xs text-gray-500 ml-2">
-                                    {fmtTime(u.data_hora_inicio)} – {fmtTime(u.data_hora_fim)}
-                                  </span>
-                                )}
+                                <span className="text-xs font-medium text-brand-700 capitalize">{fmtDate(u.data_hora_inicio)}</span>
+                                {!u.is_all_day && <span className="text-xs text-gray-500 ml-2">{fmtTime(u.data_hora_inicio)} – {fmtTime(u.data_hora_fim)}</span>}
                               </div>
                               <div className="flex items-center gap-1">
-                                <button onClick={() => openEdit(u)}
-                                  className="p-1 rounded hover:bg-white text-gray-400 hover:text-brand-600 transition-colors">
-                                  <Pencil size={12} />
-                                </button>
-                                <button onClick={() => remove.mutate(u.id)}
-                                  className="p-1 rounded hover:bg-white text-gray-400 hover:text-red-500 transition-colors">
-                                  <Trash2 size={12} />
-                                </button>
+                                <button onClick={() => openEdit(u)} className="p-1 rounded hover:bg-white text-gray-400 hover:text-brand-600 transition-colors"><Pencil size={12} /></button>
+                                <button onClick={() => remove.mutate(u.id)} className="p-1 rounded hover:bg-white text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
                               </div>
                             </div>
                           ))}
                           <div className="flex gap-2 pt-2">
                             <button
-                              onClick={() => {
-                                if (window.confirm(`Eliminar todas as ${items.length} ocorrências deste grupo?`))
-                                  removeGroup.mutate(gid)
-                              }}
+                              onClick={() => { if (window.confirm(`Eliminar todas as ${items.length} ocorrências deste grupo?`)) removeGroup.mutate(gid) }}
                               className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
                             >🗑️ Eliminar tudo</button>
                           </div>
@@ -449,7 +319,6 @@ export default function UnavailablePage() {
             </div>
           )}
 
-          {/* SINGLES */}
           {singles.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Individuais</h2>
@@ -465,23 +334,15 @@ export default function UnavailablePage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => openEdit(u)}
-                          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => remove.mutate(u.id)}
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
-                          <Trash2 size={15} />
-                        </button>
+                        <button onClick={() => openEdit(u)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"><Pencil size={14} /></button>
+                        <button onClick={() => remove.mutate(u.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={15} /></button>
                       </div>
                     </div>
                     <p className="text-xs text-gray-600">
                       {fmtDate(u.data_hora_inicio)}
                       {u.data_hora_fim !== u.data_hora_inicio && <> — {fmtDate(u.data_hora_fim)}</>}
                     </p>
-                    {!u.is_all_day && (
-                      <p className="text-xs text-gray-500 mt-0.5">{fmtTime(u.data_hora_inicio)} — {fmtTime(u.data_hora_fim)}</p>
-                    )}
+                    {!u.is_all_day && <p className="text-xs text-gray-500 mt-0.5">{fmtTime(u.data_hora_inicio)} — {fmtTime(u.data_hora_fim)}</p>}
                     {u.motivo && <p className="text-xs text-gray-500 mt-2 italic">{u.motivo}</p>}
                   </Card>
                 ))}
@@ -491,7 +352,6 @@ export default function UnavailablePage() {
         </div>
       )}
 
-      {/* Modal criar / editar */}
       <Modal
         open={modal}
         onClose={() => { setModal(false); setEditTarget(null); setEditGroupId(null); setForm(EMPTY_FORM) }}
@@ -511,41 +371,6 @@ export default function UnavailablePage() {
         />
       </Modal>
 
-      <UnavailabilityConflictsModal
-        open={conflictReservations.length > 0}
-        reservations={conflictReservations}
-        saving={submitSaving}
-        onCancel={() => {
-          setConflictReservations([])
-          setPendingCreatePayload(null)
-        }}
-        onConfirm={async ({ selectedIds, reason }) => {
-          if (!pendingCreatePayload) return
-          setSubmitSaving(true)
-          setFormError(null)
-          try {
-            const raw = await barbersApi.createUnavailable({
-              ...pendingCreatePayload,
-              skip_conflict_check: true,
-              cancel_reservation_ids: selectedIds,
-              cancel_reason: reason,
-            })
-            const response = raw as { success: boolean; error?: string }
-            if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
-            qc.invalidateQueries({ queryKey: ['unavailable'] })
-            setModal(false)
-            setForm(EMPTY_FORM)
-            setPendingCreatePayload(null)
-            setConflictReservations([])
-          } catch (e: unknown) {
-            setFormError(e instanceof Error ? e.message : 'Erro ao guardar')
-          } finally {
-            setSubmitSaving(false)
-          }
-        }}
-      />
-
-      {/* Modal detalhe do grupo */}
       {groupDetail && (
         <Modal
           open={!!groupDetail}
@@ -553,18 +378,8 @@ export default function UnavailablePage() {
           title="Detalhes da Recorrência"
           footer={
             <>
-              <button
-                className="btn-danger"
-                onClick={() => { if (window.confirm('Eliminar todo o grupo?')) removeGroup.mutate(groupDetail.group_id) }}
-                disabled={removeGroup.isPending}
-              >🗑️ Eliminar tudo</button>
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  openEditGroup(groupDetail.group_id, groupDetail.items)
-                  setGroupDetail(null)
-                }}
-              >✏️ Editar regras</button>
+              <button className="btn-danger" onClick={() => { if (window.confirm('Eliminar todo o grupo?')) removeGroup.mutate(groupDetail.group_id) }} disabled={removeGroup.isPending}>🗑️ Eliminar tudo</button>
+              <button className="btn-primary" onClick={() => { openEditGroup(groupDetail.group_id, groupDetail.items); setGroupDetail(null) }}>✏️ Editar regras</button>
               <button className="btn-secondary" onClick={() => setGroupDetail(null)}>Fechar</button>
             </>
           }
@@ -582,24 +397,12 @@ export default function UnavailablePage() {
               {groupDetail.items.map(u => (
                 <div key={u.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
                   <div>
-                    <span className="text-xs font-semibold text-brand-700 capitalize">
-                      {format(parseISO(u.data_hora_inicio), "EEEE, dd/MM", { locale: pt })}
-                    </span>
-                    {!u.is_all_day && (
-                      <span className="text-xs text-gray-500 ml-2">
-                        {fmtTime(u.data_hora_inicio)} – {fmtTime(u.data_hora_fim)}
-                      </span>
-                    )}
+                    <span className="text-xs font-semibold text-brand-700 capitalize">{format(parseISO(u.data_hora_inicio), "EEEE, dd/MM", { locale: pt })}</span>
+                    {!u.is_all_day && <span className="text-xs text-gray-500 ml-2">{fmtTime(u.data_hora_inicio)} – {fmtTime(u.data_hora_fim)}</span>}
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => { openEdit(u); setGroupDetail(null) }}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => remove.mutate(u.id)}
-                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
-                      <Trash2 size={13} />
-                    </button>
+                    <button onClick={() => { openEdit(u); setGroupDetail(null) }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"><Pencil size={13} /></button>
+                    <button onClick={() => remove.mutate(u.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={13} /></button>
                   </div>
                 </div>
               ))}
