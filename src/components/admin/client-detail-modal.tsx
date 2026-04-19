@@ -8,7 +8,21 @@ import Modal from '@/components/ui/Modal'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { Client } from '@/types'
 
-function ClientAvatar({ client, size = 16 }: { client: Client; size?: 8 | 16 }) {
+type ClientModalData = {
+  id: number
+  name: string
+  email?: string
+  phone?: string
+  photo_url?: string
+  nif?: number
+  notes?: string
+  created_at?: string
+  reservas_concluidas?: number
+  next_appointment_date?: string
+  last_appointment_date?: string
+}
+
+function ClientAvatar({ client, size = 16 }: { client: ClientModalData; size?: 8 | 16 }) {
   const sizeClass = size === 16 ? 'w-16 h-16' : 'w-8 h-8'
   const [imgError, setImgError] = useState(false)
   useEffect(() => { setImgError(false) }, [client.photo_url])
@@ -48,7 +62,7 @@ export function ClientDetailModal({
   onClose,
 }: {
   clientId: number
-  initialClient?: Client | null
+  initialClient?: ClientModalData | null
   onClose: () => void
 }) {
   const qc = useQueryClient()
@@ -58,7 +72,7 @@ export function ClientDetailModal({
     enabled: !!clientId,
   })
   const currentClient = clientRes?.data ?? initialClient ?? null
-  const [clientData, setClientData] = useState<Client | null>(currentClient)
+  const [clientData, setClientData] = useState<ClientModalData | null>(currentClient)
   const [editMode, setEditMode] = useState(false)
   const [form, setForm] = useState({
     name: currentClient?.name ?? '',
@@ -105,7 +119,7 @@ export function ClientDetailModal({
       if (!res.success || !res.data) throw new Error(res.error ?? 'Não foi possível guardar as alterações.')
       qc.invalidateQueries({ queryKey: ['clients'] })
       qc.invalidateQueries({ queryKey: ['client', clientId] })
-      setClientData(res.data)
+      setClientData(res.data as Client)
       setEditMode(false)
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : 'Não foi possível guardar as alterações.')
@@ -232,21 +246,21 @@ export function ClientDetailModal({
                    {fmtDate(clientData.last_appointment_date)}
                    {fmtAgo(clientData.last_appointment_date) && (
                      <span className="text-gray-400"> ({fmtAgo(clientData.last_appointment_date)})</span>
-                   )}
-                 </p>
-               </div>
-               <div className="bg-gray-50 rounded-lg p-2">
-                 <p className="text-gray-500">Próxima reserva</p>
+                    )}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-2">
+                  <p className="text-gray-500">Próxima reserva</p>
                  <p className="font-medium">{fmtDate(clientData.next_appointment_date)}</p>
-               </div>
-             </div>
-           </section>
+                </div>
+              </div>
+            </section>
            {clientData.notes && (
              <section>
-               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Notas</p>
-               <p className="text-xs bg-amber-50 rounded-lg px-3 py-2 text-amber-800">{clientData.notes}</p>
-             </section>
-           )}
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Notas</p>
+                <p className="text-xs bg-amber-50 rounded-lg px-3 py-2 text-amber-800">{clientData.notes}</p>
+              </section>
+            )}
            <p className="text-xs text-gray-400">Cliente desde {fmtDate(clientData.created_at)}</p>
         </div>
       )}

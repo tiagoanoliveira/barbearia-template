@@ -13,6 +13,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { ClipboardList } from 'lucide-react'
 import type { Reservation } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
+import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 import {
   ReservationDetailModal,
   ReservationEditModal,
@@ -32,13 +33,6 @@ type ModalMode =
   | { type: 'edit';   r: Reservation }
   | { type: 'status'; r: Reservation; action: 'concluida' | 'faltou' | 'cancelada' }
   | null
-
-function hasMeaningfulComment(comment?: string) {
-  if (!comment) return false
-  const trimmed = comment.trim()
-  if (!trimmed) return false
-  return !/^\[\s*\]$/.test(trimmed)
-}
 
 export default function ReservationsPage() {
   const adminUser = useAdminUser()
@@ -168,7 +162,7 @@ export default function ReservationsPage() {
                         <div>
                           <p className="text-sm font-medium text-gray-900">
                             {r.created_by === 'online' && <span className="text-blue-600 mr-0.5">@</span>}
-                            {hasMeaningfulComment(r.comentario) && <span className="mr-0.5">💬</span>}
+                            {hasMeaningfulReservationComment(r.comentario) && <span className="mr-0.5">💬</span>}
                             {r.client_name}
                           </p>
                           {r.client_phone && <p className="text-xs text-gray-500">{r.client_phone}</p>}

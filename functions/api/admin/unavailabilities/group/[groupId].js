@@ -8,6 +8,7 @@ import { sanitize } from '../../../../utils/validators.js'
 
 const VALID_TYPES = ['folga', 'almoco', 'ferias', 'ausencia', 'outro']
 const VALID_RECURRENCE = ['none', 'daily', 'weekly']
+const MAX_RECURRENCE_OCCURRENCES = 365
 
 function normalizeOccurrence(start, end) {
   return {
@@ -16,11 +17,11 @@ function normalizeOccurrence(start, end) {
   }
 }
 
-function buildOccurrences({ start, end, recurrenceType, recurrenceEndDate }) {
-  if (recurrenceType !== 'none' && recurrenceEndDate) {
+function buildOccurrences({ start, end, recurrence_type, recurrence_end_date }) {
+  if (recurrence_type !== 'none' && recurrence_end_date) {
     const startDate = new Date(start)
     const endDate = new Date(end ?? start)
-    const stopDate = new Date(recurrenceEndDate)
+    const stopDate = new Date(recurrence_end_date)
     const diffMs = endDate.getTime() - startDate.getTime()
     const inserts = []
     let cursor = new Date(startDate)
@@ -29,10 +30,10 @@ function buildOccurrences({ start, end, recurrenceType, recurrenceEndDate }) {
       const recStart = new Date(cursor)
       const recEnd = new Date(cursor.getTime() + diffMs)
       inserts.push(normalizeOccurrence(recStart.toISOString(), recEnd.toISOString()))
-      if (recurrenceType === 'daily') cursor.setDate(cursor.getDate() + 1)
-      else if (recurrenceType === 'weekly') cursor.setDate(cursor.getDate() + 7)
+      if (recurrence_type === 'daily') cursor.setDate(cursor.getDate() + 1)
+      else if (recurrence_type === 'weekly') cursor.setDate(cursor.getDate() + 7)
       else break
-      if (inserts.length > 365) break
+      if (inserts.length > MAX_RECURRENCE_OCCURRENCES) break
     }
     return inserts
   }
@@ -92,8 +93,8 @@ export async function onRequest(context) {
       const occurrenceRows = buildOccurrences({
         start,
         end,
-        recurrenceType: rec,
-        recurrenceEndDate: recurrence_end_date,
+        recurrence_type: rec,
+        recurrence_end_date,
       }).filter(o => o.start >= nowIso)
 
       await env.DB.prepare(

@@ -22,6 +22,7 @@ import { NewReservationForm, ReservationCopyContent } from '@/components/admin/c
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
 import { UnavailabilityConflictsModal, type UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
 import { ClientDetailModal } from '@/components/admin/client-detail-modal'
+import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
 // ─── Horário dinâmico a partir do theme.ts ───────────────────────────────────
 const DAY_KEYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const
@@ -85,13 +86,6 @@ function serviceShortLabel(serviceName: string, abbreviation?: string) {
     .join('')
     .slice(0, 5)
     .toUpperCase() || 'SV'
-}
-
-function hasMeaningfulComment(comment?: string) {
-  if (!comment) return false
-  const trimmed = comment.trim()
-  if (!trimmed) return false
-  return !/^\[\s*\]$/.test(trimmed)
 }
 
 type ContextTarget =
@@ -497,14 +491,14 @@ export default function CalendarPage() {
                                   <p className="text-[12px] font-semibold leading-tight truncate text-black whitespace-nowrap">
                                     {shortLabel}{' '}
                                     {r.created_by === 'online' && <span className="text-blue-700 font-bold mr-0.5">@</span>}
-                                    {hasMeaningfulComment(r.comentario) && <span className="mr-0.5">💬</span>}
+                                    {hasMeaningfulReservationComment(r.comentario) && <span className="mr-0.5">💬</span>}
                                     {r.client_name}
                                   </p>
                                 ) : (
                                   <>
                                     <p className="text-[13px] font-semibold leading-4 truncate text-black">
                                       {r.created_by === 'online' && <span className="text-blue-700 font-bold mr-0.5">@</span>}
-                                      {hasMeaningfulComment(r.comentario) && <span className="mr-0.5">💬</span>}
+                                      {hasMeaningfulReservationComment(r.comentario) && <span className="mr-0.5">💬</span>}
                                       {r.client_name}
                                     </p>
                                     <p className="text-[12px] leading-4 truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>                                  </>
@@ -599,7 +593,6 @@ export default function CalendarPage() {
             name: modal.initialClientName,
             phone: modal.initialClientPhone,
             email: modal.initialClientEmail,
-            created_at: '',
           } : null}
           onClose={close}
         />
