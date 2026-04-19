@@ -7,7 +7,7 @@ import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from
 import { sanitize } from '../../../../utils/validators.js'
 
 const VALID_TYPES = ['folga', 'almoco', 'ferias', 'ausencia', 'outro']
-const VALID_RECURRENCE = ['none', 'daily', 'weekly']
+const VALID_RECURRENCE_TYPES = ['none', 'daily', 'weekly']
 
 function normalizeOccurrence(start, end) {
   return {
@@ -99,9 +99,12 @@ export async function onRequest(context) {
       const effectiveBarberId = Number(barber_id ?? meta.barbeiro_id)
       const effectiveStart = start ?? meta.data_hora_inicio
       const effectiveEnd = end ?? meta.data_hora_fim
-      const effectiveRecurrenceType = recurrence_type && VALID_RECURRENCE.includes(recurrence_type)
-        ? recurrence_type
-        : (meta.recurrence_type && VALID_RECURRENCE.includes(meta.recurrence_type) ? meta.recurrence_type : 'weekly')
+      let effectiveRecurrenceType = 'weekly'
+      if (recurrence_type && VALID_RECURRENCE_TYPES.includes(recurrence_type)) {
+        effectiveRecurrenceType = recurrence_type
+      } else if (meta.recurrence_type && VALID_RECURRENCE_TYPES.includes(meta.recurrence_type)) {
+        effectiveRecurrenceType = meta.recurrence_type
+      }
       const effectiveRecurrenceEndDate = recurrence_end_date ?? meta.recurrence_end_date ?? null
       const effectiveIsAllDay = is_all_day !== undefined ? (is_all_day ? 1 : 0) : (meta.is_all_day ? 1 : 0)
       const tipo = type && VALID_TYPES.includes(type) ? type : 'folga'
@@ -109,7 +112,9 @@ export async function onRequest(context) {
 
       if (!effectiveStart) return badRequest('Data de início obrigatória')
       if (!effectiveEnd) return badRequest('Data de fim obrigatória')
-      if (new Date(effectiveEnd).getTime() <= new Date(effectiveStart).getTime()) {
+      const startTime = new Date(effectiveStart).getTime()
+      const endTime = new Date(effectiveEnd).getTime()
+      if (endTime <= startTime) {
         return badRequest('Fim deve ser posterior ao início')
       }
       if (effectiveRecurrenceType !== 'none' && !effectiveRecurrenceEndDate) {

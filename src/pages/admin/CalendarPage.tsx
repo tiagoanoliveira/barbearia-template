@@ -22,6 +22,8 @@ import { useAdminUser } from '@/hooks/useAdminUser'
 import { NewReservationForm, ReservationCopyContent } from '@/components/admin/calendar/forms'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
 import { UnavailabilityConflictsModal, type UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
+import { reservationNamePrefix } from '@/utils/reservationIndicators'
+import { extractUnavailabilityConflicts } from '@/utils/unavailabilityConflicts'
 
 // ─── Horário dinâmico a partir do theme.ts ───────────────────────────────────
 const DAY_KEYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const
@@ -85,19 +87,6 @@ function serviceShortLabel(serviceName: string, abbreviation?: string) {
     .join('')
     .slice(0, 5)
     .toUpperCase() || 'SV'
-}
-
-function hasReservationComment(comment?: string) {
-  const raw = (comment ?? '').trim()
-  if (!raw) return false
-  return !/^\[\s*\]$/.test(raw)
-}
-
-function reservationNamePrefix(reservation: Reservation) {
-  const indicators: string[] = []
-  if (reservation.created_by === 'online') indicators.push('@')
-  if (hasReservationComment(reservation.comentario)) indicators.push('💬')
-  return indicators.length ? `${indicators.join('')} ` : ''
 }
 
 type ContextTarget =
@@ -271,9 +260,7 @@ export default function CalendarPage() {
       if (isNew || !uForm.id) {
         const response = await barbersApi.createUnavailable(payload as Unavailable)
         if (!response.success) {
-          const conflictData = response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined
-          const conflicts = conflictData?.conflicts
-            ?? ((response as unknown as { conflicts?: UnavailabilityConflictReservation[] }).conflicts ?? [])
+          const conflicts = extractUnavailabilityConflicts(response)
           if (conflicts.length) {
             setUConflicts(conflicts)
             setUPendingPayload(payload)
@@ -477,6 +464,7 @@ export default function CalendarPage() {
                             const compact = dur < 30
                             const heightPx  = Math.max(SLOT_H, Math.round((dur / SLOT_DURATION) * SLOT_H))
                             const barColor2 = STATUS_BAR_LOCAL[r.status] ?? baseColor
+                            const timeRange = `${format(new Date(r.data_hora),'HH:mm')}–${format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}`
                             return (
                               <div key={r.id}
                                 className="absolute inset-x-0.5 top-0 rounded overflow-hidden cursor-pointer flex flex-col justify-start pl-2.5 pr-1 py-0.5 z-20"
@@ -493,8 +481,13 @@ export default function CalendarPage() {
                                   </p>
                                 ) : (
                                   <>
-                                    <p className="text-[13px] font-semibold leading-4 truncate text-black">{reservationNamePrefix(r)}{r.client_name}</p>
-                                    <p className="text-[12px] leading-4 truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>                                  </>
+                                    <p className="text-[13px] font-semibold leading-4 truncate text-black">
+                                      {reservationNamePrefix(r)}{r.client_name}
+                                    </p>
+                                    <p className="text-[12px] leading-4 truncate text-black/90">
+                                      {r.service_name} - {timeRange}
+                                    </p>
+                                  </>
                                 )}
                               </div>
                             )

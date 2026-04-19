@@ -13,6 +13,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { ClipboardList } from 'lucide-react'
 import type { Reservation } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
+import { reservationNamePrefix } from '@/utils/reservationIndicators'
 import {
   ReservationDetailModal,
   ReservationEditModal,
@@ -32,19 +33,6 @@ type ModalMode =
   | { type: 'edit';   r: Reservation }
   | { type: 'status'; r: Reservation; action: 'concluida' | 'faltou' | 'cancelada' }
   | null
-
-function hasReservationComment(comment?: string) {
-  const raw = (comment ?? '').trim()
-  if (!raw) return false
-  return !/^\[\s*\]$/.test(raw)
-}
-
-function reservationNamePrefix(reservation: Reservation) {
-  const indicators: string[] = []
-  if (reservation.created_by === 'online') indicators.push('@')
-  if (hasReservationComment(reservation.comentario)) indicators.push('💬')
-  return indicators.length ? `${indicators.join('')} ` : ''
-}
 
 export default function ReservationsPage() {
   const adminUser = useAdminUser()

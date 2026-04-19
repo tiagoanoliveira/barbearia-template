@@ -13,6 +13,7 @@ import type { Unavailable, UnavailableTipo } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
 import { UnavailabilityConflictsModal, type UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
+import { extractUnavailabilityConflicts } from '@/utils/unavailabilityConflicts'
 
 const TYPE_LABELS: Record<UnavailableTipo, string> = {
   folga:    'Folga',
@@ -152,9 +153,7 @@ export default function UnavailablePage() {
         const payload = { ...form, data_hora_inicio: inicio, data_hora_fim: fim }
         const response = await barbersApi.createUnavailable(payload)
         if (!response.success) {
-          const conflictData = response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined
-          const conflicts = conflictData?.conflicts
-            ?? ((response as unknown as { conflicts?: UnavailabilityConflictReservation[] }).conflicts ?? [])
+          const conflicts = extractUnavailabilityConflicts(response)
           if (conflicts.length) {
             setConflictReservations(conflicts)
             setPendingCreatePayload(payload)
@@ -581,7 +580,8 @@ export default function UnavailablePage() {
           <UnavailableEditorForm
             form={groupEdit.form}
             barbers={visibleBarbers.filter(b => b.id === groupEdit.form.barbeiro_id)}
-            isNew
+            isNew={false}
+            showRecurrenceFields
             disableBarberSelection
             error={groupEditError}
             saving={groupEditSaving}
