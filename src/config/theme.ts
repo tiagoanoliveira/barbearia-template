@@ -19,7 +19,7 @@ export const barberShopConfig = {
   email:       'geral@brooklynbarbearia.pt',
   address:     'Rua do Campo Alegre, 450, Porto',
   instagram:   'https://instagram.com/brooklynbarbearia',
-  supportIframeSrc: 'https://example.com',
+  supportIframeSrc: 'https://tiagoanoliveira.pt/support/988b8a8a745c445fbaff596ad5be54dd',
 
   logoUrl:    logoSrc,
   faviconUrl: faviconSrc,
