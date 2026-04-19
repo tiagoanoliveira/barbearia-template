@@ -73,6 +73,7 @@ export async function onRequest(context) {
            r.id,
            r.data_hora,
            r.status,
+           r.created_by,
            r.comentario,
            r.nota_privada,
            r.duracao_efetiva      AS service_duration,

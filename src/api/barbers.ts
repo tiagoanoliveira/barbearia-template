@@ -55,7 +55,16 @@ export const barbersApi = {
     return adminApi.put<Unavailable>(`/api/admin/unavailabilities/${id}`, payload)
   },
 
-  updateGroup: (groupId: string, data: { type?: string; reason?: string }) =>
+  updateGroup: (groupId: string, data: {
+    barber_id?: number
+    start?: string
+    end?: string
+    is_all_day?: number
+    type?: string
+    reason?: string
+    recurrence_type?: 'none' | 'daily' | 'weekly'
+    recurrence_end_date?: string
+  }) =>
     adminApi.put<ApiResponse<null>>(`/api/admin/unavailabilities/group/${groupId}`, data),
 
   deleteUnavailable: (id: number, options?: { group?: boolean }) => {

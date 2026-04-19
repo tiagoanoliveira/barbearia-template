@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO, addMinutes } from 'date-fns'
 import { pt } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
@@ -86,6 +87,19 @@ function serviceShortLabel(serviceName: string, abbreviation?: string) {
     .toUpperCase() || 'SV'
 }
 
+function hasReservationComment(comment?: string) {
+  const raw = (comment ?? '').trim()
+  if (!raw) return false
+  return !/^\[\s*\]$/.test(raw)
+}
+
+function reservationNamePrefix(reservation: Reservation) {
+  const indicators: string[] = []
+  if (reservation.created_by === 'online') indicators.push('@')
+  if (hasReservationComment(reservation.comentario)) indicators.push('💬')
+  return indicators.length ? `${indicators.join('')} ` : ''
+}
+
 type ContextTarget =
   | { kind: 'slot';        barberId: number; slot: number }
   | { kind: 'reservation'; reservation: Reservation }
@@ -119,9 +133,11 @@ function useDebouncedDate(initial: string, delay = 600) {
 
 export default function CalendarPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   // ── Utilizador logado ────────────────────────────────────────────────────
   const adminUser = useAdminUser()
+  const isAdmin = adminUser?.role === 'admin'
   const isBarber         = adminUser?.role === 'barbeiro'
   const loggedBarberId   = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
 
@@ -255,7 +271,9 @@ export default function CalendarPage() {
       if (isNew || !uForm.id) {
         const response = await barbersApi.createUnavailable(payload as Unavailable)
         if (!response.success) {
-          const conflicts = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
+          const conflictData = response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined
+          const conflicts = conflictData?.conflicts
+            ?? ((response as unknown as { conflicts?: UnavailabilityConflictReservation[] }).conflicts ?? [])
           if (conflicts.length) {
             setUConflicts(conflicts)
             setUPendingPayload(payload)
@@ -471,11 +489,11 @@ export default function CalendarPage() {
                               >
                                 {compact ? (
                                   <p className="text-[12px] font-semibold leading-tight truncate text-black whitespace-nowrap">
-                                    {shortLabel} {r.client_name}
+                                    {shortLabel} {reservationNamePrefix(r)}{r.client_name}
                                   </p>
                                 ) : (
                                   <>
-                                    <p className="text-[13px] font-semibold leading-4 truncate text-black">{r.client_name}</p>
+                                    <p className="text-[13px] font-semibold leading-4 truncate text-black">{reservationNamePrefix(r)}{r.client_name}</p>
                                     <p className="text-[12px] leading-4 truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>                                  </>
                                 )}
                               </div>
@@ -507,6 +525,9 @@ export default function CalendarPage() {
             return (
               <>
                 <CtxItem icon="👁️" label="Ver Reserva"   onClick={() => { setModal({ type: 'res_detail', r }); closeCtx() }} />
+                {isAdmin && (
+                  <CtxItem icon="🧑" label="Ver cliente" onClick={() => { navigate(`/admin/clientes/${r.client_id}`); closeCtx() }} />
+                )}
                 <CtxItem icon="✏️" label="Editar Reserva" onClick={() => { setModal({ type: 'res_edit',   r }); closeCtx() }} />
                 <CtxItem icon="📋" label="Copiar Reserva" onClick={() => { setCopyDate(selectedDate); setCopyTime(format(new Date(r.data_hora),'HH:mm')); setCopyEmail(true); setModal({ type: 'res_copy', source: r }); closeCtx() }} />
                 <div className="border-t border-gray-100 my-1" />

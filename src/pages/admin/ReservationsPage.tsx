@@ -33,6 +33,19 @@ type ModalMode =
   | { type: 'status'; r: Reservation; action: 'concluida' | 'faltou' | 'cancelada' }
   | null
 
+function hasReservationComment(comment?: string) {
+  const raw = (comment ?? '').trim()
+  if (!raw) return false
+  return !/^\[\s*\]$/.test(raw)
+}
+
+function reservationNamePrefix(reservation: Reservation) {
+  const indicators: string[] = []
+  if (reservation.created_by === 'online') indicators.push('@')
+  if (hasReservationComment(reservation.comentario)) indicators.push('💬')
+  return indicators.length ? `${indicators.join('')} ` : ''
+}
+
 export default function ReservationsPage() {
   const adminUser = useAdminUser()
   const isBarber = adminUser?.role === 'barbeiro'
@@ -159,7 +172,7 @@ export default function ReservationsPage() {
                           <span className="text-brand-700 text-xs font-bold">{r.client_name.charAt(0)}</span>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{r.client_name}</p>
+                          <p className="text-sm font-medium text-gray-900">{reservationNamePrefix(r)}{r.client_name}</p>
                           {r.client_phone && <p className="text-xs text-gray-500">{r.client_phone}</p>}
                         </div>
                       </div>

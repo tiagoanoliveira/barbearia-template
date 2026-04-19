@@ -53,6 +53,11 @@ type GroupDetailState = {
   items: Unavailable[]
 } | null
 
+type GroupEditState = {
+  group_id: string
+  form: UnavailableFormState
+} | null
+
 export default function UnavailablePage() {
   const adminUser = useAdminUser()
   const isBarber = adminUser?.role === 'barbeiro'
@@ -62,11 +67,14 @@ export default function UnavailablePage() {
   const [editTarget, setEditTarget] = useState<Unavailable | null>(null)
   const [form, setForm]             = useState<UnavailableFormState>(EMPTY_FORM)
   const [groupDetail, setGroupDetail] = useState<GroupDetailState>(null)
+  const [groupEdit, setGroupEdit] = useState<GroupEditState>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set())
   const [formError, setFormError] = useState<string | null>(null)
   const [submitSaving, setSubmitSaving] = useState(false)
   const [pendingCreatePayload, setPendingCreatePayload] = useState<Partial<Unavailable> | null>(null)
   const [conflictReservations, setConflictReservations] = useState<UnavailabilityConflictReservation[]>([])
+  const [groupEditError, setGroupEditError] = useState<string | null>(null)
+  const [groupEditSaving, setGroupEditSaving] = useState(false)
 
   const [filterBarberId, setFilterBarberId] = useState<number | 'all'>(loggedBarberId ?? 'all')
   const [filterFrom, setFilterFrom]         = useState('')
@@ -144,7 +152,9 @@ export default function UnavailablePage() {
         const payload = { ...form, data_hora_inicio: inicio, data_hora_fim: fim }
         const response = await barbersApi.createUnavailable(payload)
         if (!response.success) {
-          const conflicts = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
+          const conflictData = response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined
+          const conflicts = conflictData?.conflicts
+            ?? ((response as unknown as { conflicts?: UnavailabilityConflictReservation[] }).conflicts ?? [])
           if (conflicts.length) {
             setConflictReservations(conflicts)
             setPendingCreatePayload(payload)
@@ -182,6 +192,71 @@ export default function UnavailablePage() {
     })
     setFormError(null)
     setModal(true)
+  }
+
+  const openGroupEdit = (groupId: string, items: Unavailable[]) => {
+    const sorted = [...items].sort((a, b) => a.data_hora_inicio.localeCompare(b.data_hora_inicio))
+    const first = sorted[0]
+    if (!first) return
+    setGroupEdit({
+      group_id: groupId,
+      form: {
+        barbeiro_id: first.barbeiro_id,
+        data_hora_inicio: first.data_hora_inicio,
+        data_hora_fim: first.data_hora_fim,
+        tipo: first.tipo,
+        motivo: first.motivo ?? '',
+        is_all_day: first.is_all_day ?? 0,
+        recurrence_type: first.recurrence_type ?? 'weekly',
+        recurrence_end_date: first.recurrence_end_date ?? '',
+      },
+    })
+    setGroupEditError(null)
+  }
+
+  const handleGroupEditSave = async () => {
+    if (!groupEdit) return
+    const { form: groupForm, group_id: groupId } = groupEdit
+    if (!groupForm.data_hora_inicio) {
+      setGroupEditError('Data de início obrigatória.')
+      return
+    }
+    if (!groupForm.data_hora_fim && !groupForm.is_all_day) {
+      setGroupEditError('Data de fim obrigatória.')
+      return
+    }
+    if (groupForm.recurrence_type && groupForm.recurrence_type !== 'none' && !groupForm.recurrence_end_date) {
+      setGroupEditError('Data final da recorrência obrigatória.')
+      return
+    }
+
+    const startDate = groupForm.data_hora_inicio.substring(0, 10)
+    const endDate = (groupForm.data_hora_fim || groupForm.data_hora_inicio).substring(0, 10)
+    const inicio = groupForm.is_all_day ? `${startDate}T09:00:00` : groupForm.data_hora_inicio
+    const fim = groupForm.is_all_day ? `${endDate}T20:00:00` : groupForm.data_hora_fim
+
+    setGroupEditSaving(true)
+    setGroupEditError(null)
+    try {
+      const response = await barbersApi.updateGroup(groupId, {
+        barber_id: groupForm.barbeiro_id,
+        start: inicio,
+        end: fim,
+        is_all_day: groupForm.is_all_day ?? 0,
+        type: groupForm.tipo,
+        reason: groupForm.motivo ?? '',
+        recurrence_type: groupForm.recurrence_type,
+        recurrence_end_date: groupForm.recurrence_type === 'none' ? undefined : groupForm.recurrence_end_date,
+      })
+      if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
+      qc.invalidateQueries({ queryKey: ['unavailable'] })
+      setGroupEdit(null)
+      setGroupDetail(null)
+    } catch (e: unknown) {
+      setGroupEditError(e instanceof Error ? e.message : 'Erro ao guardar')
+    } finally {
+      setGroupEditSaving(false)
+    }
   }
 
   const upd = <K extends keyof UnavailableFormState>(field: K, value: UnavailableFormState[K]) =>
@@ -282,6 +357,11 @@ export default function UnavailablePage() {
                             title="Ver detalhes"
                           ><Eye size={14} /></button>
                           <button
+                            onClick={() => openGroupEdit(gid, sorted)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"
+                            title="Editar regras do grupo"
+                          ><Pencil size={14} /></button>
+                          <button
                             onClick={() => toggleExpand(gid)}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                           >{isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
@@ -317,6 +397,10 @@ export default function UnavailablePage() {
                             </div>
                           ))}
                           <div className="flex gap-2 pt-2">
+                            <button
+                              onClick={() => openGroupEdit(gid, items)}
+                              className="text-xs text-brand-600 hover:text-brand-700 font-medium px-2 py-1 rounded hover:bg-brand-50 transition-colors"
+                            >✏️ Editar regras</button>
                             <button
                               onClick={() => {
                                 if (window.confirm(`Eliminar todas as ${items.length} ocorrências deste grupo?`))
@@ -437,6 +521,10 @@ export default function UnavailablePage() {
           footer={
             <>
               <button
+                className="btn-primary"
+                onClick={() => openGroupEdit(groupDetail.group_id, groupDetail.items)}
+              >✏️ Editar regras</button>
+              <button
                 className="btn-danger"
                 onClick={() => { if (window.confirm('Eliminar todo o grupo?')) removeGroup.mutate(groupDetail.group_id) }}
                 disabled={removeGroup.isPending}
@@ -481,6 +569,31 @@ export default function UnavailablePage() {
               ))}
             </div>
           </div>
+        </Modal>
+      )}
+
+      {groupEdit && (
+        <Modal
+          open={!!groupEdit}
+          onClose={() => setGroupEdit(null)}
+          title="Editar regras da recorrência"
+        >
+          <UnavailableEditorForm
+            form={groupEdit.form}
+            barbers={visibleBarbers.filter(b => b.id === groupEdit.form.barbeiro_id)}
+            isNew
+            disableBarberSelection
+            error={groupEditError}
+            saving={groupEditSaving}
+            onChange={(k, v) => {
+              setGroupEdit(prev => prev ? ({
+                ...prev,
+                form: { ...prev.form, [k]: v },
+              }) : prev)
+            }}
+            onSave={() => { void handleGroupEditSave() }}
+            onCancel={() => setGroupEdit(null)}
+          />
         </Modal>
       )}
     </div>
