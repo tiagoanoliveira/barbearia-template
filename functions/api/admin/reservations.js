@@ -76,6 +76,7 @@ export async function onRequest(context) {
            r.comentario,
            r.nota_privada,
            r.duracao_efetiva      AS service_duration,
+           r.created_by           AS created_by,
            r.cliente_id           AS client_id,
            r.cliente_nome         AS client_name,
            r.cliente_email        AS client_email,

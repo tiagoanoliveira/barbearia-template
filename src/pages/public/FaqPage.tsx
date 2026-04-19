@@ -9,7 +9,7 @@ const faqs = [
   },
   {
     q: 'Posso cancelar ou alterar a minha reserva?',
-    a: 'Sim, podes cancelar ou alterar a tua reserva até com 2 horas de antecedência. Acede ao teu perfil, vão a “As minhas reservas” e selecciona a opção desejada.',
+    a: 'Sim, podes cancelar ou alterar a tua reserva com até 3 horas de antecedência. Acede ao teu perfil, vai a “As minhas reservas”, edita a reserva e seleciona a opção desejada.',
   },
   {
     q: 'A reserva é gratuita?',
@@ -17,7 +17,7 @@ const faqs = [
   },
   {
     q: 'Qual é o tempo de cada serviço?',
-    a: 'A duração varia consoante o serviço. Corte básico: 30 min. Corte + barba: 45–60 min. Tratamentos especiais podem demorar mais. O tempo está indicado em cada serviço ao reservar.',
+    a: 'A duração varia consoante o serviço. Corte básico: 30-40 min. Corte + barba: 60 min. Tratamentos especiais podem demorar mais. O tempo está indicado em cada serviço ao reservar.',
   },
   {
     q: 'Posso escolher o meu barbeiro preferido?',
@@ -25,15 +25,15 @@ const faqs = [
   },
   {
     q: 'O que acontece se não aparecer à reserva?',
-    a: 'Em caso de falta sem aviso prévio, a reserva será marcada como “Não compareceu”. Faltas repetidas podem levar à suspensão do acesso ao sistema de reservas.',
+    a: 'Em caso de falta sem aviso prévio, a reserva será marcada como “Não compareceu”. Faltas repetidas podem levar à suspensão do acesso ao sistema de reservas e obrigação do pagamento prévio para novas reservas.',
   },
   {
     q: 'Aceita walk-ins (sem reserva)?',
-    a: 'Sim, sempre que haja disponibilidade. No entanto, recomendamos a reserva online para garantir o teu horário, especialmente ao fim de semana.',
+    a: 'Não recomendamos, pois pode não existir disponibilidade no momento de comparência. No entanto, deves consultar a disponibilidade de todos os barbeiros online pois tens acesso, por esta via, a todos os horários em que os barbeiros se encontram disponíveis.',
   },
   {
     q: 'Como contacto a barbearia?',
-    a: `Podes contactar-nos por telefone (${barberShopConfig.phone}), email (${barberShopConfig.email}) ou pela nossa página de Suporte.`,
+    a: `Podes contactar-nos pela nossa página de suporte [via recomendada e rápida] ou por telefone (${barberShopConfig.phone}) [sujeito a disponibilidade dos barbeiros e apenas disponível no horário de abertura da barbearia].`,
   },
 ]
 

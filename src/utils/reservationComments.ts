@@ -1,4 +1,4 @@
-const EMPTY_BRACKET_COMMENT_PATTERN = /^\[\s*\]$/
+  const EMPTY_BRACKET_COMMENT_PATTERN = /^\[\s*\]$/
 
 export function hasMeaningfulReservationComment(comment?: string) {
   if (!comment) return false
