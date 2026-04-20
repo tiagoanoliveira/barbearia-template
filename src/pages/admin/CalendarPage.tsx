@@ -20,7 +20,6 @@ import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from 
 import { useAdminUser } from '@/hooks/useAdminUser'
 import { NewReservationForm, ReservationCopyContent } from '@/components/admin/calendar/forms'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
-import { UnavailabilityConflictsModal, type UnavailabilityConflictReservation } from '@/components/admin/unavailable/unavailability-modals'
 import { ClientDetailModal } from '@/components/admin/client-detail-modal'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
@@ -158,8 +157,6 @@ export default function CalendarPage() {
   const [uForm, setUForm]     = useState<Partial<Unavailable> & { recurrence_end_date?: string }>({})
   const [uError, setUError]   = useState<string | null>(null)
   const [uSaving, setUSaving] = useState(false)
-  const [uConflicts, setUConflicts] = useState<UnavailabilityConflictReservation[]>([])
-  const [uPendingPayload, setUPendingPayload] = useState<Partial<Unavailable> | null>(null)
 
   const [copyDate, setCopyDate]     = useState('')
   const [copyTime, setCopyTime]     = useState('')
@@ -185,7 +182,6 @@ export default function CalendarPage() {
 
   const activeBarbers: Barber[] = (barbersRes?.data ?? []).filter(b => b.active)
   const sortedActiveBarbers = useMemo(() => [...activeBarbers].sort((a, b) => a.id - b.id), [activeBarbers])
-  // Barbeiros visíveis na grelha (filtrado por barbeiro logado ou filtro manual)
   const barbers: Barber[] = useMemo(() => {
     const base = loggedBarberId
       ? activeBarbers.filter(b => b.id === loggedBarberId)
@@ -209,7 +205,6 @@ export default function CalendarPage() {
   const openCtx = (e: React.MouseEvent, target: ContextTarget) => {
     e.preventDefault(); e.stopPropagation()
     const MENU_WIDTH = 260
-    // Alturas máximas aproximadas por tipo de menu para evitar cortar opções no fundo do ecrã.
     const MENU_HEIGHT_BY_KIND: Record<ContextTarget['kind'], number> = {
       slot: 110,
       unavailable: 110,
@@ -258,20 +253,7 @@ export default function CalendarPage() {
       }
       if (isNew || !uForm.id) {
         const response = await barbersApi.createUnavailable(payload as Unavailable)
-        if (!response.success) {
-          const conflicts = (response.data as { conflicts?: UnavailabilityConflictReservation[] } | undefined)?.conflicts ?? []
-          console.debug('[CalendarPage] createUnavailable returned unsuccessfully', {
-            payload,
-            error: response.error,
-            conflicts: conflicts.length,
-          })
-          if (conflicts.length) {
-            setUConflicts(conflicts)
-            setUPendingPayload(payload)
-            return
-          }
-          throw new Error(response.error ?? 'Erro ao guardar')
-        }
+        if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
       } else {
         const response = await barbersApi.updateUnavailable(uForm.id, payload as Unavailable)
         if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
@@ -328,23 +310,12 @@ export default function CalendarPage() {
     return barberU.find(u => u.data_hora_inicio < slotEnd && u.data_hora_fim > slotISO) ?? null
   }
 
-  useEffect(() => {
-    if (uConflicts.length > 0) {
-      console.debug('[CalendarPage] opening conflicts modal', {
-        conflicts: uConflicts.length,
-        pendingPayload: uPendingPayload,
-      })
-    }
-  }, [uConflicts, uPendingPayload])
-
   if (isLoading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
 
   return (
     <div className="space-y-3" onClick={closeCtx}>
-      {/* ── Barra de controlos ─────────────────────────────────────────── */}
       <Card padding="xs">
         <div className="flex flex-col gap-3">
-          {/* Linha 1: navegação de data */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
               <button onClick={() => setSelectedDate(format(new Date(), 'yyyy-MM-dd'))}
@@ -383,7 +354,6 @@ export default function CalendarPage() {
         </div>
       </Card>
 
-      {/* ── Dia fechado ────────────────────────────────────────────────── */}
       {dayConfig.closed ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -398,7 +368,6 @@ export default function CalendarPage() {
             <div ref={gridRef} className="grid select-none"
               style={{ gridTemplateColumns: `3rem repeat(${barbers.length}, minmax(140px, 1fr))`, minWidth: 3*16 + barbers.length*140 }}>
 
-              {/* Cabeçalho */}
               <div className="sticky top-0 z-10 bg-white border-b border-gray-100 h-10" />
               {barbers.map(b => (
                 <div key={b.id} className="sticky top-0 z-10 h-10 flex items-center justify-center border-b border-l"
@@ -407,7 +376,6 @@ export default function CalendarPage() {
                 </div>
               ))}
 
-              {/* Slots */}
               {timeSlots.map(slot => {
                 const isHourEnd = (slot + 1) % SLOTS_PER_H === 0
                 return (
@@ -517,7 +485,6 @@ export default function CalendarPage() {
         </Card>
       )}
 
-      {/* ── Context menu ──────────────────────────────────────────────── */}
       {ctx && (
         <div className="fixed z-50 bg-white rounded-xl shadow-2xl border border-gray-100 py-1 min-w-[210px] text-sm"
           style={{ top: ctxPos.y, left: ctxPos.x }} onClick={e => e.stopPropagation()}>
@@ -575,7 +542,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ── Modais de reservas ─────────────────────────────────────────── */}
       {modal?.type === 'res_detail' && (
         <ReservationDetailModal reservation={modal.r} onClose={close}
           onEdit={() => setModal({ type: 'res_edit', r: modal.r })}
@@ -601,7 +567,6 @@ export default function CalendarPage() {
         <ReservationStatusModal reservation={modal.r} action={modal.action} invalidateKey="cal-reservations" onClose={close} />
       )}
 
-      {/* Modal copiar reserva */}
       <Modal open={modal?.type === 'res_copy'} onClose={close} title="Copiar reserva"
         footer={
           <>
@@ -628,7 +593,6 @@ export default function CalendarPage() {
         ) : <></>}
       </Modal>
 
-      {/* Modal nova reserva */}
       <Modal open={modal?.type === 'res_new'} onClose={close} title="Nova reserva">
         {modal?.type === 'res_new' ? (
           <NewReservationForm
@@ -658,7 +622,6 @@ export default function CalendarPage() {
         ) : <></>}
       </Modal>
 
-      {/* Modal indisponibilidade */}
       <Modal open={modal?.type === 'unavail'} onClose={close}
         title={modal?.type === 'unavail' && modal.isNew ? 'Nova indisponibilidade' : 'Editar indisponibilidade'}>
         {modal?.type === 'unavail' ? (
@@ -669,39 +632,6 @@ export default function CalendarPage() {
             onSave={handleSaveUnavailable} onCancel={close} />
         ) : <></>}
       </Modal>
-
-      <UnavailabilityConflictsModal
-        open={uConflicts.length > 0}
-        reservations={uConflicts}
-        saving={uSaving}
-        onCancel={() => {
-          setUConflicts([])
-          setUPendingPayload(null)
-        }}
-        onConfirm={async ({ selectedIds, reason }) => {
-          if (!uPendingPayload) return
-          setUSaving(true)
-          setUError(null)
-          try {
-            const response = await barbersApi.createUnavailable({
-              ...(uPendingPayload as Unavailable),
-              skip_conflict_check: true,
-              cancel_reservation_ids: selectedIds,
-              cancel_reason: reason,
-            })
-            if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
-            qc.invalidateQueries({ queryKey: ['cal-unavail'] })
-            qc.invalidateQueries({ queryKey: ['cal-reservations'] })
-            setUConflicts([])
-            setUPendingPayload(null)
-            close()
-          } catch (e: unknown) {
-            setUError(e instanceof Error ? e.message : 'Erro ao guardar')
-          } finally {
-            setUSaving(false)
-          }
-        }}
-      />
     </div>
   )
 }
