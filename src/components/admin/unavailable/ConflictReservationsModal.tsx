@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 import { AlertTriangle, CalendarDays } from 'lucide-react'
@@ -23,6 +23,13 @@ export function ConflictReservationsModal({
   const [selected, setSelected]   = useState<Set<number>>(() => new Set(reservations.map(r => r.id)))
   const [reason,   setReason]     = useState('')
   const [error,    setError]      = useState<string | null>(null)
+
+  // Sync selection when reservations change (e.g. modal reopened with different data)
+  useEffect(() => {
+    setSelected(new Set(reservations.map(r => r.id)))
+    setReason('')
+    setError(null)
+  }, [reservations])
 
   const allSelected = reservations.length > 0 && selected.size === reservations.length
 
