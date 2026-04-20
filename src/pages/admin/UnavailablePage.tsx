@@ -5,13 +5,16 @@ import { format, parseISO, isAfter, startOfDay } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
 import { barbersApi } from '@/api/barbers'
+import { reservationsApi } from '@/api/reservations'
+import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import type { Unavailable, UnavailableTipo } from '@/types'
+import type { Unavailable, UnavailableTipo, ConflictReservation } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
+import { ConflictReservationsModal } from '@/components/admin/unavailable/ConflictReservationsModal'
 
 const TYPE_LABELS: Record<UnavailableTipo, string> = {
   folga:    'Folga',
@@ -65,6 +68,12 @@ export default function UnavailablePage() {
   const [expanded, setExpanded]       = useState<Set<string>>(new Set())
   const [formError, setFormError]     = useState<string | null>(null)
   const [submitSaving, setSubmitSaving] = useState(false)
+
+  // Conflict modal state
+  const [conflictModal, setConflictModal]               = useState(false)
+  const [conflictReservations, setConflictReservations] = useState<ConflictReservation[]>([])
+  const [pendingPayload, setPendingPayload]             = useState<UnavailableFormState | null>(null)
+  const [conflictSaving, setConflictSaving]             = useState(false)
 
   const [filterBarberId, setFilterBarberId] = useState<number | 'all'>(loggedBarberId ?? 'all')
   const [filterFrom, setFilterFrom]         = useState('')
@@ -146,6 +155,21 @@ export default function UnavailablePage() {
         setModal(false)
         setEditTarget(null)
       } else {
+        // Check for conflicting reservations before creating
+        const conflictsRes = await barbersApi.checkConflicts({
+          barber_id:           form.barbeiro_id!,
+          start:               inicio!,
+          end:                 fim!,
+          is_all_day:          !!form.is_all_day,
+          recurrence_type:     form.recurrence_type,
+          recurrence_end_date: form.recurrence_end_date,
+        })
+        if (conflictsRes.success && conflictsRes.data && conflictsRes.data.length > 0) {
+          setPendingPayload({ ...form, data_hora_inicio: inicio, data_hora_fim: fim })
+          setConflictReservations(conflictsRes.data)
+          setConflictModal(true)
+          return
+        }
         const response = await barbersApi.createUnavailable({ ...form, data_hora_inicio: inicio, data_hora_fim: fim })
         if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
         qc.invalidateQueries({ queryKey: ['unavailable'] })
@@ -156,6 +180,37 @@ export default function UnavailablePage() {
       setFormError(e instanceof Error ? e.message : 'Erro ao guardar')
     } finally {
       setSubmitSaving(false)
+    }
+  }
+
+  const handleConflictConfirm = async (selectedIds: number[], reason: string) => {
+    if (!pendingPayload) return
+    setConflictSaving(true)
+    try {
+      const response = await barbersApi.createUnavailable(pendingPayload)
+      if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
+      await Promise.all(
+        selectedIds.map(async id => {
+          await reservationsApi.update(id, {
+            status: 'cancelada',
+            nota_privada: `[Cancelamento] ${reason}`,
+          })
+          await adminApi.post('/api/admin/reservations/cancel-email', {
+            reservation_id: id, reason,
+          }).catch(() => {})
+        })
+      )
+      qc.invalidateQueries({ queryKey: ['unavailable'] })
+      setConflictModal(false)
+      setPendingPayload(null)
+      setConflictReservations([])
+      setModal(false)
+      setForm(EMPTY_FORM)
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : 'Erro ao guardar')
+      setConflictModal(false)
+    } finally {
+      setConflictSaving(false)
     }
   }
 
@@ -213,6 +268,7 @@ export default function UnavailablePage() {
   })
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end sm:justify-between">
         <div className="flex flex-wrap gap-2 items-end">
@@ -411,5 +467,14 @@ export default function UnavailablePage() {
         </Modal>
       )}
     </div>
+
+    <ConflictReservationsModal
+      open={conflictModal}
+      reservations={conflictReservations}
+      saving={conflictSaving}
+      onCancel={() => { setConflictModal(false); setPendingPayload(null); setConflictReservations([]) }}
+      onConfirm={(selectedIds, reason) => { void handleConflictConfirm(selectedIds, reason) }}
+    />
+    </>
   )
 }
