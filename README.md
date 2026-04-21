@@ -6,7 +6,6 @@ Template moderno para websites de barbearia com painel de administração comple
 
 - **Frontend**: React 18 + Vite + TypeScript
 - **Estilos**: Tailwind CSS v4
-- **Gráficos**: Recharts
 - **Calendário**: FullCalendar React
 - **Estado/API**: TanStack Query (React Query)
 - **Backend**: Cloudflare Pages Functions + D1 + KV
