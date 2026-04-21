@@ -32,7 +32,7 @@ export async function onRequest(context) {
       if (unread) {
         // View optimizada para não lidas, limitada aos últimos 7 dias
         query = 'SELECT * FROM v_notifications_unread'
-        const whereParts: string[] = []
+        const whereParts = []
         if (effectiveBarberId) {
           whereParts.push('barber_id = ?')
           params.push(effectiveBarberId)
@@ -48,7 +48,7 @@ export async function onRequest(context) {
       } else {
         // Últimas 50 notificações recentes (view limitada a 24h no schema)
         query = 'SELECT * FROM v_notifications_recent'
-        const whereParts: string[] = []
+        const whereParts = []
         if (effectiveBarberId) {
           whereParts.push('barber_id = ?')
           params.push(effectiveBarberId)
@@ -84,7 +84,7 @@ export async function onRequest(context) {
           isBarber && barberIdDb
             ? 'UPDATE notifications SET is_read = 1 WHERE id = ? AND (barber_id = ? OR barber_id IS NULL)'
             : 'UPDATE notifications SET is_read = 1 WHERE id = ?'
-        ).bind(isBarber && barberIdDb ? [id, barberIdDb] : [id]).run()
+        ).bind(...(isBarber && barberIdDb ? [id, barberIdDb] : [id])).run()
 
         if (!success) {
           return serverError('Não foi possível atualizar a notificação', 'update_failed')
