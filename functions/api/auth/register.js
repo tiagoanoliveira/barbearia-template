@@ -86,11 +86,28 @@ export async function onRequest(context) {
     if (phone && sanitize(phone, 30).trim()) {
       const phoneClean = sanitize(phone, 30).trim()
       const existingPhone = await env.DB.prepare(
-          `SELECT id FROM clientes
+        `SELECT id FROM clientes
          WHERE replace(replace(telefone,' ',''),'-','') = replace(replace(?,' ',''),'-','')`
       ).bind(phoneClean).first()
 
       if (existingPhone) {
+        // Verificar se o cliente existente tem email placeholder (@withoutcontact.pt)
+        // — isso significa que foi criado pelo admin sem email real.
+        const existingClient = await env.DB.prepare(
+          'SELECT email FROM clientes WHERE id = ?'
+        ).bind(existingPhone.id).first()
+
+        if (existingClient?.email?.toLowerCase().endsWith('@withoutcontact.pt')) {
+          // Conta criada pelo admin sem email: orientar o utilizador para o suporte
+          return conflict(JSON.stringify({
+            code: 'PHONE_EXISTS_NO_EMAIL',
+            message: 'Já existe uma conta associada a este número de telemóvel, mas sem email configurado.',
+            hint: 'Para associar o seu email a esta conta, contacte o nosso suporte.',
+            support_url: '/suporte',
+          }))
+        }
+
+        // Telemóvel duplicado com email real: comportamento padrão
         return conflict(JSON.stringify({
           code: 'PHONE_EXISTS',
           message: 'Já existe uma conta com este número de telemóvel.',
@@ -104,17 +121,17 @@ export async function onRequest(context) {
     const expires = new Date(Date.now() + 86400000).toISOString() // 24h
 
     const result = await env.DB.prepare(
-        `INSERT INTO clientes
+      `INSERT INTO clientes
          (nome, email, telefone, password_hash, auth_methods,
           email_verificado, token_verificacao, token_verificacao_expira)
        VALUES (?, ?, ?, ?, 'password', 0, ?, ?)`
     ).bind(
-        sanitize(name, 100),
-        emailClean,
-        sanitize(phone ?? '', 30),
-        hash,
-        token,
-        expires,
+      sanitize(name, 100),
+      emailClean,
+      sanitize(phone ?? '', 30),
+      hash,
+      token,
+      expires,
     ).run()
 
     const { html } = buildVerificationEmail({ clientName: sanitize(name, 100), verifyToken: token })

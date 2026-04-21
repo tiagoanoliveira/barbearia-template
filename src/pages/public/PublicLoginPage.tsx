@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { Eye, EyeOff, LogIn } from 'lucide-react'
+import { Eye, EyeOff, LogIn, AlertTriangle } from 'lucide-react'
 import { api } from '@/api/client'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 
@@ -65,10 +65,13 @@ export default function PublicLoginPage() {
     }
   }, [])
 
-  // Estado para modal de telefone duplicado
+  // Estado para modal de telefone duplicado (com email real)
   const [phoneExistModal, setPhoneExistModal] = useState(false)
   const [pendingEmail, setPendingEmail] = useState('')
   const [pendingPhone, setPendingPhone] = useState('')
+
+  // Estado para aviso de telefone sem email (criado pelo admin)
+  const [phoneNoEmailWarning, setPhoneNoEmailWarning] = useState<{ phone: string; supportUrl: string } | null>(null)
 
   const field = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
@@ -77,6 +80,7 @@ export default function PublicLoginPage() {
     e.preventDefault()
     setError(null)
     setSuccessMsg(null)
+    setPhoneNoEmailWarning(null)
 
     if (!turnstileToken) {
       setError('Por favor confirme que não é um robô antes de continuar.')
@@ -104,9 +108,19 @@ export default function PublicLoginPage() {
     }
 
     if (!res.success || !res.data) {
-      // Tentar interpretar erro estruturado (ex: PHONE_EXISTS)
+      // Tentar interpretar erro estruturado
       try {
         const parsed = JSON.parse(res.error ?? '')
+
+        if (parsed?.code === 'PHONE_EXISTS_NO_EMAIL') {
+          // Conta criada pelo admin sem email real — redirecionar para suporte
+          setPhoneNoEmailWarning({
+            phone:      form.phone,
+            supportUrl: parsed.support_url ?? '/suporte',
+          })
+          return
+        }
+
         if (parsed?.code === 'PHONE_EXISTS') {
           setPendingEmail(form.email)
           setPendingPhone(form.phone)
@@ -158,7 +172,7 @@ export default function PublicLoginPage() {
         {/* Toggle login/register */}
         <div className="flex bg-white/5 rounded-2xl p-1 mb-6">
           {(['login', 'register'] as Mode[]).map(m => (
-            <button key={m} onClick={() => { setMode(m); setError(null); setSuccessMsg(null) }}
+            <button key={m} onClick={() => { setMode(m); setError(null); setSuccessMsg(null); setPhoneNoEmailWarning(null) }}
                     className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
                       mode === m ? 'bg-brand-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'
                     }`}>
@@ -278,6 +292,26 @@ export default function PublicLoginPage() {
             </p>
           )}
 
+          {/* Aviso especial: conta criada pelo admin sem email */}
+          {phoneNoEmailWarning && (
+            <div className="flex gap-3 bg-amber-950/60 border border-amber-700/60 rounded-xl px-4 py-3">
+              <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
+              <div className="text-sm text-amber-300 space-y-1">
+                <p className="font-medium">Conta sem email associado</p>
+                <p className="text-amber-400/80">
+                  Já existe uma conta com o número <strong className="text-amber-300">{phoneNoEmailWarning.phone}</strong>, mas
+                  sem email configurado. Para associar o seu email a esta conta, contacte o nosso suporte.
+                </p>
+                <Link
+                  to={phoneNoEmailWarning.supportUrl}
+                  className="inline-block mt-1 text-amber-300 underline underline-offset-2 hover:text-amber-200 font-medium"
+                >
+                  Ir para o suporte →
+                </Link>
+              </div>
+            </div>
+          )}
+
           {successMsg && (
             <p className="text-sm text-green-400 bg-green-950/50 border border-green-800/50 rounded-xl px-4 py-2.5">
               {successMsg}
@@ -297,7 +331,7 @@ export default function PublicLoginPage() {
         </form>
       </div>
 
-      {/* Modal: telefone já associado a outra conta */}
+      {/* Modal: telefone já associado a outra conta com email real */}
       <ConfirmDialog
         open={phoneExistModal}
         onClose={() => setPhoneExistModal(false)}

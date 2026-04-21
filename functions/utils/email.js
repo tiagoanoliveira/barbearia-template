@@ -8,6 +8,18 @@ const BASE_URL = 'https://brooklynbarbearia.pt'
 const YEAR = new Date().getFullYear()
 
 /**
+ * Verifica se um endereço de email é um placeholder sem contacto.
+ * Endereços com terminação @withoutcontact.pt são gerados automaticamente
+ * para clientes criados pelo admin sem email real.
+ *
+ * @param {string} email
+ * @returns {boolean}
+ */
+export function isPlaceholderEmail(email) {
+  return typeof email === 'string' && email.toLowerCase().endsWith('@withoutcontact.pt')
+}
+
+/**
  * Converte uma string UTF-8 para Base64 de forma segura.
  * btoa() nativo falha com caracteres fora do range Latin1 (ex: acentos em nomes,
  * emojis, caracteres especiais em assuntos ICS).
@@ -123,6 +135,12 @@ function icsParams(dataHora, duracao) {
 
 // ─── Envio central com debug completo ───────────────────────────────────────────────
 export async function sendEmail(context, { to, subject, html, attachments = [] }) {
+  // Bloquear envio para endereços @withoutcontact.pt (clientes sem email real)
+  if (isPlaceholderEmail(to)) {
+    console.warn(`[sendEmail] Envio bloqueado para "${to}" — cliente sem email atualizado. Atualize o email do cliente no painel de admin.`)
+    throw new Error('EMAIL_NOT_UPDATED: Este cliente não tem um email válido configurado. Por favor atualize o email no painel de administração.')
+  }
+
   const key = context.env?.RESEND_API_KEY
 
   if (!key) {
