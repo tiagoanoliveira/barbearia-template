@@ -80,6 +80,15 @@ export interface Unavailable {
   created_at: string
 }
 
+// ─── Conflito de reserva ─────────────────────────────────────────────────────
+export interface ConflictReservation {
+  id: number
+  client_name: string
+  data_hora: string
+  service_name: string
+  duracao_minutos: number
+}
+
 // ─── Dashboard stats ─────────────────────────────────────────────────────────
 export interface DashboardStats {
   today: number

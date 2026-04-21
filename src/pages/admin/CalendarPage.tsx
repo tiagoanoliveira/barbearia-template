@@ -16,10 +16,11 @@ import {
   ReservationEditModal,
   ReservationStatusModal,
 } from '@/components/admin/reservation-modals'
-import type { Reservation, Barber, Unavailable, UnavailableTipo, Service } from '@/types'
+import type { Reservation, Barber, Unavailable, UnavailableTipo, Service, ConflictReservation } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
 import { NewReservationForm, ReservationCopyContent } from '@/components/admin/calendar/forms'
 import { UnavailableEditorForm } from '@/components/admin/unavailable/UnavailableEditorForm'
+import { ConflictReservationsModal } from '@/components/admin/unavailable/ConflictReservationsModal'
 import { ClientDetailModal } from '@/components/admin/client-detail-modal'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
@@ -158,6 +159,12 @@ export default function CalendarPage() {
   const [uError, setUError]   = useState<string | null>(null)
   const [uSaving, setUSaving] = useState(false)
 
+  // Conflict modal state
+  const [conflictModal, setConflictModal]               = useState(false)
+  const [conflictReservations, setConflictReservations] = useState<ConflictReservation[]>([])
+  const [pendingUForm, setPendingUForm]                 = useState<Partial<Unavailable> | null>(null)
+  const [conflictSaving, setConflictSaving]             = useState(false)
+
   const [copyDate, setCopyDate]     = useState('')
   const [copyTime, setCopyTime]     = useState('')
   const [copySaving, setCopySaving] = useState(false)
@@ -252,6 +259,21 @@ export default function CalendarPage() {
         payload.data_hora_fim    = `${dayEnd}T${String(CLOSE_H).padStart(2,'0')}:00:00`
       }
       if (isNew || !uForm.id) {
+        // Check for conflicting reservations before creating
+        const conflictsRes = await barbersApi.checkConflicts({
+          barber_id:  payload.barbeiro_id!,
+          start:      payload.data_hora_inicio!,
+          end:        payload.data_hora_fim!,
+          is_all_day: !!payload.is_all_day,
+          recurrence_type:     (payload as Partial<Unavailable> & { recurrence_end_date?: string }).recurrence_type,
+          recurrence_end_date: (payload as Partial<Unavailable> & { recurrence_end_date?: string }).recurrence_end_date,
+        })
+        if (conflictsRes.success && conflictsRes.data && conflictsRes.data.length > 0) {
+          setPendingUForm(payload)
+          setConflictReservations(conflictsRes.data)
+          setConflictModal(true)
+          return
+        }
         const response = await barbersApi.createUnavailable(payload as Unavailable)
         if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
       } else {
@@ -261,6 +283,37 @@ export default function CalendarPage() {
       qc.invalidateQueries({ queryKey: ['cal-unavail'] }); close()
     } catch (e: unknown) { setUError(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setUSaving(false) }
+  }
+
+  const handleCalendarConflictConfirm = async (selectedIds: number[], reason: string) => {
+    if (!pendingUForm) return
+    setConflictSaving(true)
+    try {
+      const response = await barbersApi.createUnavailable(pendingUForm as Unavailable)
+      if (!response.success) throw new Error(response.error ?? 'Erro ao guardar')
+      await Promise.all(
+        selectedIds.map(async id => {
+          await reservationsApi.update(id, {
+            status: 'cancelada',
+            nota_privada: `[Cancelamento] ${reason}`,
+          })
+          await adminApi.post('/api/admin/reservations/cancel-email', {
+            reservation_id: id, reason,
+          }).catch(() => {})
+        })
+      )
+      qc.invalidateQueries({ queryKey: ['cal-unavail'] })
+      qc.invalidateQueries({ queryKey: ['cal-reservations'] })
+      setConflictModal(false)
+      setPendingUForm(null)
+      setConflictReservations([])
+      close()
+    } catch (e: unknown) {
+      setUError(e instanceof Error ? e.message : 'Erro ao guardar')
+      setConflictModal(false)
+    } finally {
+      setConflictSaving(false)
+    }
   }
 
   const handleCopy = async () => {
@@ -632,6 +685,14 @@ export default function CalendarPage() {
             onSave={handleSaveUnavailable} onCancel={close} />
         ) : <></>}
       </Modal>
+
+      <ConflictReservationsModal
+        open={conflictModal}
+        reservations={conflictReservations}
+        saving={conflictSaving}
+        onCancel={() => { setConflictModal(false); setPendingUForm(null); setConflictReservations([]) }}
+        onConfirm={(selectedIds, reason) => { void handleCalendarConflictConfirm(selectedIds, reason) }}
+      />
     </div>
   )
 }

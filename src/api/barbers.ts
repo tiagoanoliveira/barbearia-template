@@ -1,5 +1,5 @@
 import { adminApi } from './client'
-import type { Barber, Unavailable, ApiResponse } from '@/types'
+import type { Barber, Unavailable, ApiResponse, ConflictReservation } from '@/types'
 
 export const barbersApi = {
   list: (options?: { includeInactive?: boolean }) =>
@@ -66,4 +66,14 @@ export const barbersApi = {
 
   deleteGroup: (groupId: string) =>
     adminApi.delete<ApiResponse<null>>(`/api/admin/unavailabilities/group/${groupId}`),
+
+  checkConflicts: (data: {
+    barber_id: number
+    start: string
+    end: string
+    is_all_day: boolean
+    recurrence_type?: string
+    recurrence_end_date?: string
+  }) =>
+    adminApi.post<ConflictReservation[]>('/api/admin/unavailabilities/check-conflicts', data),
 }
