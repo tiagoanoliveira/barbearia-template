@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO, addMinutes } from 'date-fns'
 import { pt } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
@@ -122,6 +123,8 @@ function useDebouncedDate(initial: string, delay = 600) {
 
 export default function CalendarPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // ── Utilizador logado ────────────────────────────────────────────────────
   const adminUser = useAdminUser()
@@ -130,8 +133,20 @@ export default function CalendarPage() {
   const loggedBarberId   = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
 
   // ── Data seleccionada ────────────────────────────────────────────────────
+  const initialDateFromUrl = searchParams.get('date')
+  const initialDate        = initialDateFromUrl || format(new Date(), 'yyyy-MM-dd')
+
   const { display: dateDisplay, committed: selectedDate, onChange: onDateInput, setDate: setSelectedDate } =
-    useDebouncedDate(format(new Date(), 'yyyy-MM-dd'))
+    useDebouncedDate(initialDate)
+
+  // Sincronizar alteração de data com URL para permitir deep-linking
+  useEffect(() => {
+    const current = new URLSearchParams(searchParams)
+    current.set('date', selectedDate)
+    // não manter reservationId depois de a modal abrir
+    current.delete('reservationId')
+    setSearchParams(current, { replace: true })
+  }, [selectedDate, searchParams, setSearchParams])
 
   // ── Filtro de barbeiro (apenas 1 coluna) ─────────────────────────────────
   // Se o user é barbeiro, forçar o seu id e não permitir alterar
@@ -362,6 +377,24 @@ export default function CalendarPage() {
     const slotEnd = slotToISO(selectedDate, slot + 1, START_H)
     return barberU.find(u => u.data_hora_inicio < slotEnd && u.data_hora_fim > slotISO) ?? null
   }
+
+  // Abrir automaticamente a reserva passada via query string (reservationId)
+  useEffect(() => {
+    const reservationIdParam = searchParams.get('reservationId')
+    if (!reservationIdParam || !reservations.length) return
+
+    const id = Number(reservationIdParam)
+    if (!Number.isFinite(id)) return
+
+    const found = reservations.find(r => r.id === id)
+    if (found) {
+      setModal({ type: 'res_detail', r: found })
+      const params = new URLSearchParams(searchParams)
+      params.delete('reservationId')
+      setSearchParams(params, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservations])
 
   if (isLoading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
 
