@@ -72,12 +72,16 @@ export async function onRequest(context) {
   if (request.method === 'POST') {
     try {
       const body = await request.json()
-      const name  = sanitize(body.name ?? '', 255)
-      const email = sanitize(body.email ?? '', 255) || null
-      const phone = sanitize(body.phone ?? '', 50)  || null
+      const name  = sanitize(body.name  ?? '', 255)
+      const phone = sanitize(body.phone ?? '', 50).trim()
 
-      if (!name) return badRequest('Nome do cliente é obrigatório')
+      if (!name)  return badRequest('Nome do cliente é obrigatório')
       if (!phone) return badRequest('Telefone do cliente é obrigatório')
+
+      // Se não for fornecido email, gerar um placeholder com o telefone
+      // para que o campo não fique nulo mas o sistema saiba que não é um email real.
+      const rawEmail = sanitize(body.email ?? '', 255).trim()
+      const email    = rawEmail || `${phone}@withoutcontact.pt`
 
       const result = await env.DB.prepare(
         `INSERT INTO clientes (nome, email, telefone, password_hash, email_verificado, criado_em, atualizado_em)
