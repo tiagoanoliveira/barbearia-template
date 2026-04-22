@@ -51,6 +51,15 @@ export default {
       screens: {
         'xs': '30rem',
       },
+      keyframes: {
+        'slide-in': {
+          '0%':   { opacity: '0', transform: 'translateY(16px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'slide-in': 'slide-in 0.25s ease-out',
+      },
     },
   },
   plugins: [],
