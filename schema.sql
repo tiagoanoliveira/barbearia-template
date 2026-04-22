@@ -360,23 +360,27 @@ JOIN servicos s ON r.servico_id = s.id;
 
 CREATE VIEW IF NOT EXISTS v_notifications_recent AS
 SELECT
-  n.id, n.type, n.message, n.reservation_id,
-  n.client_name, n.barber_id, n.is_read, n.created_at,
-  b.nome  AS barber_name,
-  b.color AS barber_color
+    n.id, n.type, n.message, n.reservation_id,
+    n.client_name, n.barber_id, n.is_read, n.created_at,
+    b.nome  AS barber_name,
+    b.color AS barber_color,
+    r.data_hora AS reservation_date
 FROM notifications n
-LEFT JOIN barbeiros b ON n.barber_id = b.id
+         LEFT JOIN barbeiros b ON n.barber_id = b.id
+         LEFT JOIN reservas  r ON n.reservation_id = r.id
 WHERE datetime(n.created_at) > datetime('now', '-1 day')
 ORDER BY n.created_at DESC;
 
 CREATE VIEW IF NOT EXISTS v_notifications_unread AS
 SELECT
-  n.id, n.type, n.message, n.reservation_id,
-  n.client_name, n.barber_id, n.is_read, n.created_at,
-  b.nome  AS barber_name,
-  b.color AS barber_color
+    n.id, n.type, n.message, n.reservation_id,
+    n.client_name, n.barber_id, n.is_read, n.created_at,
+    b.nome  AS barber_name,
+    b.color AS barber_color,
+    r.data_hora AS reservation_date
 FROM notifications n
-LEFT JOIN barbeiros b ON n.barber_id = b.id
+         LEFT JOIN barbeiros b ON n.barber_id = b.id
+         LEFT JOIN reservas  r ON n.reservation_id = r.id
 WHERE n.is_read = 0
   AND datetime(n.created_at) > datetime('now', '-7 days')
 ORDER BY n.created_at DESC;
