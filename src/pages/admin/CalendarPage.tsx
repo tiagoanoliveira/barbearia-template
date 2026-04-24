@@ -146,7 +146,7 @@ export default function CalendarPage() {
       const n = Number(rid)
       if (Number.isFinite(n)) pendingReservationIdRef.current = n
     }
-  }, [])
+  }, [searchParams])
 
   // Sincronizar alteração de data com URL para permitir deep-linking
   useEffect(() => {

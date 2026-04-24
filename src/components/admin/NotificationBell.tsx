@@ -266,7 +266,7 @@ export default function NotificationBell() {
       <div className="relative flex items-center">
 
         {/* ── Stack de toasts — canto superior direito, cresce para baixo ── */}
-        <div className="hidden sm:flex flex-col gap-2 fixed top-16 right-4 z-50 items-end pointer-events-none">
+        <div className="hidden sm:flex flex-col gap-2 fixed top-16 right-4 z-[220] items-end pointer-events-none">
           {toasts.map(t => (
               <div
                   key={t.id}
@@ -328,8 +328,8 @@ export default function NotificationBell() {
         {/* ── Dropdown ── */}
         {open && (
             <>
-              <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-              <div className="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-40 text-xs overflow-hidden">
+              <div className="fixed inset-0 z-[200]" onClick={() => setOpen(false)} />
+              <div className="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-[210] text-xs overflow-hidden">
 
                 <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
                   <span className="font-semibold text-gray-800 text-[13px]">Notificações</span>
