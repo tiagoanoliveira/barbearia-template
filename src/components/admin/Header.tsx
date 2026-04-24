@@ -29,7 +29,7 @@ export default function Header({ title, subtitle, sidebarOpen, onToggleSidebar }
             {subtitle && <p className="text-xs text-gray-500 truncate">{subtitle}</p>}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 pr-4">
           <NotificationBell />
         </div>
       </div>
