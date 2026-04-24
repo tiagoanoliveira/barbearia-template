@@ -83,7 +83,6 @@ export default function RalPage() {
                     <li>DL n.º 74/2017, de 21 de junho — Livro de Reclamações Eletrónico</li>
                     <li>Regulamento (UE) n.º 524/2013 — Resolução de Litígios em Linha (ODR)</li>
                     <li>Regulamento (UE) n.º 1215/2012 — Competência Judiciária (Bruxelas I Reformulado)</li>
-                    <li>DL n.º 59/2021, de 14 de julho — Custo da chamada telefónica</li>
                     <li>Lei n.º 24/96, de 31 de julho — Lei de Defesa do Consumidor</li>
                 </ul>
             </Section>

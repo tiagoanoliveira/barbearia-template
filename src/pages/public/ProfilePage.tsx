@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { LogOut, Edit2, Camera, X, Save, Link2, Unlink, Star } from 'lucide-react'
+import { LogOut, Edit2, Camera, X, Save, Link2, Unlink, Star, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { api } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -12,16 +12,104 @@ interface ProfileForm {
   current_password: string; new_password: string; new_password_confirm: string
 }
 
+function SetPasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState({ new_password: '', new_password_confirm: '' })
+  const [showPw, setShowPw] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (form.new_password.length < 6) {
+      setError('A password deve ter pelo menos 6 caracteres.')
+      return
+    }
+    if (form.new_password !== form.new_password_confirm) {
+      setError('As passwords não coincidem.')
+      return
+    }
+    setLoading(true)
+    const res = await api.put('/api/me', { new_password: form.new_password })
+    setLoading(false)
+    if (!res.success) {
+      setError((res as any).error ?? 'Erro ao definir password.')
+      return
+    }
+    onSuccess()
+    onClose()
+  }
+
+  return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+            <h3 className="font-bold text-gray-900">Definir password</h3>
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} className="text-gray-500" /></button>
+          </div>
+          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+            <div>
+              <label className="label">Nova password</label>
+              <div className="relative">
+                <input
+                    type={showPw ? 'text' : 'password'}
+                    className="input pr-10"
+                    value={form.new_password}
+                    onChange={e => setForm(f => ({ ...f, new_password: e.target.value }))}
+                    placeholder="Mínimo 6 caracteres"
+                    required
+                />
+                <button type="button" onClick={() => setShowPw(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="label">Confirmar password</label>
+              <div className="relative">
+                <input
+                    type={showConfirm ? 'text' : 'password'}
+                    className="input pr-10"
+                    value={form.new_password_confirm}
+                    onChange={e => setForm(f => ({ ...f, new_password_confirm: e.target.value }))}
+                    placeholder="Repete a password"
+                    required
+                />
+                <button type="button" onClick={() => setShowConfirm(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+              <button type="submit" className="btn-primary" disabled={loading}>
+                {loading ? 'A guardar...' : 'Definir password'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+  )
+}
+
 export default function ProfilePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const qc = useQueryClient()
   const photoRef = useRef<HTMLInputElement>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [setPasswordOpen, setSetPasswordOpen] = useState(false)
   const [form, setForm] = useState<ProfileForm>({
     name: '', email: '', phone: '', nif: '',
     current_password: '', new_password: '', new_password_confirm: '',
   })
+  const [showCurrentPw, setShowCurrentPw] = useState(false)
+  const [showNewPw, setShowNewPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [photoUploading, setPhotoUploading] = useState(false)
@@ -78,6 +166,10 @@ export default function ProfilePage() {
       qc.invalidateQueries({ queryKey: ['me'] })
       setEditOpen(false)
       setFormError(null)
+      // Reset password fields visibility
+      setShowCurrentPw(false)
+      setShowNewPw(false)
+      setShowConfirmPw(false)
 
       if (res?.data?.email_change_pending && res.data.pending_email) {
         setEmailChangeInfo({
@@ -110,9 +202,8 @@ export default function ProfilePage() {
 
   const handleLogout = () => { localStorage.removeItem('user_token'); navigate('/login') }
   const field = (key: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm(f => ({ ...f, [key]: e.target.value }))
+      setForm(f => ({ ...f, [key]: e.target.value }))
 
-  // Upload de foto de perfil
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -198,230 +289,270 @@ export default function ProfilePage() {
   const isNextFree     = currentStamps === 9
 
   return (
-    <div className="pt-24 pb-16 min-h-screen bg-gray-950 text-white">
-      <div className="max-w-2xl mx-auto px-4 space-y-5">
+      <div className="pt-24 pb-16 min-h-screen bg-gray-950 text-white">
+        <div className="max-w-2xl mx-auto px-4 space-y-5">
 
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-black">O meu perfil</h1>
-          <button onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-xl text-sm transition-all">
-            <LogOut size={16} /> Sair
-          </button>
-        </div>
-
-        <Link to="/reservations"
-          className="flex items-center justify-between px-5 py-4 bg-primary-500/10 border border-primary-500/30 rounded-2xl hover:bg-primary-500/20 transition-all">
-          <span className="text-primary-400 font-semibold">Ver as minhas reservas</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-        </Link>
-
-        {/* Cartão de fidelização */}
-        <Card>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Star size={16} className="text-amber-400" />
-              <h3 className="text-sm font-semibold text-gray-900">Cartão de fidelização</h3>
-            </div>
-            <span className="text-xs text-gray-500">{totalCompleted} cortes concluídos</span>
-          </div>
-          <p className="text-xs text-gray-500 mb-3">O 10º corte é por conta da casa 🍻</p>
-          <div className="grid grid-cols-5 gap-2 mb-3 max-w-md mx-auto">
-            {Array.from({ length: 10 }).map((_, i) => {
-              const isFilled = i < currentStamps
-              const isGift   = i === 9
-              const isNext   = isGift && isNextFree
-              return (
-                <div key={i} className={`flex items-center justify-center aspect-square rounded-2xl text-xs font-semibold border ${
-                  isGift
-                    ? isNext ? 'bg-amber-500 text-white border-amber-400 animate-pulse' : 'bg-amber-500/10 text-amber-400 border-amber-400/40'
-                    : isFilled ? 'bg-primary-500 text-white border-primary-500/80' : 'bg-white/5 text-gray-500 border-white/10'
-                }`}>
-                  {isGift ? '10' : i + 1}
-                </div>
-              )
-            })}
-          </div>
-          {isNextFree
-            ? <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">O teu próximo corte será gratuito. Apresenta este ecrã no pagamento para aplicar a oferta.</p>
-            : <p className="text-xs text-gray-500">Faltam <span className="font-semibold text-gray-700">{10 - currentStamps}</span> reservas para o próximo corte grátis.</p>
-          }
-        </Card>
-
-        {/* Foto de perfil */}
-        <Card>
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Foto de perfil</h3>
-          <div className="flex items-center gap-5">
-            <div className="relative">
-              <div className="w-20 h-20 rounded-2xl bg-primary-100 overflow-hidden">
-                {(user as any).photo_url
-                  ? <img src={(user as any).photo_url} alt={user.name} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center text-primary-700 text-3xl font-black">
-                      {user.name.charAt(0).toUpperCase()}
-                    </div>
-                }
-              </div>
-              <button onClick={() => photoRef.current?.click()} disabled={photoUploading}
-                className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center shadow-md hover:bg-primary-600 transition-colors disabled:opacity-60">
-                {photoUploading
-                  ? <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  : <Camera size={14} className="text-white" />
-                }
-              </button>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">{photoUploading ? 'A fazer upload...' : 'Clica na câmara para alterar a foto.'}</p>
-              <p className="text-xs text-gray-400 mt-1">JPG, PNG, WebP — máx. 3 MB</p>
-              {photoError && <p className="text-xs text-red-500 mt-1">{photoError}</p>}
-            </div>
-            <input type="file" ref={photoRef} accept="image/*" className="hidden" onChange={handlePhotoChange} />
-          </div>
-        </Card>
-
-        {/* Info pessoal */}
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Informações pessoais</h3>
-            <button onClick={() => setEditOpen(true)}
-              className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium">
-              <Edit2 size={14} /> Editar
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-black">O meu perfil</h1>
+            <button onClick={handleLogout}
+                    className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-xl text-sm transition-all">
+              <LogOut size={16} /> Sair
             </button>
           </div>
-          <dl className="space-y-3">
-            {[
-              { label: 'Nome',     value: user.name },
-              { label: 'Email',    value: user.email },
-              { label: 'Telefone', value: (user as any).phone || '—' },
-              { label: 'NIF',      value: (user as any).nif   || '—' },
-            ].map(({ label, value }) => (
-              <div key={label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                <dt className="text-sm text-gray-500">{label}</dt>
-                <dd className="text-sm font-medium text-gray-900">{value}</dd>
+
+          <Link to="/reservations"
+                className="flex items-center justify-between px-5 py-4 bg-primary-500/10 border border-primary-500/30 rounded-2xl hover:bg-primary-500/20 transition-all">
+            <span className="text-primary-400 font-semibold">Ver as minhas reservas</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+          </Link>
+
+          {/* Cartão de fidelização */}
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Star size={16} className="text-amber-400" />
+                <h3 className="text-sm font-semibold text-gray-900">Cartão de fidelização</h3>
               </div>
-            ))}
-          </dl>
-        </Card>
-
-        {/* Métodos de autenticação */}
-        <Card>
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Métodos de autenticação</h3>
-          <p className="text-xs text-gray-500 mb-3">
-            Podes associar a tua conta do Google ou Facebook. Para remover todos os métodos sociais, é obrigatório ter uma password definida.
-          </p>
-          <div className="space-y-2">
-            {/* Password */}
-            <div className="flex items-center justify-between py-2 border-b border-gray-50">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Password</p>
-                <p className="text-xs text-gray-500">{hasPassword ? 'Password definida' : 'Ainda não definiste uma password.'}</p>
-              </div>
-              {hasPassword
-                ? <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 font-medium">Ativo</span>
-                : <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-600 font-medium">Recomendado</span>
-              }
+              <span className="text-xs text-gray-500">{totalCompleted} cortes concluídos</span>
             </div>
-
-            {/* Google */}
-            <div className="flex items-center justify-between py-2 border-b border-gray-50">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Google</p>
-                <p className="text-xs text-gray-500">{hasGoogle ? 'Conta Google associada.' : 'Usa a tua conta Google para entrar rapidamente.'}</p>
-              </div>
-              {hasGoogle
-                ? <button onClick={handleUnlinkGoogle} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-100">
-                    <Unlink size={12} /> Desassociar
-                  </button>
-                : <button onClick={handleLinkGoogle} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-white text-gray-800 border border-gray-200 hover:bg-gray-50">
-                    <Link2 size={12} /> Associar Google
-                  </button>
-              }
+            <p className="text-xs text-gray-500 mb-3">O 10º corte é por conta da casa 🍻</p>
+            <div className="grid grid-cols-5 gap-2 mb-3 max-w-md mx-auto">
+              {Array.from({ length: 10 }).map((_, i) => {
+                const isFilled = i < currentStamps
+                const isGift   = i === 9
+                const isNext   = isGift && isNextFree
+                return (
+                    <div key={i} className={`flex items-center justify-center aspect-square rounded-2xl text-xs font-semibold border ${
+                        isGift
+                            ? isNext ? 'bg-amber-500 text-white border-amber-400 animate-pulse' : 'bg-amber-500/10 text-amber-400 border-amber-400/40'
+                            : isFilled ? 'bg-primary-500 text-white border-primary-500/80' : 'bg-white/5 text-gray-500 border-white/10'
+                    }`}>
+                      {isGift ? '10' : i + 1}
+                    </div>
+                )
+              })}
             </div>
+            {isNextFree
+                ? <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">O teu próximo corte será gratuito. Apresenta este ecrã no pagamento para aplicar a oferta.</p>
+                : <p className="text-xs text-gray-500">Faltam <span className="font-semibold text-gray-700">{10 - currentStamps}</span> reservas para o próximo corte grátis.</p>
+            }
+          </Card>
 
-            {/* Facebook */}
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Facebook</p>
-                <p className="text-xs text-gray-500">{hasFacebook ? 'Conta Facebook associada.' : 'Associa a tua conta Facebook.'}</p>
-              </div>
-              {hasFacebook
-                ? <button onClick={handleUnlinkFacebook} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-100">
-                    <Unlink size={12} /> Desassociar
-                  </button>
-                : <button onClick={handleLinkFacebook} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100">
-                    <Link2 size={12} /> Associar Facebook
-                  </button>
-              }
-            </div>
-          </div>
-          {linkError && <p className="mt-3 text-xs text-red-500">{linkError}</p>}
-        </Card>
-
-      </div>
-
-      {/* Modal editar */}
-      {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900">Editar perfil</h3>
-              <button onClick={() => setEditOpen(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} className="text-gray-500" /></button>
-            </div>
-            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-              {([['Nome','name','text'],['Email','email','email'],['Telefone','phone','tel'],['NIF','nif','text']] as const).map(([label, key, type]) => (
-                <div key={key}>
-                  <label className="label">{label}</label>
-                  <input type={type} className="input" value={(form as any)[key]} onChange={field(key as keyof ProfileForm)} />
+          {/* Foto de perfil */}
+          <Card>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Foto de perfil</h3>
+            <div className="flex items-center gap-5">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-2xl bg-primary-100 overflow-hidden">
+                  {(user as any).photo_url
+                      ? <img src={(user as any).photo_url} alt={user.name} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-primary-700 text-3xl font-black">
+                        {user.name.charAt(0).toUpperCase()}
+                      </div>
+                  }
                 </div>
-              ))}
-              <hr className="border-gray-100" />
-              <p className="text-xs text-gray-500">Alteração de password (opcional)</p>
-              {([['Password atual','current_password','password'],['Nova password','new_password','password'],['Confirmar password','new_password_confirm','password']] as const).map(([label, key, type]) => (
-                <div key={key}>
-                  <label className="label">{label}</label>
-                  <input type={type} className="input" value={(form as any)[key]} onChange={field(key as keyof ProfileForm)} />
-                </div>
-              ))}
-              {formError && <p className="text-sm text-red-500">{formError}</p>}
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button type="button" className="btn-secondary" onClick={() => setEditOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn-primary" disabled={updateProfile.isPending}>
-                  <Save size={14} /> {updateProfile.isPending ? 'A guardar...' : 'Guardar'}
+                <button onClick={() => photoRef.current?.click()} disabled={photoUploading}
+                        className="absolute -bottom-2 -right-2 w-8 h-8 bg-primary-500 rounded-xl flex items-center justify-center shadow-md hover:bg-primary-600 transition-colors disabled:opacity-60">
+                  {photoUploading
+                      ? <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      : <Camera size={14} className="text-white" />
+                  }
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+              <div>
+                <p className="text-sm text-gray-600">{photoUploading ? 'A fazer upload...' : 'Clica na câmara para alterar a foto.'}</p>
+                <p className="text-xs text-gray-400 mt-1">JPG, PNG, WebP — máx. 3 MB</p>
+                {photoError && <p className="text-xs text-red-500 mt-1">{photoError}</p>}
+              </div>
+              <input type="file" ref={photoRef} accept="image/*" className="hidden" onChange={handlePhotoChange} />
+            </div>
+          </Card>
 
-      {emailChangeInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 space-y-4">
-            <h3 className="font-bold text-gray-900 mb-1">Confirmação de alteração de email</h3>
-            <p className="text-sm text-gray-700">
-              Enviámos um email para <span className="font-semibold">{emailChangeInfo.pendingEmail}</span> com um link para
-              confirmares a alteração do teu email.
-            </p>
-            <p className="text-sm text-gray-700">
-              Tens <span className="font-semibold">24 horas</span> para concluir esta confirmação. Até lá, deves continuar a
-              entrar com o teu email atual.
-            </p>
-            {emailChangeInfo.hadSocial && (
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                Atenção: ao confirmares o novo email, as contas de redes sociais associadas (Google/Facebook) serão desassociadas
-                deste perfil. Depois podes associá-las novamente se quiseres.
-              </p>
-            )}
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setEmailChangeInfo(null)}
-                className="btn-primary text-sm"
-              >
-                Percebi
+          {/* Info pessoal */}
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Informações pessoais</h3>
+              <button onClick={() => setEditOpen(true)}
+                      className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium">
+                <Edit2 size={14} /> Editar
               </button>
             </div>
-          </div>
+            <dl className="space-y-3">
+              {[
+                { label: 'Nome',     value: user.name },
+                { label: 'Email',    value: user.email },
+                { label: 'Telefone', value: (user as any).phone || '—' },
+                { label: 'NIF',      value: (user as any).nif   || '—' },
+              ].map(({ label, value }) => (
+                  <div key={label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                    <dt className="text-sm text-gray-500">{label}</dt>
+                    <dd className="text-sm font-medium text-gray-900">{value}</dd>
+                  </div>
+              ))}
+            </dl>
+          </Card>
+
+          {/* Métodos de autenticação */}
+          <Card>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Métodos de autenticação</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Podes associar a tua conta do Google ou Facebook. Para remover todos os métodos sociais, é obrigatório ter uma password definida.
+            </p>
+            <div className="space-y-2">
+              {/* Password */}
+              <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Password</p>
+                  <p className="text-xs text-gray-500">{hasPassword ? 'Password definida' : 'Ainda não definiste uma password.'}</p>
+                </div>
+                {hasPassword
+                    ? <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 font-medium">Ativo</span>
+                    : (
+                        <button
+                            onClick={() => setSetPasswordOpen(true)}
+                            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 font-medium transition-colors"
+                        >
+                          <KeyRound size={12} /> Definir password
+                        </button>
+                    )
+                }
+              </div>
+
+              {/* Google */}
+              <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Google</p>
+                  <p className="text-xs text-gray-500">{hasGoogle ? 'Conta Google associada.' : 'Usa a tua conta Google para entrar rapidamente.'}</p>
+                </div>
+                {hasGoogle
+                    ? <button onClick={handleUnlinkGoogle} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-100">
+                      <Unlink size={12} /> Desassociar
+                    </button>
+                    : <button onClick={handleLinkGoogle} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-white text-gray-800 border border-gray-200 hover:bg-gray-50">
+                      <Link2 size={12} /> Associar Google
+                    </button>
+                }
+              </div>
+
+              {/* Facebook */}
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Facebook</p>
+                  <p className="text-xs text-gray-500">{hasFacebook ? 'Conta Facebook associada.' : 'Associa a tua conta Facebook.'}</p>
+                </div>
+                {hasFacebook
+                    ? <button onClick={handleUnlinkFacebook} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-100">
+                      <Unlink size={12} /> Desassociar
+                    </button>
+                    : <button onClick={handleLinkFacebook} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100">
+                      <Link2 size={12} /> Associar Facebook
+                    </button>
+                }
+              </div>
+            </div>
+            {linkError && <p className="mt-3 text-xs text-red-500">{linkError}</p>}
+          </Card>
+
         </div>
-      )}
-    </div>
+
+        {/* Modal editar perfil */}
+        {editOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl">
+                <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                  <h3 className="font-bold text-gray-900">Editar perfil</h3>
+                  <button onClick={() => setEditOpen(false)} className="p-1 rounded-lg hover:bg-gray-100"><X size={18} className="text-gray-500" /></button>
+                </div>
+                <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+                  {([['Nome','name','text'],['Email','email','email'],['Telefone','phone','tel'],['NIF','nif','text']] as const).map(([label, key, type]) => (
+                      <div key={key}>
+                        <label className="label">{label}</label>
+                        <input type={type} className="input" value={(form as any)[key]} onChange={field(key as keyof ProfileForm)} />
+                      </div>
+                  ))}
+
+                  {/* Secção de password — só mostra se o utilizador já tem password */}
+                  {hasPassword && (
+                      <>
+                        <hr className="border-gray-100" />
+                        <p className="text-xs text-gray-500">Alteração de password (opcional)</p>
+                        {([
+                          ['Password atual', 'current_password', showCurrentPw, setShowCurrentPw],
+                          ['Nova password', 'new_password', showNewPw, setShowNewPw],
+                          ['Confirmar password', 'new_password_confirm', showConfirmPw, setShowConfirmPw],
+                        ] as const).map(([label, key, show, setShow]) => (
+                            <div key={key}>
+                              <label className="label">{label}</label>
+                              <div className="relative">
+                                <input
+                                    type={show ? 'text' : 'password'}
+                                    className="input pr-10"
+                                    value={(form as any)[key]}
+                                    onChange={field(key as keyof ProfileForm)}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => (setShow as React.Dispatch<React.SetStateAction<boolean>>)(v => !v)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                                </button>
+                              </div>
+                            </div>
+                        ))}
+                      </>
+                  )}
+
+                  {formError && <p className="text-sm text-red-500">{formError}</p>}
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button type="button" className="btn-secondary" onClick={() => setEditOpen(false)}>Cancelar</button>
+                    <button type="submit" className="btn-primary" disabled={updateProfile.isPending}>
+                      <Save size={14} /> {updateProfile.isPending ? 'A guardar...' : 'Guardar'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+        )}
+
+        {/* Modal definir password pela primeira vez */}
+        {setPasswordOpen && (
+            <SetPasswordModal
+                onClose={() => setSetPasswordOpen(false)}
+                onSuccess={() => qc.invalidateQueries({ queryKey: ['me'] })}
+            />
+        )}
+
+        {emailChangeInfo && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 space-y-4">
+                <h3 className="font-bold text-gray-900 mb-1">Confirmação de alteração de email</h3>
+                <p className="text-sm text-gray-700">
+                  Enviámos um email para <span className="font-semibold">{emailChangeInfo.pendingEmail}</span> com um link para
+                  confirmares a alteração do teu email.
+                </p>
+                <p className="text-sm text-gray-700">
+                  Tens <span className="font-semibold">24 horas</span> para concluir esta confirmação. Até lá, deves continuar a
+                  entrar com o teu email atual.
+                </p>
+                {emailChangeInfo.hadSocial && (
+                    <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                      Atenção: ao confirmares o novo email, as contas de redes sociais associadas (Google/Facebook) serão desassociadas
+                      deste perfil. Depois podes associá-las novamente se quiseres.
+                    </p>
+                )}
+                <div className="flex justify-end pt-2">
+                  <button
+                      type="button"
+                      onClick={() => setEmailChangeInfo(null)}
+                      className="btn-primary text-sm"
+                  >
+                    Percebi
+                  </button>
+                </div>
+              </div>
+            </div>
+        )}
+      </div>
   )
 }

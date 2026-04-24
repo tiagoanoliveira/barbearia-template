@@ -139,11 +139,19 @@ export default function CalendarPage() {
   const { display: dateDisplay, committed: selectedDate, onChange: onDateInput, setDate: setSelectedDate } =
     useDebouncedDate(initialDate)
 
+  // Capturar reservationId do URL na montagem, antes de o URL ser limpo
+  useEffect(() => {
+    const rid = searchParams.get('reservationId')
+    if (rid) {
+      const n = Number(rid)
+      if (Number.isFinite(n)) pendingReservationIdRef.current = n
+    }
+  }, [])
+
   // Sincronizar alteração de data com URL para permitir deep-linking
   useEffect(() => {
     const current = new URLSearchParams(searchParams)
     current.set('date', selectedDate)
-    // não manter reservationId depois de a modal abrir
     current.delete('reservationId')
     setSearchParams(current, { replace: true })
   }, [selectedDate, searchParams, setSearchParams])
@@ -189,6 +197,7 @@ export default function CalendarPage() {
   const [newResSaving, setNewResSaving] = useState(false)
 
   const gridRef = useRef<HTMLDivElement>(null)
+  const pendingReservationIdRef = useRef<number | null>(null)
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const { data: barbersRes }  = useQuery({ queryKey: ['barbers'],   queryFn: () => barbersApi.list() })
@@ -380,20 +389,13 @@ export default function CalendarPage() {
 
   // Abrir automaticamente a reserva passada via query string (reservationId)
   useEffect(() => {
-    const reservationIdParam = searchParams.get('reservationId')
-    if (!reservationIdParam || !reservations.length) return
-
-    const id = Number(reservationIdParam)
-    if (!Number.isFinite(id)) return
-
+    if (!pendingReservationIdRef.current || !reservations.length) return
+    const id = pendingReservationIdRef.current
     const found = reservations.find(r => r.id === id)
     if (found) {
+      pendingReservationIdRef.current = null
       setModal({ type: 'res_detail', r: found })
-      const params = new URLSearchParams(searchParams)
-      params.delete('reservationId')
-      setSearchParams(params, { replace: true })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservations])
 
   if (isLoading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>

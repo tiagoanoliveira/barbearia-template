@@ -84,11 +84,13 @@ export default function Footer() {
             <ul className="space-y-2 text-sm">
               {[
                 { to: '/faq',               label: 'Perguntas Frequentes' },
-                { to: '/suporte',           label: 'Suporte & Ajuda' },
+                { to: '/suporte',           label: 'Suporte' },
                 { to: '/condicoes-reserva', label: 'Condições de Reserva' },
                 { to: '/privacidade',       label: 'Política de Privacidade' },
                 { to: '/cookies',           label: 'Política de Cookies' },
                 { to: '/termos',            label: 'Termos e Condições' },
+                { to: '/aviso-legal',       label: 'Aviso Legal' },
+                { to: '/ral',               label: 'Reclamações' },
               ].map(({ to, label }) => (
                 <li key={to}>
                   <Link to={to} className="text-gray-500 hover:text-gray-300 transition-colors">
