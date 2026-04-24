@@ -33,6 +33,8 @@ import CookiesPage from '@/pages/public/CookiesPage'
 import TermsPage from '@/pages/public/TermsPage'
 import BookingConditionsPage from '@/pages/public/BookingConditionsPage'
 import SupportPage from '@/pages/public/SupportPage'
+import RalPage from '@/pages/public/RalPage'
+import LegalNoticePage from '@/pages/public/LegalNoticePage'
 
 export default function App() {
   return (
@@ -59,6 +61,8 @@ export default function App() {
           <Route path="/termos"             element={<TermsPage />} />
           <Route path="/condicoes-reserva"  element={<BookingConditionsPage />} />
           <Route path="/suporte"            element={<SupportPage />} />
+          <Route path="/aviso-legal"        element={<LegalNoticePage />} />
+          <Route path="/ral-e-reclamacoes"  element={<RalPage />} />
         </Route>
 
         {/* Admin auth */}

@@ -78,13 +78,13 @@ export async function onRequest(context) {
       const reservationId = result.meta.last_row_id
 
       await env.DB.prepare(
-        `INSERT INTO notifications (type, message, reservation_id, client_name, barber_id)
-         VALUES ('new_booking', ?, ?, ?, ?)`
+          `INSERT INTO notifications (type, message, reservation_id, client_name, barber_id)
+           VALUES ('new_booking', ?, ?, ?, ?)`
       ).bind(
-        `Nova reserva: cliente ${auth.clientId} às ${time}`,
-        reservationId,
-        String(auth.clientId),
-        finalBarberId
+          `Nova reserva: ${client?.nome ?? 'Cliente'} — ${service.nome} às ${time}`,
+          reservationId,
+          barber.nome,       // segunda linha do toast = nome do barbeiro
+          finalBarberId
       ).run().catch(() => {})
 
       // Envia email de confirmação e agenda lembrete 24h antes (em background)

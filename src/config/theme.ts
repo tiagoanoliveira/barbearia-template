@@ -20,6 +20,18 @@ export const barberShopConfig = {
   address:     'Rua do Campo Alegre, 450, Porto',
   instagram:   'https://instagram.com/brooklynbarbearia',
   supportIframeSrc: 'https://tiagoanoliveira.pt/support/988b8a8a745c445fbaff596ad5be54dd',
+  // Dados legais
+  nif:           'PT 999 999 999',
+  legalName:     'Brooklyn Barbearia, Lda.',
+  legalForm:     'Sociedade por Quotas',
+  comarca:       'Porto',
+  ralName:       'Centro de Arbitragem de Conflitos de Consumo do Porto',
+  ralAddress:    'Rua de Damião de Góis, 31, Loja 6, 4050-225 Porto',
+  ralPhone:      '+351 225 508 048',
+  ralEmail:      'cacc@centrodearbitragemdoporto.pt',
+  ralWebsite:    'https://www.centrodearbitragemdoporto.pt',
+  privacyEmail:  'privacidade@brooklynbarbearia.pt',
+  lastUpdated:   '24 de abril de 2026',
 
   logoUrl:    logoSrc,
   faviconUrl: faviconSrc,
