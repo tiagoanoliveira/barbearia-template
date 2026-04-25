@@ -155,8 +155,8 @@ export function ReservationEditModal({
     <Modal open onClose={onClose} title={`Editar reserva #${reservation.id}`}
       footer={
         <>
-          <button className="btn-secondary" onClick={onClose}>Fechar</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>
+          <button className="btn-secondary text-xs" onClick={onClose}>Fechar</button>
+          <button className="btn-primary text-xs" onClick={handleSave} disabled={saving}>
             {saving ? 'A guardar...' : 'Guardar'}
           </button>
         </>
