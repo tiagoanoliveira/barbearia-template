@@ -18,6 +18,7 @@ import {
   ReservationDetailModal,
   ReservationEditModal,
   ReservationStatusModal,
+  CheckoutModal,
 } from '@/components/admin/reservation-modals'
 
 const STATUS_OPTIONS = [
@@ -31,7 +32,8 @@ const STATUS_OPTIONS = [
 type ModalMode =
   | { type: 'detail'; r: Reservation }
   | { type: 'edit';   r: Reservation }
-  | { type: 'status'; r: Reservation; action: 'concluida' | 'faltou' | 'cancelada' }
+  | { type: 'status'; r: Reservation; action: 'faltou' | 'cancelada' }
+  | { type: 'checkout'; r: Reservation }
   | null
 
 export default function ReservationsPage() {
@@ -212,16 +214,25 @@ export default function ReservationsPage() {
         )}
       </Card>
 
-      {/* Modais partilhados */}
       {modal?.type === 'detail' && (
-        <ReservationDetailModal
-          reservation={modal.r}
-          onClose={close}
-          onEdit={() => setModal({ type: 'edit', r: modal.r })}
-          onChangeStatus={action => setModal({ type: 'status', r: modal.r, action })}
-          onCancel={() => setModal({ type: 'status', r: modal.r, action: 'cancelada' })}
-        />
+          <ReservationDetailModal
+              reservation={modal.r}
+              onClose={close}
+              onEdit={() => setModal({ type: 'edit', r: modal.r })}
+              onChangeStatus={action => setModal({ type: 'status', r: modal.r, action })}
+              onCancel={() => setModal({ type: 'status', r: modal.r, action: 'cancelada' })}
+              onCheckout={() => setModal({ type: 'checkout', r: modal.r })}  // NOVO
+          />
       )}
+
+      {modal?.type === 'checkout' && (
+          <CheckoutModal
+              reservation={modal.r}
+              invalidateKey="reservations"
+              onClose={close}
+          />
+      )}
+
       {modal?.type === 'edit' && (
         <ReservationEditModal
           reservation={modal.r}

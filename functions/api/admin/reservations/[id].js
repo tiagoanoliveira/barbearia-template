@@ -51,6 +51,10 @@ export async function onRequest(context) {
         nota_privada,
         service_duration,
         motivo,
+        meio_pagamento,
+        valor_pago,
+        gorjeta,
+        meio_gorjeta,
       } = body
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
@@ -75,6 +79,26 @@ export async function onRequest(context) {
       if (service_duration !== undefined && Number.isFinite(Number(service_duration))) {
         updates.push('duracao_minutos = ?')
         vals.push(Number(service_duration))
+      }
+      const VALID_MEIOS = ['multibanco', 'dinheiro', 'outro']
+
+      if (meio_pagamento !== undefined) {
+        if (!VALID_MEIOS.includes(meio_pagamento)) return badRequest('Meio de pagamento inválido')
+        updates.push('meio_pagamento = ?')
+        vals.push(meio_pagamento)
+      }
+      if (valor_pago !== undefined && Number.isFinite(Number(valor_pago))) {
+        updates.push('valor_pago = ?')
+        vals.push(Number(valor_pago))
+      }
+      if (gorjeta !== undefined && Number.isFinite(Number(gorjeta))) {
+        updates.push('gorjeta = ?')
+        vals.push(Number(gorjeta))
+      }
+      if (meio_gorjeta !== undefined) {
+        if (!VALID_MEIOS.includes(meio_gorjeta)) return badRequest('Meio de gorjeta inválido')
+        updates.push('meio_gorjeta = ?')
+        vals.push(meio_gorjeta)
       }
 
       if (!updates.length) return badRequest('Nada para actualizar')

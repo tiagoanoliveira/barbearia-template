@@ -36,6 +36,7 @@ export interface Client {
 
 // ─── Reserva ─────────────────────────────────────────────────────────────────
 export type ReservationStatus = 'confirmada' | 'concluida' | 'cancelada' | 'faltou'
+export type MeioPagamento = 'multibanco' | 'dinheiro' | 'outro'
 
 export interface Reservation {
   id: number
@@ -59,6 +60,10 @@ export interface Reservation {
   criado_em?: string
   /** Enviado apenas na criação: true = enviar email de confirmação ao cliente */
   send_email?: boolean
+  meio_pagamento?: MeioPagamento
+  valor_pago?: number
+  gorjeta?: number
+  meio_gorjeta?: MeioPagamento
 }
 
 // ─── Indisponibilidade ───────────────────────────────────────────────────────

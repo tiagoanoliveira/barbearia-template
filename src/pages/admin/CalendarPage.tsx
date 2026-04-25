@@ -16,6 +16,7 @@ import {
   ReservationDetailModal,
   ReservationEditModal,
   ReservationStatusModal,
+  CheckoutModal,
 } from '@/components/admin/reservation-modals'
 import type { Reservation, Barber, Unavailable, UnavailableTipo, Service, ConflictReservation } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
@@ -97,7 +98,8 @@ type ContextTarget =
 type CalModal =
   | { type: 'res_detail';  r: Reservation }
   | { type: 'res_edit';    r: Reservation }
-  | { type: 'res_status';  r: Reservation; action: 'concluida' | 'faltou' | 'cancelada' }
+  | { type: 'res_status';  r: Reservation; action: 'faltou' | 'cancelada' }
+  | { type: 'res_checkout'; r: Reservation }
   | { type: 'res_copy';    source: Reservation }
   | { type: 'res_new';     barberId: number; slot: number }
   | { type: 'unavail';     data: Partial<Unavailable>; isNew: boolean }
@@ -607,7 +609,7 @@ export default function CalendarPage() {
                 <CtxItem icon="📋" label="Copiar Reserva" onClick={() => { setCopyDate(selectedDate); setCopyTime(format(new Date(r.data_hora),'HH:mm')); setCopyEmail(true); setModal({ type: 'res_copy', source: r }); closeCtx() }} />
                 <div className="border-t border-gray-100 my-1" />
                 {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
-                  <CtxItem icon="✅" label="Chegou" onClick={() => { setModal({ type: 'res_status', r, action: 'concluida' }); closeCtx() }} />
+                    <CtxItem icon="✅" label="Chegou" onClick={() => { setModal({ type: 'res_checkout', r }); closeCtx() }} />
                 )}
                 {r.status !== 'faltou' && r.status !== 'cancelada' && (
                   <CtxItem icon="👤" label="Faltou" onClick={() => { setModal({ type: 'res_status', r, action: 'faltou'    }); closeCtx() }} />
@@ -631,11 +633,25 @@ export default function CalendarPage() {
       )}
 
       {modal?.type === 'res_detail' && (
-        <ReservationDetailModal reservation={modal.r} onClose={close}
-          onEdit={() => setModal({ type: 'res_edit', r: modal.r })}
-          onChangeStatus={action => setModal({ type: 'res_status', r: modal.r, action })}
-          onCancel={() => setModal({ type: 'res_status', r: modal.r, action: 'cancelada' })} />
+          <ReservationDetailModal
+              reservation={modal.r}
+              onClose={close}
+              onEdit={() => setModal({ type: 'res_edit', r: modal.r })}
+              onChangeStatus={action => setModal({ type: 'res_status', r: modal.r, action })}
+              onCancel={() => setModal({ type: 'res_status', r: modal.r, action: 'cancelada' })}
+              onCheckout={() => setModal({ type: 'res_checkout', r: modal.r })}  // NOVO
+          />
       )}
+
+      {/* NOVO — modal de checkout/pagamento */}
+      {modal?.type === 'res_checkout' && (
+          <CheckoutModal
+              reservation={modal.r}
+              invalidateKey="calendar"   // usa a queryKey do calendário
+              onClose={close}
+          />
+      )}
+
       {modal?.type === 'res_edit' && (
         <ReservationEditModal reservation={modal.r} invalidateKey="cal-reservations" onClose={close} />
       )}

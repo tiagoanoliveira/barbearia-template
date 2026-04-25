@@ -27,13 +27,14 @@ export const EDIT_STATUSES: ReservationStatus[] = ['confirmada', 'concluida', 'f
 
 // ─── ReservationDetailModal ───────────────────────────────────────────────────
 export function ReservationDetailModal({
-  reservation, onClose, onEdit, onChangeStatus, onCancel,
+  reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout,
 }: {
   reservation: Reservation
   onClose: () => void
   onEdit: () => void
-  onChangeStatus: (action: 'concluida' | 'faltou') => void
+  onChangeStatus: (action: 'faltou') => void
   onCancel: () => void
+  onCheckout: () => void
 }) {
   const r = reservation
   const dt    = new Date(r.data_hora)
@@ -73,7 +74,7 @@ export function ReservationDetailModal({
         {r.nota_privada && <NoteBox label="Nota privada"     text={r.nota_privada} bg="amber" />}
         <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2">
           {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
-            <button onClick={() => onChangeStatus('concluida')}
+            <button onClick={onCheckout}
               className="text-xs px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 font-medium hover:bg-emerald-200">
               ✅ Chegou
             </button>
@@ -234,12 +235,12 @@ export function ReservationEditModal({
 
 // ─── ReservationStatusModal ───────────────────────────────────────────────────
 // Modal dedicado à alteração de estado. Para 'cancelada' pede motivo obrigatório.
-// Para 'concluida' e 'faltou' pede confirmação simples.
+// Para 'faltou' pede confirmação simples.
 export function ReservationStatusModal({
-  reservation, action, invalidateKey, onClose,
-}: {
+                                         reservation, action, invalidateKey, onClose,
+                                       }: {
   reservation: Reservation
-  action: 'concluida' | 'faltou' | 'cancelada'
+  action: 'faltou' | 'cancelada'
   invalidateKey: string
   onClose: () => void
 }) {
@@ -251,12 +252,10 @@ export function ReservationStatusModal({
   const isCancel = action === 'cancelada'
 
   const titles: Record<typeof action, string> = {
-    concluida: '✅ Confirmar presença',
     faltou:    '👤 Confirmar falta',
     cancelada: '❌ Cancelar reserva',
   }
   const confirmLabels: Record<typeof action, string> = {
-    concluida: 'Confirmar presença',
     faltou:    'Confirmar falta',
     cancelada: 'Confirmar cancelamento',
   }
@@ -286,48 +285,176 @@ export function ReservationStatusModal({
   }
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={titles[action]}
-      footer={
-        <>
-          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button
-            className={isCancel ? 'btn-danger' : 'btn-primary'}
-            onClick={handleConfirm}
-            disabled={saving}
-          >
-            {saving ? 'A guardar...' : confirmLabels[action]}
-          </button>
-        </>
-      }
-    >
-      <div className="space-y-3 text-sm">
-        {isCancel ? (
-          <>
-            <p className="text-gray-600">
-              Indica o motivo do cancelamento. O cliente receberá um email com essa informação.
-            </p>
-            <textarea
-              rows={3}
-              value={reason}
-              onChange={e => { setReason(e.target.value); setError(null) }}
-              placeholder="Ex.: Barbeiro indisponível por motivo de saúde"
-              className={`input text-sm w-full resize-none ${error ? 'border-red-400' : ''}`}
+      <Modal
+          open
+          onClose={onClose}
+          title={titles[action]}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+              <button
+                  className={isCancel ? 'btn-danger' : 'btn-primary'}
+                  onClick={handleConfirm}
+                  disabled={saving}
+              >
+                {saving ? 'A guardar...' : confirmLabels[action]}
+              </button>
+            </>
+          }
+      >
+        <div className="space-y-3 text-sm">
+          {isCancel ? (
+              <>
+                <p className="text-gray-600">
+                  Indica o motivo do cancelamento. O cliente receberá um email com essa informação.
+                </p>
+                <textarea
+                    rows={3}
+                    value={reason}
+                    onChange={e => { setReason(e.target.value); setError(null) }}
+                    placeholder="Ex.: Barbeiro indisponível por motivo de saúde"
+                    className={`input text-sm w-full resize-none ${error ? 'border-red-400' : ''}`}
+                />
+                {error && <p className="text-xs text-red-500">{error}</p>}
+              </>
+          ) : (
+              <p className="text-gray-700">
+                {`Confirmas que ${reservation.client_name} não compareceu a esta reserva?`}
+              </p>
+          )}
+        </div>
+      </Modal>
+  )
+}
+
+// ─── CheckoutModal ─────────────────────────────────────────────────────────
+export function CheckoutModal({
+                                reservation, invalidateKey, onClose,
+                              }: {
+  reservation: Reservation
+  invalidateKey: string
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+
+  const [meioPagamento, setMeioPagamento] = useState<'multibanco' | 'dinheiro' | 'outro'>('dinheiro')
+  const [valorPago, setValorPago]         = useState<number>(reservation.service_price ?? 0)
+  const [temGorjeta, setTemGorjeta]       = useState(false)
+  const [gorjeta, setGorjeta]             = useState<number>(0)
+  const [meioGorjeta, setMeioGorjeta]     = useState<'multibanco' | 'dinheiro' | 'outro'>('dinheiro')
+  const [saving, setSaving]               = useState(false)
+
+  const handleConfirm = async () => {
+    setSaving(true)
+    try {
+      await reservationsApi.update(reservation.id, {
+        status:          'concluida',
+        meio_pagamento:  meioPagamento,
+        valor_pago:      valorPago,
+        gorjeta:         temGorjeta ? gorjeta : undefined,
+        meio_gorjeta:    temGorjeta ? meioGorjeta : undefined,
+      })
+      qc.invalidateQueries({ queryKey: [invalidateKey] })
+      onClose()
+    } catch {}
+    finally { setSaving(false) }
+  }
+
+  return (
+      <Modal
+          open
+          onClose={onClose}
+          title="💳 Pagamento & Checkout"
+          footer={
+            <>
+              <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+              <button className="btn-primary" onClick={handleConfirm} disabled={saving}>
+                {saving ? 'A guardar...' : '✅ Confirmar chegada'}
+              </button>
+            </>
+          }
+      >
+        <div className="space-y-4 text-sm">
+          {/* Informação do serviço */}
+          <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
+            {reservation.client_name} · {reservation.service_name}
+          </div>
+
+          {/* Meio de pagamento */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Meio de pagamento</label>
+            <div className="flex gap-2">
+              {(['multibanco', 'dinheiro', 'outro'] as const).map(op => (
+                  <button
+                      key={op}
+                      type="button"
+                      onClick={() => setMeioPagamento(op)}
+                      className={`flex-1 py-2 rounded-lg border text-xs font-medium capitalize transition-colors ${
+                          meioPagamento === op
+                              ? 'bg-brand-600 text-white border-brand-600'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
+                      }`}
+                  >
+                    {op === 'multibanco' ? '🏧 Multibanco' : op === 'dinheiro' ? '💵 Dinheiro' : '🔄 Outro'}
+                  </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Valor pago */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Valor cobrado (€)</label>
+            <input
+                type="number"
+                min={0}
+                step={0.5}
+                className="input text-sm w-full"
+                value={valorPago}
+                onChange={e => setValorPago(Number(e.target.value))}
             />
-            {error && <p className="text-xs text-red-500">{error}</p>}
-          </>
-        ) : (
-          <p className="text-gray-700">
-            {action === 'concluida'
-              ? `Confirmas que ${reservation.client_name} chegou e a reserva foi concluída?`
-              : `Confirmas que ${reservation.client_name} não compareceu a esta reserva?`
-            }
-          </p>
-        )}
-      </div>
-    </Modal>
+          </div>
+
+          {/* Gorjeta checkbox */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+                type="checkbox"
+                checked={temGorjeta}
+                onChange={e => setTemGorjeta(e.target.checked)}
+                className="rounded"
+            />
+            <span className="font-medium">🎁 Gorjeta?</span>
+          </label>
+
+          {/* Campos de gorjeta (condicional) */}
+          {temGorjeta && (
+              <div className="space-y-3 pl-5 border-l-2 border-emerald-200">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Valor da gorjeta (€)</label>
+                  <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      className="input text-sm w-full"
+                      value={gorjeta}
+                      onChange={e => setGorjeta(Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Como foi recebida a gorjeta</label>
+                  <select
+                      className="input text-sm w-full bg-white"
+                      value={meioGorjeta}
+                      onChange={e => setMeioGorjeta(e.target.value as 'multibanco' | 'dinheiro' | 'outro')}
+                  >
+                    <option value="dinheiro">💵 Dinheiro</option>
+                    <option value="multibanco">🏧 Multibanco</option>
+                    <option value="outro">🔄 Outro</option>
+                  </select>
+                </div>
+              </div>
+          )}
+        </div>
+      </Modal>
   )
 }
 
