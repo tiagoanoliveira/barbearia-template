@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import { ROUTES } from '@/config/routes'
-import { getAdminUser } from '@/hooks/useAdminUser'
+import { getAdminUser, isSuperAdmin } from '@/hooks/useAdminUser'
 
 const pageTitles: Record<string, { title: string; subtitle?: string }> = {
   '/admin/dashboard':          { title: 'Dashboard',          subtitle: 'Visão geral do negócio' },
@@ -12,6 +12,7 @@ const pageTitles: Record<string, { title: string; subtitle?: string }> = {
   '/admin/clientes':           { title: 'Clientes',           subtitle: 'Base de clientes' },
   '/admin/indisponibilidades': { title: 'Indisponibilidades', subtitle: 'Gestão de folgas e ausências' },
   '/admin/configuracao':       { title: 'Configuração',       subtitle: 'Serviços, barbeiros, utilizadores e site' },
+  '/admin/pagamentos':         { title: 'Pagamentos',         subtitle: 'Estatísticas e resumo financeiro' },
 }
 
 export default function AdminLayout() {
@@ -19,25 +20,30 @@ export default function AdminLayout() {
   const token = localStorage.getItem('admin_token')
   const adminUser = getAdminUser()
   const isBarber = adminUser?.role === 'barbeiro'
+  const isSA      = isSuperAdmin(adminUser)
 
-  // mobile: sidebar aberta/fechada
   const [mobileOpen, setMobileOpen] = useState(false)
-  // desktop: sidebar expandida (texto) ou colapsada (mini-icons) — por defeito colapsada
   const [desktopExpanded, setDesktopExpanded] = useState(false)
 
-  // Fecha o mobile ao navegar
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
+  // Sem token → login
   if (!token) return <Navigate to={ROUTES.ADMIN_LOGIN} replace />
 
-  if (
-    isBarber
-    && (
-      location.pathname === ROUTES.ADMIN_CLIENTS
-      || location.pathname.startsWith('/admin/clientes/')
-      || location.pathname === ROUTES.ADMIN_SETTINGS
-    )
-  ) {
+  // Barbeiros não acedem a clientes nem configuração
+  if (isBarber && (
+      location.pathname === ROUTES.ADMIN_CLIENTS ||
+      location.pathname.startsWith('/admin/clientes/') ||
+      location.pathname === ROUTES.ADMIN_SETTINGS
+  )) {
+    return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
+  }
+
+  // Apenas superAdmin acede a configuração e pagamentos
+  if (!isSA && (
+      location.pathname === ROUTES.ADMIN_SETTINGS ||
+      location.pathname === (ROUTES as Record<string, string>).ADMIN_PAYMENTS
+  )) {
     return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
   }
 
