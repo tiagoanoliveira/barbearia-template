@@ -1,97 +1,24 @@
 import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Shield, Scissors, Sparkles, Users, Plus, Pencil, Trash2, Eye, EyeOff, Check, X, Upload, Link as LinkIcon } from 'lucide-react'
+import { Scissors, Sparkles, Users, Plus, Pencil, Trash2, Eye, EyeOff, Check, X, Upload, Link as LinkIcon } from 'lucide-react'
 import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { Barber, Service } from '@/types'
 
 interface AdminUser {
-  id: number; username: string; nome: string; role: 'admin' | 'barbeiro'
+  id: number; username: string; nome: string; role: 'admin' | 'barbeiro' | 'superAdmin'
   ativo: number; barbeiro_id: number | null; barbeiro_nome: string | null
   criado_em: string; ultimo_login: string | null
 }
 
-const SESSION_KEY = 'admin_settings_unlocked'
-
 export default function ConfiguracaoPage() {
-  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(SESSION_KEY) === 'true')
-  if (!unlocked) return <MasterCodeGate onUnlock={() => { sessionStorage.setItem(SESSION_KEY, 'true'); setUnlocked(true) }} />
   return (
-    <div className="space-y-8">
-      <ServicosSection />
-      <BarbeirosSection />
-      <AdminUsersSection />
-    </div>
-  )
-}
-
-function MasterCodeGate({ onUnlock }: { onUnlock: () => void }) {
-  const [digits, setDigits] = useState(Array(8).fill(''))
-  const [error, setError]   = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const refs = useRef<(HTMLInputElement | null)[]>([])
-
-  const handleChange = (i: number, v: string) => {
-    if (!/^\d?$/.test(v)) return
-    const next = [...digits]; next[i] = v; setDigits(next)
-    if (v && i < 7) refs.current[i + 1]?.focus()
-  }
-  const handleKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !digits[i] && i > 0) refs.current[i - 1]?.focus()
-    if (e.key === 'ArrowLeft'  && i > 0) refs.current[i - 1]?.focus()
-    if (e.key === 'ArrowRight' && i < 7) refs.current[i + 1]?.focus()
-  }
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const txt = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 8)
-    if (txt.length === 8) { setDigits(txt.split('')); refs.current[7]?.focus() }
-  }
-  const submit = async () => {
-    const code = digits.join('')
-    if (code.length < 8) { setError('Introduz os 8 dígitos'); return }
-    setLoading(true); setError(null)
-    try {
-      await adminApi.post('/api/admin/master-code/verify', { code })
-      onUnlock()
-    } catch {
-      setError('Código incorrecto. Tenta novamente.')
-      setDigits(Array(8).fill(''))
-      refs.current[0]?.focus()
-    } finally {
-      setLoading(false)
-    }
-  }
-  return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <Card className="max-w-sm w-full">
-        <div className="text-center space-y-4 p-4">
-          <div className="w-16 h-16 mx-auto bg-brand-50 rounded-2xl flex items-center justify-center">
-            <Shield size={32} className="text-brand-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Área protegida</h2>
-            <p className="text-sm text-gray-500 mt-1">Introduz o código de 8 dígitos para aceder às configurações</p>
-          </div>
-          <div className="flex justify-center gap-2" onPaste={handlePaste}>
-            {digits.map((d, i) => (
-              <input key={i} ref={el => { refs.current[i] = el }}
-                type="text" inputMode="numeric" maxLength={1} value={d}
-                onChange={e => handleChange(i, e.target.value)}
-                onKeyDown={e => handleKeyDown(i, e)}
-                onFocus={e => e.target.select()}
-                className={`w-10 h-12 text-center text-lg font-bold border-2 rounded-lg outline-none transition-colors
-                  ${ d ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 bg-white text-gray-700' }
-                  focus:border-brand-500 focus:ring-2 focus:ring-brand-200`}
-              />
-            ))}
-          </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button onClick={submit} disabled={loading || digits.join('').length < 8} className="btn-primary w-full disabled:opacity-50">
-            {loading ? <span className="flex items-center justify-center gap-2"><LoadingSpinner size="sm" /> A verificar...</span> : 'Entrar'}
-          </button>
-        </div>
-      </Card>
-    </div>
+      <div className="space-y-8">
+        <ServicosSection />
+        <BarbeirosSection />
+        <AdminUsersSection />
+      </div>
   )
 }
 
@@ -453,7 +380,7 @@ function BarbeirosSection() {
 }
 
 // ─── ADMIN USERS ──────────────────────────────────────────────────────────────
-interface AdminUserForm { id?: number; username: string; password: string; nome: string; role: 'admin' | 'barbeiro'; barbeiro_id: string; ativo: number }
+interface AdminUserForm { id?: number; username: string; password: string; nome: string; role: 'admin' | 'barbeiro' | 'superAdmin'; barbeiro_id: string; ativo: number }
 const emptyAdminUser = (): AdminUserForm => ({ username: '', password: '', nome: '', role: 'barbeiro', barbeiro_id: '', ativo: 1 })
 
 function AdminUsersSection() {
