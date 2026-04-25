@@ -364,12 +364,12 @@ export function CheckoutModal({
       <Modal
           open
           onClose={onClose}
-          title="💳 Pagamento & Checkout"
+          title="💰 Pagamento & Checkout"
           footer={
             <>
-              <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-              <button className="btn-primary" onClick={handleConfirm} disabled={saving}>
-                {saving ? 'A guardar...' : '✅ Confirmar chegada'}
+              <button className="btn-secondary text-sm" onClick={onClose}>Cancelar</button>
+              <button className="btn-primary text-sm" onClick={handleConfirm} disabled={saving}>
+                {saving ? 'A guardar...' : '✅ Confirmar'}
               </button>
             </>
           }
@@ -395,7 +395,7 @@ export function CheckoutModal({
                               : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
                       }`}
                   >
-                    {op === 'multibanco' ? '🏧 Multibanco' : op === 'dinheiro' ? '💵 Dinheiro' : '🔄 Outro'}
+                    {op === 'multibanco' ? '💳 Multibanco' : op === 'dinheiro' ? '💵 Dinheiro' : 'Outro'}
                   </button>
               ))}
             </div>
