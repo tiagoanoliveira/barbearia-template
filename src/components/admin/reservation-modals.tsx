@@ -369,7 +369,7 @@ export function CheckoutModal({
             <>
               <button className="btn-secondary text-sm" onClick={onClose}>Cancelar</button>
               <button className="btn-primary text-sm" onClick={handleConfirm} disabled={saving}>
-                {saving ? 'A guardar...' : '✅ Confirmar'}
+                {saving ? 'A guardar...' : 'Confirmar'}
               </button>
             </>
           }
@@ -447,8 +447,8 @@ export function CheckoutModal({
                       onChange={e => setMeioGorjeta(e.target.value as 'multibanco' | 'dinheiro' | 'outro')}
                   >
                     <option value="dinheiro">💵 Dinheiro</option>
-                    <option value="multibanco">🏧 Multibanco</option>
-                    <option value="outro">🔄 Outro</option>
+                    <option value="multibanco">💳 Multibanco</option>
+                    <option value="outro">Outro</option>
                   </select>
                 </div>
               </div>
