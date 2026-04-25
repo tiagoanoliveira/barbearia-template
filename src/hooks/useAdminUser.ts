@@ -4,7 +4,7 @@ export interface AdminUserSession {
   id?: number
   username?: string
   name?: string
-  role?: 'admin' | 'barbeiro' | string
+  role?: 'admin' | 'barbeiro' | 'superAdmin' | string
   barbeiro_id?: number | null
 }
 
@@ -35,4 +35,8 @@ export function useAdminUser() {
   }, [])
 
   return adminUser
+}
+
+export function isSuperAdmin(user: AdminUserSession | null): boolean {
+  return user?.role === 'superAdmin'
 }

@@ -14,6 +14,7 @@ import ClientsPage from '@/pages/admin/ClientsPage'
 import ClientDetailPage from '@/pages/admin/ClientDetailPage'
 import UnavailablePage from '@/pages/admin/UnavailablePage'
 import ConfiguracaoPage from '@/pages/admin/ConfiguracaoPage'
+import PagamentosPage from '@/pages/admin/PagamentosPage'
 import LoginPage from '@/pages/admin/LoginPage'
 
 // Public pages
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="clientes/:id"       element={<ClientDetailPage />} />
           <Route path="indisponibilidades" element={<UnavailablePage />} />
           <Route path="configuracao"       element={<ConfiguracaoPage />} />
+          <Route path="pagamentos"         element={<PagamentosPage />} />
         </Route>
 
         {/* Fallback */}

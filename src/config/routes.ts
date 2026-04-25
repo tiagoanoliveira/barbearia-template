@@ -15,5 +15,6 @@ export const ROUTES = {
   ADMIN_CLIENT_DETAIL: '/admin/clientes/:id',
   ADMIN_UNAVAILABLE: '/admin/indisponibilidades',
   ADMIN_SETTINGS: '/admin/configuracao',
+  ADMIN_PAYMENTS:  '/admin/pagamentos',
   ADMIN_LOGIN: '/admin/login',
 } as const

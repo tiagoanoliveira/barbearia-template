@@ -138,8 +138,8 @@ CREATE TABLE IF NOT EXISTS admin_users (
   username      TEXT    NOT NULL UNIQUE,
   password_hash TEXT    NOT NULL,
   nome          TEXT    NOT NULL,
-  role          TEXT    NOT NULL DEFAULT 'admin'
-                  CHECK(role IN ('admin','barbeiro')),
+  role TEXT NOT NULL DEFAULT 'admin'
+        CHECK(role IN ('admin','barbeiro','superAdmin')),
   barbeiro_id   INTEGER REFERENCES barbeiros(id) ON DELETE CASCADE,
   ativo         INTEGER DEFAULT 1,
   criado_em     DATETIME DEFAULT CURRENT_TIMESTAMP,

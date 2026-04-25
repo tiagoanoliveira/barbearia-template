@@ -131,7 +131,7 @@ export default function CalendarPage() {
   // ── Utilizador logado ────────────────────────────────────────────────────
   const adminUser = useAdminUser()
   const isBarber         = adminUser?.role === 'barbeiro'
-  const isAdmin          = adminUser?.role === 'admin'
+  const isAdmin          = adminUser?.role === 'admin' || adminUser?.role === 'superAdmin'
   const loggedBarberId   = isBarber && adminUser?.barbeiro_id ? adminUser.barbeiro_id : null
 
   // ── Data seleccionada ────────────────────────────────────────────────────
@@ -207,10 +207,12 @@ export default function CalendarPage() {
   const { data: resRes,  isLoading: loadingRes } = useQuery({
     queryKey: ['cal-reservations', selectedDate, effectiveBarberId],
     queryFn:  () => reservationsApi.list({ date: selectedDate, perPage: 200, barberId: effectiveBarberId ?? undefined }),
+    refetchInterval: 30_000,
   })
   const { data: uRes, isLoading: loadingU } = useQuery({
     queryKey: ['cal-unavail', selectedDate, effectiveBarberId],
     queryFn:  () => barbersApi.listUnavailable({ date: selectedDate, barberId: effectiveBarberId ?? undefined }),
+    refetchInterval: 30_000,
   })
 
   const activeBarbers: Barber[] = (barbersRes?.data ?? []).filter(b => b.active)
@@ -647,7 +649,7 @@ export default function CalendarPage() {
       {modal?.type === 'res_checkout' && (
           <CheckoutModal
               reservation={modal.r}
-              invalidateKey="calendar"   // usa a queryKey do calendário
+              invalidateKey="cal-reservations"   // usa a queryKey do calendário
               onClose={close}
           />
       )}
