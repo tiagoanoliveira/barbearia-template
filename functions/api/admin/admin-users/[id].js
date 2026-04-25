@@ -13,7 +13,7 @@ export async function onRequest(context) {
 
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
-  if (auth.payload?.role !== 'admin') return unauthorized('Apenas admins podem gerir utilizadores')
+  if (!['admin', 'superAdmin'].includes(auth.user?.role)) return unauthorized('Apenas admins podem gerir utilizadores')
 
   const id = parseInt(params.id)
   if (isNaN(id)) return badRequest('ID inválido')

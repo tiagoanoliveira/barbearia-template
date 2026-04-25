@@ -20,8 +20,7 @@ export async function onRequest(context) {
     return unauthorized()
   }
 
-  // Só o role 'admin' pode gerir utilizadores
-  if (auth.payload?.role !== 'admin') {
+  if (!['admin', 'superAdmin'].includes(auth.user?.role)) {
     console.warn('admin/admin-users: role sem permissões', {
       url: request.url,
       role: auth.payload?.role,
@@ -46,7 +45,7 @@ export async function onRequest(context) {
     if (!username || !password || !nome || !role) {
       return badRequest('username, password, nome e role são obrigatórios')
     }
-    if (!['admin', 'barbeiro'].includes(role)) {
+    if (!['admin', 'barbeiro', 'superAdmin'].includes(role)) {
       return badRequest('role inválido')
     }
     const password_hash = await hashPassword(password)
