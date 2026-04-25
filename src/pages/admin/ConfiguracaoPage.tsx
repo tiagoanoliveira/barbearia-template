@@ -490,9 +490,10 @@ function AdminUsersSection() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Role *</label>
-              <select className="input text-sm w-full" value={form.role} onChange={e => setForm(f => f && ({ ...f, role: e.target.value as 'admin' | 'barbeiro' }))}>
-                <option value="admin">admin</option>
-                <option value="barbeiro">barbeiro</option>
+              <select className="input text-sm w-full" value={form.role} onChange={e => setForm(f => f && ({ ...f, role: e.target.value as 'admin' | 'barbeiro' | 'superAdmin' }))}>
+                <option value="barbeiro">Barbeiro</option>
+                <option value="admin">Admin</option>
+                <option value="superAdmin">Super Administrador</option>
               </select>
             </div>
             {form.role === 'barbeiro' && (
