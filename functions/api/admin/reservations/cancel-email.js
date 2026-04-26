@@ -2,6 +2,7 @@ import { ok, badRequest, notFound, serverError, corsOptions } from '../../../uti
 import { authenticateAdmin } from '../../../utils/auth.js'
 import { sendEmail, buildReservationCancellationEmail } from '../../../utils/email.js'
 import { cancelScheduledReminder } from '../../../utils/reservationEmails.js'
+import { EMAIL_SUBJECTS } from '../../../utils/site-config.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -69,7 +70,7 @@ export async function onRequest(context) {
 
     await sendEmail(context, {
       to:          row.client_email,
-      subject:     'A tua reserva foi cancelada – Brooklyn Barbearia',
+      subject:     EMAIL_SUBJECTS.cancellation,
       html,
       attachments,
     })
