@@ -5,7 +5,7 @@
  * Autenticação: Bearer JWT emitido pelo login de admin.
  * Binding obrigatório: R2 (R2 bucket) + R2_PUBLIC_URL.
  */
-import { authenticateAdmin } from '../../../utils/auth.js'
+import { authenticateAdmin } from '../../utils/auth.js'
 
 export async function onRequest(context) {
   const { request, env } = context
