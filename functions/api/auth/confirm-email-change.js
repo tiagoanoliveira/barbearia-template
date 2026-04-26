@@ -3,6 +3,7 @@
  * Confirma a alteração de email pendente e aplica o novo email.
  */
 import { corsOptions } from '../../utils/response.js'
+import { SHOP } from '../../utils/site-config.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -11,7 +12,7 @@ export async function onRequest(context) {
   const url   = new URL(request.url)
   const token = url.searchParams.get('token')
 
-  const BASE_URL = 'https://brooklynbarbearia.pt' // ajusta se precisares
+  const BASE_URL = SHOP.baseUrl
 
   if (!token) {
     return Response.redirect(`${BASE_URL}/perfil?email_change=invalid`, 302)
@@ -66,9 +67,9 @@ export async function onRequest(context) {
         .filter(Boolean)
 
     const filteredMethods = methods.filter(m => {
-      if (m === 'google'   && row.google_id)   return false
-      if (m === 'facebook' && row.facebook_id) return false
-      if (m === 'instagram'&& row.instagram_id)return false
+      if (m === 'google'    && row.google_id)    return false
+      if (m === 'facebook'  && row.facebook_id)  return false
+      if (m === 'instagram' && row.instagram_id) return false
       return true
     })
 
@@ -78,7 +79,7 @@ export async function onRequest(context) {
 
     await env.DB.prepare(
         `UPDATE clientes
-       SET email = ?, 
+       SET email = ?,
            email_pendente = NULL,
            email_verificado = 1,
            token_verificacao = NULL,

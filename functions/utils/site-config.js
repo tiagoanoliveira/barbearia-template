@@ -39,3 +39,17 @@ export const LOGO_ALT = SHOP.name
 
 /** Ano corrente (recalculado em cada deploy) */
 export const CURRENT_YEAR = new Date().getFullYear()
+
+/**
+ * Assuntos dos emails transacionais.
+ * Centralizados aqui para que mudar o nome da barbearia
+ * actualize automaticamente todos os subjects.
+ */
+export const EMAIL_SUBJECTS = {
+  verifyEmail:   `Confirme o seu email – ${SHOP.name}`,
+  passwordReset: `Recuperação de Password – ${SHOP.name}`,
+  emailChange:   `Confirme a alteração de email – ${SHOP.name}`,
+  newEmail:      `Confirme o novo email – ${SHOP.name}`,
+  reservation:   `Reserva confirmada – ${SHOP.name}`,
+  cancellation:  `Reserva cancelada – ${SHOP.name}`,
+}

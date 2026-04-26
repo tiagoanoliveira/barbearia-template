@@ -2,6 +2,7 @@ import { ok, badRequest, notFound, serverError, corsOptions, unauthorized } from
 import { authenticateClient } from '../../utils/auth.js'
 import { sendEmail, buildVerificationEmail } from '../../utils/email.js'
 import { generateToken } from '../../utils/crypto.js'
+import { EMAIL_SUBJECTS } from '../../utils/site-config.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -29,10 +30,9 @@ export async function onRequest(context) {
 
     let verifyToken = client.token_verificacao
 
-    // Se o token já expirou ou não existe, gera um novo
     if (!verifyToken || !expMs || expMs <= now) {
       verifyToken = generateToken()
-      const expires = new Date(now + 86400000).toISOString() // 24h
+      const expires = new Date(now + 86400000).toISOString()
 
       await env.DB.prepare(
         `UPDATE clientes
@@ -47,16 +47,14 @@ export async function onRequest(context) {
     try {
       const resp = await sendEmail(context, {
         to:      client.email,
-        subject: 'Verifique o seu email – Brooklyn Barbearia',
+        subject: EMAIL_SUBJECTS.verifyEmail,
         html,
       })
 
       const emailId = resp?.id
       if (emailId) {
         await env.DB.prepare(
-          `UPDATE clientes
-             SET resend_verification_email_id = ?, atualizado_em = CURRENT_TIMESTAMP
-           WHERE id = ?`
+          `UPDATE clientes SET resend_verification_email_id = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?`
         ).bind(emailId, client.id).run()
       }
     } catch (emailErr) {
@@ -65,7 +63,6 @@ export async function onRequest(context) {
         key_present: !!context.env?.RESEND_API_KEY,
         to:          client.email,
       })
-      // Não bloqueia a resposta – o token foi gravado e o cliente pode tentar de novo
     }
 
     return ok({ message: 'Email de verificação enviado' })

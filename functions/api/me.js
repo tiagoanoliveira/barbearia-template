@@ -3,6 +3,7 @@ import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from
 import { hashPassword, verifyPassword, generateToken } from '../utils/crypto.js'
 import { sanitize } from '../utils/validators.js'
 import { buildEmailChangeEmail, sendEmail } from '../utils/email.js'
+import { EMAIL_SUBJECTS } from '../utils/site-config.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -28,7 +29,6 @@ export async function onRequest(context) {
         if (new Date(client.token_verificacao_expira) > new Date()) {
           pendingEmail = client.email_pendente
         } else {
-          // opcional: limpar pendentes expirados
           await env.DB.prepare(
               `UPDATE clientes
        SET email_pendente = NULL,
@@ -68,7 +68,6 @@ export async function onRequest(context) {
 
       if (!name) return badRequest('Nome é obrigatório')
 
-      // Alteração de password
       if (new_password) {
         if (!current_password) return badRequest('Password atual é necessária')
         if (new_password.length < 8) return badRequest('Nova password mínimo 8 caracteres')
@@ -86,7 +85,6 @@ export async function onRequest(context) {
         ).bind(newHash, auth.clientId).run()
       }
 
-      // Atualizar nome, telefone, NIF (sem tocar no email diretamente)
       const current = await env.DB.prepare(
         'SELECT nome, email FROM clientes WHERE id = ?'
       ).bind(auth.clientId).first()
@@ -94,7 +92,6 @@ export async function onRequest(context) {
       const newEmail    = email ? sanitize(email, 200).toLowerCase() : current.email
       const emailChange = newEmail && newEmail !== current.email
 
-      // Atualizar todos os campos exceto email (email só muda após confirmação)
       await env.DB.prepare(
         `UPDATE clientes
          SET nome = ?, telefone = ?, nif = ?,
@@ -107,16 +104,14 @@ export async function onRequest(context) {
         auth.clientId
       ).run()
 
-      // Se o email mudou, gerar token de confirmação e enviar para o NOVO email
       if (emailChange) {
         const token   = generateToken()
-        const expires = new Date(Date.now() + 86400000).toISOString() // 24h
+        const expires = new Date(Date.now() + 86400000).toISOString()
 
-        // Guardar novo email e token diretamente em clientes
         await env.DB.prepare(
             `UPDATE clientes
-             SET email_pendente = ?, 
-                 token_verificacao = ?, 
+             SET email_pendente = ?,
+                 token_verificacao = ?,
                  token_verificacao_expira = ?,
                  atualizado_em = CURRENT_TIMESTAMP
              WHERE id = ?`
@@ -130,7 +125,7 @@ export async function onRequest(context) {
 
         sendEmail(context, {
           to:      newEmail,
-          subject: 'Confirme o novo email – Brooklyn Barbearia',
+          subject: EMAIL_SUBJECTS.newEmail,
           html,
         }).catch(err =>
             console.error('[me] Erro ao enviar email de confirmação de alteração:', err)
