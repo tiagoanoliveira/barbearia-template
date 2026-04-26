@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Mail, ArrowLeft, CheckCircle } from 'lucide-react'
 import { api } from '@/api/client'
+import { barberShopConfig } from '@/config/theme'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail]     = useState('')
@@ -22,7 +23,7 @@ export default function ForgotPasswordPage() {
       if (!ts || !turnstileRef.current || widgetIdRef.current) return
 
       widgetIdRef.current = ts.render(turnstileRef.current, {
-        sitekey: '0x4AAAAAAC77HIBeGCioAqAq',
+        sitekey: barberShopConfig.turnstileSiteKey,
         callback: (token: string) => setTurnstileToken(token),
       })
     }

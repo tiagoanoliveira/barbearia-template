@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {Link, useNavigate} from 'react-router-dom'
 import { Scissors, Eye, EyeOff, LogIn } from 'lucide-react'
 import { authApi } from '@/api/auth'
-import {barberShopConfig, LOGO_URL} from '@/config/theme'
+import { barberShopConfig, LOGO_URL } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
 
 export default function LoginPage() {
@@ -34,7 +34,7 @@ export default function LoginPage() {
       if (!ts || !turnstileRef.current || widgetIdRef.current) return
 
       widgetIdRef.current = ts.render(turnstileRef.current, {
-        sitekey: '0x4AAAAAAC77HIBeGCioAqAq',
+        sitekey: barberShopConfig.turnstileSiteKey,
         callback: (token: string) => setTurnstileToken(token),
       })
     }

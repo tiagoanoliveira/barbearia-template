@@ -7,6 +7,13 @@
 import logoSrc    from '@/media/images/logos/logo-512px.png'
 import faviconSrc from '@/media/images/logos/logo-96px.png'
 
+// ─ Media da HomePage ──────────────────────────────────────────────────────
+import heroVideoSrc from '@/media/video/presentation.mp4'
+import aboutImgSrc  from '@/media/images/corte-cabelo-detalhe.png'
+import gallery1Src  from '@/media/images/brooklyn/Entrada.jpg'
+import gallery2Src  from '@/media/images/brooklyn/Cadeiras.jpg'
+import gallery3Src  from '@/media/images/brooklyn/Sinuca.jpg'
+
 export const LOGO_URL    = logoSrc
 export const FAVICON_URL = faviconSrc
 
@@ -20,6 +27,11 @@ export const barberShopConfig = {
   address:     'Rua do Campo Alegre, 450, Porto',
   instagram:   'https://instagram.com/brooklynbarbearia',
   supportIframeSrc: 'https://tiagoanoliveira.pt/support/988b8a8a745c445fbaff596ad5be54dd',
+
+  // ─ Cloudflare Turnstile ─────────────────────────────────────────────────
+  // Obter em: https://dash.cloudflare.com -> Turnstile -> Sites
+  turnstileSiteKey: '0x4AAAAAAC77HIBeGCioAqAq',
+
   // Dados legais
   nif:           '515753300',
   legalName:     'Horizonte Inicial.',
@@ -38,6 +50,20 @@ export const barberShopConfig = {
 
   siteTitle:       'Brooklyn Barbearia',
   siteDescription: 'Barbearia premium no Porto. Reserva online rápida e fácil.',
+
+  // ─ Media da HomePage ─────────────────────────────────────────────────────
+  media: {
+    // Vídeo do hero (null para usar imagem de fallback)
+    heroVideo: heroVideoSrc as string,
+    // Imagem da secção "Sobre"
+    aboutImage: { src: aboutImgSrc as string, alt: 'Barbearia' },
+    // Galeria — adicionar/remover entradas conforme necessário
+    gallery: [
+      { src: gallery1Src as string, alt: 'Entrada da barbearia' },
+      { src: gallery2Src as string, alt: 'Cadeiras' },
+      { src: gallery3Src as string, alt: 'Mesa de sinuca' },
+    ],
+  },
 
   // ─ Secção "Sobre" da HomePage ────────────────────────────────────────────
   about: {

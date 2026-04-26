@@ -7,17 +7,7 @@ import { barberShopConfig, groupWorkingHours } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
 import type { Service, Barber } from '@/types'
 
-import heroVideo   from '@/media/video/presentation.mp4'
-import aboutImg    from '@/media/images/corte-cabelo-detalhe.png'
-import galleryImg1 from '@/media/images/brooklyn/Entrada.jpg'
-import galleryImg2 from '@/media/images/brooklyn/Cadeiras.jpg'
-import galleryImg3 from '@/media/images/brooklyn/Sinuca.jpg'
-
-const galleryImages = [
-  { src: galleryImg1, alt: 'Entrada da barbearia' },
-  { src: galleryImg2, alt: 'Cadeiras' },
-  { src: galleryImg3, alt: 'Mesa de sinuca' },
-]
+const { heroVideo, aboutImage, gallery: galleryImages } = barberShopConfig.media
 
 // ── Galeria: grelha em desktop, slideshow em mobile ──────────────────────
 function Gallery() {
@@ -193,7 +183,7 @@ export default function HomePage() {
             <div className="relative flex justify-center">
               {/* Altura e largura máximas da foto do about */}
               <div className="overflow-hidden rounded-3xl shadow-xl" style={{ maxWidth: 350, maxHeight: 350 }}>
-                <img src={aboutImg} alt="Barbearia" className="w-full h-full object-cover" />
+                <img src={aboutImage.src} alt={aboutImage.alt} className="w-full h-full object-cover" />
               </div>
               {about.rating && (
                 <div className="absolute -bottom-4 bg-secondary-500 rounded-2xl p-4 shadow-xl">

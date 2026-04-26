@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Eye, EyeOff, LogIn, AlertTriangle } from 'lucide-react'
 import { api } from '@/api/client'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { barberShopConfig } from '@/config/theme'
 
 type Mode = 'login' | 'register'
 
@@ -31,7 +32,7 @@ export default function PublicLoginPage() {
       if (!ts || !turnstileRef.current || widgetIdRef.current) return
 
       widgetIdRef.current = ts.render(turnstileRef.current, {
-        sitekey: '0x4AAAAAAC77HIBeGCioAqAq',
+        sitekey: barberShopConfig.turnstileSiteKey,
         callback: (token: string) => setTurnstileToken(token),
       })
     }
