@@ -1,19 +1,15 @@
 /**
- * Utilitário de envio de email via Resend
+ * Utilitário de envio de email via Resend.
  * Usado por todos os endpoints que precisam de enviar emails.
+ *
+ * Todos os dados da barbearia (nome, domínio, contacto) são importados
+ * de functions/utils/site-config.js — edite apenas aí.
  */
 
-const FROM = 'Brooklyn Barbearia <noreply@brooklynbarbearia.pt>'
-const BASE_URL = 'https://brooklynbarbearia.pt'
-const YEAR = new Date().getFullYear()
+import { SHOP, LOGO_URL, LOGO_ALT, CURRENT_YEAR } from './site-config.js'
 
 /**
  * Verifica se um endereço de email é um placeholder sem contacto.
- * Endereços com terminação @withoutcontact.pt são gerados automaticamente
- * para clientes criados pelo admin sem email real.
- *
- * @param {string} email
- * @returns {boolean}
  */
 export function isPlaceholderEmail(email) {
   return typeof email === 'string' && email.toLowerCase().endsWith('@withoutcontact.pt')
@@ -21,12 +17,6 @@ export function isPlaceholderEmail(email) {
 
 /**
  * Converte uma string UTF-8 para Base64 de forma segura.
- * btoa() nativo falha com caracteres fora do range Latin1 (ex: acentos em nomes,
- * emojis, caracteres especiais em assuntos ICS).
- * Esta função usa TextEncoder para lidar corretamente com UTF-8.
- *
- * @param {string} str
- * @returns {string} Base64
  */
 function toBase64(str) {
   const bytes = new TextEncoder().encode(str)
@@ -35,7 +25,7 @@ function toBase64(str) {
   return btoa(binary)
 }
 
-// ─── CSS partilhado ─────────────────────────────────────────────────────────────────────────────
+// ─── CSS partilhado ───────────────────────────────────────────────────────────────────
 function emailCSS() {
   return `
     *{margin:0;padding:0;box-sizing:border-box}
@@ -100,13 +90,13 @@ function shell(headerClass, headerTitle, body) {
 <style>${emailCSS()}</style></head>
 <body><div class="wrap"><div class="container">
   <div class="logo-sec">
-    <img src="${BASE_URL}/images/logos/logo-512px.svg" alt="Brooklyn Barbearia" class="logo">
+    <img src="${LOGO_URL}" alt="${LOGO_ALT}" class="logo">
   </div>
   <div class="${headerClass}"><h1>${headerTitle}</h1></div>
   <div class="content">${body}</div>
   <div class="footer">
     <p style="font-size:12px;color:#718096">Este é um email automático, por favor não responda.</p>
-    <p>&copy; ${YEAR} Brooklyn Barbearia &ndash; Todos os direitos reservados.
+    <p>&copy; ${CURRENT_YEAR} ${SHOP.name} &ndash; Todos os direitos reservados.
        Feito com &#129820; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
   </div>
 </div></div></body></html>`
@@ -118,47 +108,74 @@ function detailRow(icon, label, value) {
 }
 
 function icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName) {
-  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Brooklyn Barbearia//Reservas//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:reserva-${reservaId}@brooklynbarbearia.pt\r\nDTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z\r\nDTSTART:${dtStart}\r\nDTEND:${dtEnd}\r\nSUMMARY:Reserva - ${serviceName} com ${barberName}\r\nDESCRIPTION:Confirmacao de reserva na Brooklyn Barbearia\r\nLOCATION:Brooklyn Barbearia\r\nORGANIZER:CN=Brooklyn Barbearia:mailto:noreply@brooklynbarbearia.pt\r\nATTENDEE:mailto:${clientEmail}\r\nSTATUS:CONFIRMED\r\nSEQUENCE:0\r\nEND:VEVENT\r\nEND:VCALENDAR`
+  return [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    `PRODID:-//${SHOP.name}//Reservas//PT`,
+    'CALSCALE:GREGORIAN', 'METHOD:REQUEST',
+    'BEGIN:VEVENT',
+    `UID:reserva-${reservaId}@${new URL(SHOP.baseUrl).hostname}`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z`,
+    `DTSTART:${dtStart}`, `DTEND:${dtEnd}`,
+    `SUMMARY:Reserva - ${serviceName} com ${barberName}`,
+    `DESCRIPTION:Confirmacao de reserva na ${SHOP.name}`,
+    `LOCATION:${SHOP.name} \u2013 ${SHOP.address}`,
+    `ORGANIZER;CN=${SHOP.name}:mailto:${SHOP.email}`,
+    `ATTENDEE:mailto:${clientEmail}`,
+    'STATUS:CONFIRMED', 'SEQUENCE:0',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n')
 }
 
 function icsCancelled(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName) {
-  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Brooklyn Barbearia//Reservas//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:CANCEL\r\nBEGIN:VEVENT\r\nUID:reserva-${reservaId}@brooklynbarbearia.pt\r\nDTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z\r\nDTSTART:${dtStart}\r\nDTEND:${dtEnd}\r\nSUMMARY:CANCELADA - ${serviceName} com ${barberName}\r\nDESCRIPTION:Esta reserva foi cancelada pela Brooklyn Barbearia\r\nLOCATION:Brooklyn Barbearia\r\nORGANIZER:CN=Brooklyn Barbearia:mailto:noreply@brooklynbarbearia.pt\r\nATTENDEE:mailto:${clientEmail}\r\nSTATUS:CANCELLED\r\nSEQUENCE:1\r\nEND:VEVENT\r\nEND:VCALENDAR`
+  return [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    `PRODID:-//${SHOP.name}//Reservas//PT`,
+    'CALSCALE:GREGORIAN', 'METHOD:CANCEL',
+    'BEGIN:VEVENT',
+    `UID:reserva-${reservaId}@${new URL(SHOP.baseUrl).hostname}`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z`,
+    `DTSTART:${dtStart}`, `DTEND:${dtEnd}`,
+    `SUMMARY:CANCELADA - ${serviceName} com ${barberName}`,
+    `DESCRIPTION:Esta reserva foi cancelada pela ${SHOP.name}`,
+    `LOCATION:${SHOP.name} \u2013 ${SHOP.address}`,
+    `ORGANIZER;CN=${SHOP.name}:mailto:${SHOP.email}`,
+    `ATTENDEE:mailto:${clientEmail}`,
+    'STATUS:CANCELLED', 'SEQUENCE:1',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n')
 }
 
 function icsParams(dataHora, duracao) {
-  const dt   = new Date(dataHora)
-  const pad  = n => String(n).padStart(2,'0')
-  const fmt  = d => `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00Z`
-  const dtEnd = new Date(dt.getTime() + (duracao || 60) * 60000)
-  return { dtStart: fmt(dt), dtEnd: fmt(dtEnd) }
+  const dt  = new Date(dataHora)
+  const pad = n => String(n).padStart(2, '0')
+  const fmt = d => `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00Z`
+  return { dtStart: fmt(dt), dtEnd: fmt(new Date(dt.getTime() + (duracao || 60) * 60000)) }
 }
 
-// ─── Envio central com debug completo ───────────────────────────────────────────────
+// ─── Envio central ─────────────────────────────────────────────────────────────────────
 export async function sendEmail(context, { to, subject, html, attachments = [] }) {
-  // Bloquear envio para endereços @withoutcontact.pt (clientes sem email real)
   if (isPlaceholderEmail(to)) {
-    console.warn(`[sendEmail] Envio bloqueado para "${to}" — cliente sem email atualizado. Atualize o email do cliente no painel de admin.`)
+    console.warn(`[sendEmail] Envio bloqueado para "${to}" — cliente sem email atualizado.`)
     throw new Error('EMAIL_NOT_UPDATED: Este cliente não tem um email válido configurado. Por favor atualize o email no painel de administração.')
   }
 
   const key = context.env?.RESEND_API_KEY
-
   if (!key) {
     console.error('[sendEmail] RESEND_API_KEY não está definida nas variáveis de ambiente.')
     throw new Error('RESEND_API_KEY não configurada')
   }
 
-  const payload = { from: FROM, to, subject, html }
+  const payload = { from: SHOP.fromEmail, to, subject, html }
   if (attachments.length) payload.attachments = attachments
 
-  console.log(`[sendEmail] A enviar email para: ${to} | assunto: "${subject}" | anexos: ${attachments.length}`)
+  console.log(`[sendEmail] A enviar para: ${to} | assunto: "${subject}" | anexos: ${attachments.length}`)
 
   let res
   try {
     res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
+      method:  'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body:    JSON.stringify(payload),
     })
   } catch (fetchErr) {
     console.error('[sendEmail] Erro de rede ao chamar Resend API:', fetchErr)
@@ -166,97 +183,68 @@ export async function sendEmail(context, { to, subject, html, attachments = [] }
   }
 
   const responseText = await res.text()
-
   if (!res.ok) {
     console.error(`[sendEmail] Resend devolveu ${res.status}:`, responseText)
     throw new Error(`Resend error ${res.status}: ${responseText}`)
   }
 
-  console.log(`[sendEmail] Email enviado com sucesso para ${to}. Resposta Resend:`, responseText)
-
-  try {
-    return JSON.parse(responseText)
-  } catch {
-    return { raw: responseText }
-  }
+  console.log(`[sendEmail] Enviado com sucesso para ${to}.`)
+  try { return JSON.parse(responseText) } catch { return { raw: responseText } }
 }
 
-// Recupera detalhes de um email já enviado (para debug / auditoria)
 export async function retrieveEmail(context, emailId) {
   const key = context.env?.RESEND_API_KEY
-
-  if (!key || !emailId) {
-    console.warn('[retrieveEmail] Chamada ignorada — falta API key ou emailId')
-    return null
-  }
-
+  if (!key || !emailId) return null
   try {
-    const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
-      method: 'GET',
+    const res  = await fetch(`https://api.resend.com/emails/${emailId}`, {
       headers: { Authorization: `Bearer ${key}` },
     })
-
     const text = await res.text()
-
-    if (!res.ok) {
-      console.error(`[retrieveEmail] Resend devolveu ${res.status}:`, text)
-      return null
-    }
-
-    try {
-      return JSON.parse(text)
-    } catch {
-      return { raw: text }
-    }
+    if (!res.ok) { console.error(`[retrieveEmail] ${res.status}:`, text); return null }
+    try { return JSON.parse(text) } catch { return { raw: text } }
   } catch (err) {
-    console.error('[retrieveEmail] Erro ao chamar API Resend:', err)
+    console.error('[retrieveEmail] Erro:', err)
     return null
   }
 }
 
-// ─── 1. Email de confirmação de reserva ──────────────────────────────────────────────────
+// ─── 1. Confirmação de reserva ───────────────────────────────────────────────────────────────
 export function buildReservationConfirmationEmail({ reservaId, clientName, clientEmail,
   dataHora, serviceName, barberName, duracao, comentario }) {
 
-  const dt      = new Date(dataHora)
-  const data    = dt.toLocaleDateString('pt-PT', { day:'2-digit', month:'2-digit', year:'numeric' })
-  const hora    = dt.toLocaleTimeString('pt-PT', { hour:'2-digit', minute:'2-digit' })
+  const dt   = new Date(dataHora)
+  const data = dt.toLocaleDateString('pt-PT', { day:'2-digit', month:'2-digit', year:'numeric' })
+  const hora = dt.toLocaleTimeString('pt-PT', { hour:'2-digit', minute:'2-digit' })
   const { dtStart, dtEnd } = icsParams(dataHora, duracao)
 
-  const notasHtml = comentario
-    ? detailRow('&#128172;','Notas:',`<br>${comentario}`)
-    : ''
+  const notasHtml = comentario ? detailRow('&#128172;', 'Notas:', `<br>${comentario}`) : ''
 
-  const html = shell('header-green','Reserva Confirmada! &#9989;',`
+  const html = shell('header-green', 'Reserva Confirmada! &#9989;', `
     <p>Olá <strong>${clientName}</strong>,</p>
     <p>A sua reserva foi confirmada com sucesso. Aqui estão os detalhes:</p>
     <div class="info-box border-green">
       <h3>Detalhes da Reserva</h3>
-      ${detailRow('&#128197;','Data:',data)}
-      ${detailRow('&#128341;','Hora:',hora)}
-      ${detailRow('&#9986;&#65039;','Serviço:',serviceName)}
-      ${detailRow('&#128100;','Barbeiro:',barberName)}
+      ${detailRow('&#128197;', 'Data:', data)}
+      ${detailRow('&#128341;', 'Hora:', hora)}
+      ${detailRow('&#9986;&#65039;', 'Serviço:', serviceName)}
+      ${detailRow('&#128100;', 'Barbeiro:', barberName)}
       ${notasHtml}
     </div>
     <div class="cta-sec">
       <p class="cta-text">Aguardamos por si! Se precisar de cancelar ou reagendar:</p>
-      <a href="${BASE_URL}/reservations" class="btn">Ver as minhas reservas</a>
+      <a href="${SHOP.baseUrl}/reservations" class="btn">Ver as minhas reservas</a>
     </div>
     <div class="contact-sec">
       <p>Ou contacte-nos diretamente:</p>
-      <a href="tel:+351224938542" class="contact-link">&#128222; +351 224 938 542</a>
+      <a href="tel:${SHOP.phone.replace(/\s/g,'')}" class="contact-link">&#128222; ${SHOP.phone}</a>
     </div>
   `)
 
   const ics = icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName)
-
-  return {
-    html,
-    attachments: [{ filename: 'reserva.ics', content: toBase64(ics), type: 'text/calendar' }],
-  }
+  return { html, attachments: [{ filename: 'reserva.ics', content: toBase64(ics), type: 'text/calendar' }] }
 }
 
-// ─── 2. Email de cancelamento de reserva ───────────────────────────────────────────────
+// ─── 2. Cancelamento de reserva ────────────────────────────────────────────────────────────
 export function buildReservationCancellationEmail({ reservaId, clientName, clientEmail,
   dataHora, serviceName, barberName, duracao, motivo }) {
 
@@ -266,48 +254,42 @@ export function buildReservationCancellationEmail({ reservaId, clientName, clien
   const { dtStart, dtEnd } = icsParams(dataHora, duracao)
 
   const motivoHtml = motivo
-    ? `<div class="info-box border-amber">
-         <h3>Motivo do Cancelamento</h3>
-         <p class="reason-text">${motivo}</p>
-       </div>`
+    ? `<div class="info-box border-amber"><h3>Motivo do Cancelamento</h3>
+       <p class="reason-text">${motivo}</p></div>`
     : ''
 
-  const html = shell('header-red','Reserva Cancelada',`
+  const html = shell('header-red', 'Reserva Cancelada', `
     <p>Olá <strong>${clientName}</strong>,</p>
     <p>Lamentamos informar que a sua reserva foi <strong>cancelada</strong>.</p>
     <div class="info-box border-red">
       <h3>Detalhes da Reserva Cancelada</h3>
-      ${detailRow('&#128197;','Data:',data)}
-      ${detailRow('&#128341;','Hora:',hora)}
-      ${detailRow('&#9986;&#65039;','Serviço:',serviceName)}
-      ${detailRow('&#128100;','Barbeiro:',barberName)}
+      ${detailRow('&#128197;', 'Data:', data)}
+      ${detailRow('&#128341;', 'Hora:', hora)}
+      ${detailRow('&#9986;&#65039;', 'Serviço:', serviceName)}
+      ${detailRow('&#128100;', 'Barbeiro:', barberName)}
     </div>
     ${motivoHtml}
     <div class="cta-sec">
       <p class="cta-text">Pedimos desculpa pelo inconveniente. Pode fazer uma nova reserva a qualquer momento:</p>
-      <a href="${BASE_URL}/reservar" class="btn">Fazer Nova Reserva</a>
+      <a href="${SHOP.baseUrl}/reservar" class="btn">Fazer Nova Reserva</a>
     </div>
     <div class="contact-sec">
       <p>Se tiver alguma dúvida, não hesite em contactar-nos:</p>
-      <a href="tel:+351224938542" class="contact-link">&#128222; +351 224 938 542</a>
+      <a href="tel:${SHOP.phone.replace(/\s/g,'')}" class="contact-link">&#128222; ${SHOP.phone}</a>
     </div>
   `)
 
   const ics = icsCancelled(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName)
-
-  return {
-    html,
-    attachments: [{ filename: 'cancelamento.ics', content: toBase64(ics), type: 'text/calendar' }],
-  }
+  return { html, attachments: [{ filename: 'cancelamento.ics', content: toBase64(ics), type: 'text/calendar' }] }
 }
 
-// ─── 3. Email de verificação de conta / novo email ─────────────────────────────────────────
+// ─── 3. Verificação de conta ────────────────────────────────────────────────────────────────
 export function buildVerificationEmail({ clientName, verifyToken }) {
-  const verifyUrl = `${BASE_URL}/api/auth/verify?token=${verifyToken}`
+  const verifyUrl = `${SHOP.baseUrl}/api/auth/verify?token=${verifyToken}`
 
-  const html = shell('header-gold','Confirme o seu email &#128231;',`
+  const html = shell('header-gold', 'Confirme o seu email &#128231;', `
     <p>Olá <strong>${clientName}</strong>,</p>
-    <p>Bem-vindo à Brooklyn Barbearia! Por favor confirme o seu email para ativar a conta:</p>
+    <p>Bem-vindo à ${SHOP.name}! Por favor confirme o seu email para ativar a conta:</p>
     <div style="text-align:center;margin:30px 0">
       <a href="${verifyUrl}" class="btn">Verificar Email</a>
     </div>
@@ -322,11 +304,11 @@ export function buildVerificationEmail({ clientName, verifyToken }) {
   return { html }
 }
 
-// ─── 4. Email de confirmação de alteração de email ───────────────────────────────────────
+// ─── 4. Confirmação de alteração de email ──────────────────────────────────────────────────
 export function buildEmailChangeEmail({ clientName, confirmToken, newEmail }) {
-  const confirmUrl = `${BASE_URL}/confirmar-email?token=${confirmToken}`
+  const confirmUrl = `${SHOP.baseUrl}/confirmar-email?token=${confirmToken}`
 
-  const html = shell('header-gold','Confirme o novo email &#128231;',`
+  const html = shell('header-gold', 'Confirme o novo email &#128231;', `
     <p>Olá <strong>${clientName}</strong>,</p>
     <p>Recebemos um pedido para alterar o email da sua conta para <strong>${newEmail}</strong>.</p>
     <p>Para confirmar esta alteração, clique no botão abaixo:</p>
@@ -344,11 +326,11 @@ export function buildEmailChangeEmail({ clientName, confirmToken, newEmail }) {
   return { html }
 }
 
-// ─── 5. Email de recuperação de password ──────────────────────────────────────────────────
+// ─── 5. Recuperação de password ────────────────────────────────────────────────────────────
 export function buildPasswordResetEmail({ clientName, resetToken }) {
-  const resetUrl = `${BASE_URL}/recuperar-password?token=${resetToken}`
+  const resetUrl = `${SHOP.baseUrl}/recuperar-password?token=${resetToken}`
 
-  const html = shell('header-gold','Recuperação de Password &#128273;',`
+  const html = shell('header-gold', 'Recuperação de Password &#128273;', `
     <p>Olá <strong>${clientName}</strong>,</p>
     <p>Recebemos um pedido para redefinir a password da sua conta.</p>
     <p>Se foi você que fez este pedido, clique no botão abaixo:</p>
