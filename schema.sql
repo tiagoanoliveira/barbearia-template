@@ -404,19 +404,3 @@ FROM notifications n
 WHERE n.is_read = 0
   AND datetime(n.created_at) > datetime('now', '-7 days')
 ORDER BY n.created_at DESC;
-
--- Admin por defeito — gerar hash com o script em BACKEND.md antes de usar
--- INSERT INTO admin_users (username, password_hash, nome, role)
--- VALUES ('admin', '<hash-aqui>', 'Admin', 'admin');
-
--- ================================================
--- MIGRAÇÃO (bases de dados já existentes)
--- Executar apenas se a tabela reservas já existir sem estes campos.
--- O D1 ignora erros de "duplicate column" se usares um script separado;
--- aqui ficam documentados os comandos necessários:
--- ================================================
--- ALTER TABLE reservas ADD COLUMN meio_pagamento TEXT DEFAULT NULL;
--- ALTER TABLE reservas ADD COLUMN valor_pago     INTEGER DEFAULT NULL;
--- ALTER TABLE reservas ADD COLUMN gorjeta        INTEGER DEFAULT NULL;
--- ALTER TABLE reservas ADD COLUMN meio_gorjeta   TEXT DEFAULT NULL;
--- CREATE INDEX IF NOT EXISTS idx_reservas_meio_pagamento ON reservas(meio_pagamento, status, data_hora);
