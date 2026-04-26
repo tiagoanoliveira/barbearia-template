@@ -1,11 +1,12 @@
 import { authenticateAdmin } from '../../utils/auth.js'
+import { canManageAdminUsers } from '../../utils/authz.js'
 import { hashPassword } from '../../utils/crypto.js'
-import { ok, created, badRequest, unauthorized, notFound, corsOptions } from '../../utils/response.js'
+import { ok, created, badRequest, unauthorized, corsOptions } from '../../utils/response.js'
 import { sanitize } from '../../utils/validators.js'
 
 /**
- * GET  /api/admin/admin-users          – lista todos
- * POST /api/admin/admin-users          – cria novo
+ * GET  /api/admin/admin-users  – lista todos
+ * POST /api/admin/admin-users  – cria novo
  */
 export async function onRequest(context) {
   const { request, env } = context
@@ -13,18 +14,13 @@ export async function onRequest(context) {
 
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) {
-    console.warn('admin/admin-users: pedido não autorizado (falha no token)', {
-      url: request.url,
-      hasAuthHeader: !!request.headers.get('Authorization'),
-    })
+    console.warn('admin/admin-users: token inválido ou ausente', { url: request.url })
     return unauthorized()
   }
 
-  if (!['admin', 'superAdmin'].includes(auth.user?.role)) {
-    console.warn('admin/admin-users: role sem permissões', {
-      url: request.url,
-      role: auth.payload?.role,
-    })
+  // Usa auth.user.role (BD) — nunca auth.payload.role (JWT)
+  if (!canManageAdminUsers(auth)) {
+    console.warn('admin/admin-users: role sem permissões', { role: auth.user?.role })
     return unauthorized('Apenas admins podem gerir utilizadores')
   }
 

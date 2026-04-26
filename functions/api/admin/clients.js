@@ -1,4 +1,5 @@
 import { authenticateAdmin } from '../../utils/auth.js'
+import { isAdmin } from '../../utils/authz.js'
 import { ok, created, unauthorized, badRequest, serverError, corsOptions } from '../../utils/response.js'
 import { sanitize } from '../../utils/validators.js'
 
@@ -8,6 +9,12 @@ export async function onRequest(context) {
 
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
+
+  // Barbeiros não têm acesso a dados de clientes
+  if (!isAdmin(auth)) {
+    console.warn('admin/clients: acesso negado', { role: auth.user?.role })
+    return unauthorized('Sem permissões para aceder a clientes')
+  }
 
   if (request.method === 'GET') {
     try {
@@ -57,13 +64,7 @@ export async function onRequest(context) {
          LIMIT ? OFFSET ?`
       ).bind(...params, perPage, offset).all()
 
-      return ok({
-        items: results,
-        total,
-        page,
-        perPage,
-        totalPages,
-      })
+      return ok({ items: results, total, page, perPage, totalPages })
     } catch (e) {
       return serverError('Erro ao listar clientes', e.message)
     }
@@ -71,15 +72,13 @@ export async function onRequest(context) {
 
   if (request.method === 'POST') {
     try {
-      const body = await request.json()
+      const body  = await request.json()
       const name  = sanitize(body.name  ?? '', 255)
       const phone = sanitize(body.phone ?? '', 50).trim()
 
       if (!name)  return badRequest('Nome do cliente é obrigatório')
       if (!phone) return badRequest('Telefone do cliente é obrigatório')
 
-      // Se não for fornecido email, gerar um placeholder com o telefone
-      // para que o campo não fique nulo mas o sistema saiba que não é um email real.
       const rawEmail = sanitize(body.email ?? '', 255).trim()
       const email    = rawEmail || `${phone}@withoutcontact.pt`
 
@@ -88,24 +87,13 @@ export async function onRequest(context) {
          VALUES (?, ?, ?, '', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       ).bind(name, email, phone).run()
 
-      const id = result.meta.last_row_id
-
       const createdClient = await env.DB.prepare(
-        `SELECT
-           c.id,
-           c.nome        AS name,
-           c.email,
-           c.telefone    AS phone,
-           c.nif,
-           c.foto_perfil AS photo_url,
-           c.reservas_concluidas,
-           c.next_appointment_date,
-           c.last_appointment_date,
-           c.notas       AS notes,
-           c.criado_em   AS created_at
-         FROM clientes c
-         WHERE c.id = ?`
-      ).bind(id).first()
+        `SELECT c.id, c.nome AS name, c.email, c.telefone AS phone,
+                c.nif, c.foto_perfil AS photo_url, c.reservas_concluidas,
+                c.next_appointment_date, c.last_appointment_date,
+                c.notas AS notes, c.criado_em AS created_at
+         FROM clientes c WHERE c.id = ?`
+      ).bind(result.meta.last_row_id).first()
 
       return created(createdClient)
     } catch (e) {

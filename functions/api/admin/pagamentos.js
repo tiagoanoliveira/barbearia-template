@@ -1,25 +1,30 @@
 import { authenticateAdmin } from '../../utils/auth.js'
+import { isSuperAdmin } from '../../utils/authz.js'
 import { ok, unauthorized, serverError, corsOptions } from '../../utils/response.js'
 
 export async function onRequest(context) {
-    const { request, env } = context
-    if (request.method === 'OPTIONS') return corsOptions()
+  const { request, env } = context
+  if (request.method === 'OPTIONS') return corsOptions()
 
-    const auth = await authenticateAdmin(request, env)
-    if (!auth.success || auth.user.role !== 'superAdmin') return unauthorized()
+  const auth = await authenticateAdmin(request, env)
+  if (!auth.success) return unauthorized()
 
-    const url      = new URL(request.url)
-    const dateFrom = url.searchParams.get('date_from')
-    const dateTo   = url.searchParams.get('date_to')
+  // Apenas superAdmin acede a estatísticas de pagamentos
+  if (!isSuperAdmin(auth)) {
+    console.warn('admin/pagamentos: acesso negado', { role: auth.user?.role })
+    return unauthorized('Apenas superAdmin pode aceder a pagamentos')
+  }
 
-    // Default: mês corrente
-    const now   = new Date()
-    const from  = dateFrom ?? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
-    const to    = dateTo   ?? now.toISOString().slice(0, 10)
+  const url      = new URL(request.url)
+  const dateFrom = url.searchParams.get('date_from')
+  const dateTo   = url.searchParams.get('date_to')
 
-    try {
-        // Totais por meio de pagamento
-        const { results: porMeio } = await env.DB.prepare(`
+  const now  = new Date()
+  const from = dateFrom ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const to   = dateTo   ?? now.toISOString().slice(0, 10)
+
+  try {
+    const { results: porMeio } = await env.DB.prepare(`
       SELECT
         meio_pagamento,
         COUNT(*)        AS total_reservas,
@@ -32,12 +37,11 @@ export async function onRequest(context) {
       GROUP BY meio_pagamento
     `).bind(from, to).all()
 
-        // Totais por barbeiro
-        const { results: porBarbeiro } = await env.DB.prepare(`
+    const { results: porBarbeiro } = await env.DB.prepare(`
       SELECT
-        b.nome          AS barbeiro_nome,
-        b.color         AS barbeiro_color,
-        COUNT(r.id)     AS total_reservas,
+        b.nome            AS barbeiro_nome,
+        b.color           AS barbeiro_color,
+        COUNT(r.id)       AS total_reservas,
         SUM(r.valor_pago) AS total_valor,
         SUM(r.gorjeta)    AS total_gorjetas
       FROM reservas r
@@ -49,8 +53,7 @@ export async function onRequest(context) {
       ORDER BY total_valor DESC
     `).bind(from, to).all()
 
-        // Totais por serviço
-        const { results: porServico } = await env.DB.prepare(`
+    const { results: porServico } = await env.DB.prepare(`
       SELECT
         s.nome            AS servico_nome,
         COUNT(r.id)       AS total_reservas,
@@ -65,21 +68,19 @@ export async function onRequest(context) {
       ORDER BY total_valor DESC
     `).bind(from, to).all()
 
-        // Totais gerais
-        const totais = await env.DB.prepare(`
+    const totais = await env.DB.prepare(`
       SELECT
-        COUNT(*)          AS total_reservas,
-        SUM(valor_pago)   AS total_faturado,
-        SUM(gorjeta)      AS total_gorjetas,
-        AVG(valor_pago)   AS media_por_reserva
+        COUNT(*)        AS total_reservas,
+        SUM(valor_pago) AS total_faturado,
+        SUM(gorjeta)    AS total_gorjetas,
+        AVG(valor_pago) AS media_por_reserva
       FROM reservas
       WHERE status = 'concluida'
         AND meio_pagamento IS NOT NULL
         AND date(data_hora) BETWEEN ? AND ?
     `).bind(from, to).first()
 
-        // Detalhe linha a linha
-        const { results: detalhe } = await env.DB.prepare(`
+    const { results: detalhe } = await env.DB.prepare(`
       SELECT
         r.id,
         r.data_hora,
@@ -100,8 +101,8 @@ export async function onRequest(context) {
       ORDER BY r.data_hora DESC
     `).bind(from, to).all()
 
-        return ok({ totais, porMeio, porBarbeiro, porServico, detalhe, periodo: { from, to } })
-    } catch (e) {
-        return serverError('Erro ao obter pagamentos', e.message)
-    }
+    return ok({ totais, porMeio, porBarbeiro, porServico, detalhe, periodo: { from, to } })
+  } catch (e) {
+    return serverError('Erro ao obter pagamentos', e.message)
+  }
 }
