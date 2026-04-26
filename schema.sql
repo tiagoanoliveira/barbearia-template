@@ -1,5 +1,4 @@
 -- ================================================
--- Brooklyn Barbearia Template — D1 Database Schema
 -- Compatible: Cloudflare D1 (SQLite dialect)
 -- NOTA: PRAGMA journal_mode e foreign_keys não são
 -- suportados pelo D1 — omitidos intencionalmente.
