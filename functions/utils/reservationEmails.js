@@ -16,10 +16,11 @@ import {
   buildReservationConfirmationEmail,
   buildReservationCancellationEmail,
 } from './email.js'
+import { SHOP, LOGO_URL, LOGO_ALT, CURRENT_YEAR, EMAIL_SUBJECTS } from './site-config.js'
 
 const RESEND_EMAILS_URL = 'https://api.resend.com/emails'
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── helpers ────────────────────────────────────────────────────────────────────────────────
 
 function isMoreThan24hAway(dataHora) {
   const diffMs = new Date(dataHora).getTime() - Date.now()
@@ -31,7 +32,7 @@ function reminderSendAt(dataHora) {
   return d.toISOString()
 }
 
-// ─── 1. Agendar lembrete (privado) ───────────────────────────────────────────
+// ─── 1. Agendar lembrete (privado) ─────────────────────────────────────────────────────────
 
 async function _scheduleReminder(context, { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao }) {
   const key = context.env?.RESEND_API_KEY
@@ -53,9 +54,9 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
   const html = buildReminderHtml({ clientName, data, hora, serviceName, barberName, reservaId })
 
   const payload = {
-    from:         'Brooklyn Barbearia <noreply@brooklynbarbearia.pt>',
+    from:         SHOP.fromEmail,
     to:           clientEmail,
-    subject:      `Lembrete: reserva amanhã às ${hora} – Brooklyn Barbearia`,
+    subject:      `Lembrete: reserva amanhã às ${hora} – ${SHOP.name}`,
     html,
     scheduled_at: sendAt,
   }
@@ -83,7 +84,7 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
   }
 }
 
-// ─── 2. Cancelar lembrete agendado ───────────────────────────────────────────
+// ─── 2. Cancelar lembrete agendado ──────────────────────────────────────────────────────────────
 
 export async function cancelScheduledReminder(context, resendEmailId) {
   console.log(`[cancelScheduledReminder] Chamada com resendEmailId=${JSON.stringify(resendEmailId)}`)
@@ -114,7 +115,6 @@ export async function cancelScheduledReminder(context, resendEmailId) {
     if (res.ok) {
       console.log(`[cancelScheduledReminder] Email agendado ${resendEmailId} cancelado com sucesso.`)
     } else if (res.status === 422) {
-      // 422 = email já enviado ou já cancelado — não é um erro crítico
       console.warn(`[cancelScheduledReminder] Email ${resendEmailId} já enviado/cancelado (422) — ignorado. Body: ${rawText}`)
     } else if (res.status === 404) {
       console.warn(`[cancelScheduledReminder] Email ${resendEmailId} não encontrado na Resend (404) — pode ter sido enviado ou o ID está errado. Body: ${rawText}`)
@@ -126,7 +126,7 @@ export async function cancelScheduledReminder(context, resendEmailId) {
   }
 }
 
-// ─── 3. Enviar confirmação + agendar lembrete ────────────────────────────────
+// ─── 3. Enviar confirmação + agendar lembrete ──────────────────────────────────────────────────────
 
 export function sendReservationConfirmation(context, params) {
   const { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao, comentario } = params
@@ -148,7 +148,7 @@ export function sendReservationConfirmation(context, params) {
         })
         await sendEmail(context, {
           to:      clientEmail,
-          subject: `Reserva #${reservaId} confirmada – Brooklyn Barbearia`,
+          subject: `Reserva #${reservaId} confirmada – ${SHOP.name}`,
           html,
           attachments,
         })
@@ -178,7 +178,7 @@ export function sendReservationConfirmation(context, params) {
   )
 }
 
-// ─── 4. Enviar cancelamento + cancelar lembrete ───────────────────────────────
+// ─── 4. Enviar cancelamento + cancelar lembrete ────────────────────────────────────────────────────
 
 export function sendReservationCancellation(context, params) {
   const { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao, motivo, resendLembreteId } = params
@@ -217,7 +217,7 @@ export function sendReservationCancellation(context, params) {
         })
         await sendEmail(context, {
           to:      clientEmail,
-          subject: 'A tua reserva foi cancelada – Brooklyn Barbearia',
+          subject: EMAIL_SUBJECTS.cancellation,
           html,
           attachments,
         })
@@ -229,7 +229,7 @@ export function sendReservationCancellation(context, params) {
   )
 }
 
-// ─── 5. Reagendar lembrete (usado em edições) ────────────────────────────────
+// ─── 5. Reagendar lembrete (usado em edições) ──────────────────────────────────────────────────────
 
 export async function rescheduleReminder(context, params) {
   const { reservaId, oldLembreteId, clientEmail, clientName, dataHora, serviceName, barberName, duracao } = params
@@ -265,12 +265,9 @@ export async function rescheduleReminder(context, params) {
   )
 }
 
-// ─── Template HTML do lembrete ────────────────────────────────────────────────
+// ─── Template HTML do lembrete ──────────────────────────────────────────────────────────────────────
 
 function buildReminderHtml({ clientName, data, hora, serviceName, barberName, reservaId }) {
-  const BASE_URL = 'https://brooklynbarbearia.pt'
-  const YEAR = new Date().getFullYear()
-
   return `<!DOCTYPE html><html lang="pt"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -301,7 +298,7 @@ function buildReminderHtml({ clientName, data, hora, serviceName, barberName, re
 </style></head>
 <body><div class="wrap"><div class="container">
   <div class="logo-sec">
-    <img src="${BASE_URL}/images/logos/logo-512px.svg" alt="Brooklyn Barbearia" class="logo">
+    <img src="${LOGO_URL}" alt="${LOGO_ALT}" class="logo">
   </div>
   <div class="header"><h1>&#9200; Lembrete de Reserva</h1></div>
   <div class="content">
@@ -316,12 +313,12 @@ function buildReminderHtml({ clientName, data, hora, serviceName, barberName, re
     </div>
     <div class="cta-sec">
       <p style="color:#92400e;margin-bottom:20px">Precisa de cancelar ou reagendar?</p>
-      <a href="${BASE_URL}/reservations" class="btn">Gerir a minha reserva</a>
+      <a href="${SHOP.baseUrl}/reservations" class="btn">Gerir a minha reserva</a>
     </div>
   </div>
   <div class="footer">
     <p style="font-size:12px;color:#718096">Este é um email automático, por favor não responda.</p>
-    <p>&copy; ${YEAR} Brooklyn Barbearia &ndash; Todos os direitos reservados.
+    <p>&copy; ${CURRENT_YEAR} ${SHOP.name} &ndash; Todos os direitos reservados.
        Feito com &#129820; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
   </div>
 </div></div></body></html>`
