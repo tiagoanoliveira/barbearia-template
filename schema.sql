@@ -41,11 +41,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_email_unique      ON clientes(ema
 CREATE INDEX        IF NOT EXISTS idx_clientes_email             ON clientes(email);
 CREATE INDEX        IF NOT EXISTS idx_clientes_telefone          ON clientes(telefone);
 CREATE INDEX        IF NOT EXISTS idx_clientes_next_appointment  ON clientes(next_appointment_date);
+CREATE INDEX        IF NOT EXISTS idx_clientes_token_verificacao ON clientes(token_verificacao);
 CREATE INDEX        IF NOT EXISTS idx_google_id                  ON clientes(google_id);
 CREATE INDEX        IF NOT EXISTS idx_facebook_id                ON clientes(facebook_id);
 CREATE INDEX        IF NOT EXISTS idx_instagram_id               ON clientes(instagram_id);
 CREATE INDEX        IF NOT EXISTS idx_auth_methods               ON clientes(auth_methods);
-CREATE INDEX        IF NOT EXISTS idx_clientes_token_verificacao ON clientes(token_verificacao);
 
 -- ================================================
 -- BARBEIROS
@@ -96,7 +96,21 @@ CREATE TABLE IF NOT EXISTS reservas (
   duracao_minutos        INTEGER DEFAULT NULL,
   wpp_lembrete           INTEGER DEFAULT 1,
   -- ID do email de lembrete agendado na Resend (para poder cancelar / reagendar)
-  resend_lembrete_id     TEXT
+  resend_lembrete_id     TEXT,
+
+  -- ── Pagamento ──────────────────────────────────────────────────────────────
+  -- Meio de pagamento do serviço (null = ainda não pago / não registado)
+  meio_pagamento         TEXT    DEFAULT NULL
+                           CHECK(meio_pagamento IS NULL OR meio_pagamento IN
+                             ('dinheiro','multibanco','mbway','cartao','transferencia','outro')),
+  -- Valor efectivamente pago em cêntimos (INTEGER evita erros de vírgula flutuante)
+  valor_pago             INTEGER DEFAULT NULL,
+  -- Gorjeta em cêntimos (null = sem gorjeta registada)
+  gorjeta                INTEGER DEFAULT NULL,
+  -- Meio de pagamento da gorjeta (pode diferir do meio principal)
+  meio_gorjeta           TEXT    DEFAULT NULL
+                           CHECK(meio_gorjeta IS NULL OR meio_gorjeta IN
+                             ('dinheiro','multibanco','mbway','cartao','transferencia','outro'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_reservas_cliente_data          ON reservas(cliente_id, data_hora);
@@ -107,6 +121,8 @@ CREATE INDEX IF NOT EXISTS idx_reservas_disponibilidade       ON reservas(barbei
 CREATE INDEX IF NOT EXISTS idx_reservas_cliente_status_data   ON reservas(cliente_id, status, data_hora);
 CREATE INDEX IF NOT EXISTS idx_reservas_moloni_document       ON reservas(moloni_document_id);
 CREATE INDEX IF NOT EXISTS idx_reservas_resend_lembrete       ON reservas(resend_lembrete_id);
+-- Índice para queries de relatórios/faturação por meio de pagamento
+CREATE INDEX IF NOT EXISTS idx_reservas_meio_pagamento        ON reservas(meio_pagamento, status, data_hora);
 
 -- ================================================
 -- HORÁRIOS INDISPONÍVEIS
@@ -392,3 +408,15 @@ ORDER BY n.created_at DESC;
 -- Admin por defeito — gerar hash com o script em BACKEND.md antes de usar
 -- INSERT INTO admin_users (username, password_hash, nome, role)
 -- VALUES ('admin', '<hash-aqui>', 'Admin', 'admin');
+
+-- ================================================
+-- MIGRAÇÃO (bases de dados já existentes)
+-- Executar apenas se a tabela reservas já existir sem estes campos.
+-- O D1 ignora erros de "duplicate column" se usares um script separado;
+-- aqui ficam documentados os comandos necessários:
+-- ================================================
+-- ALTER TABLE reservas ADD COLUMN meio_pagamento TEXT DEFAULT NULL;
+-- ALTER TABLE reservas ADD COLUMN valor_pago     INTEGER DEFAULT NULL;
+-- ALTER TABLE reservas ADD COLUMN gorjeta        INTEGER DEFAULT NULL;
+-- ALTER TABLE reservas ADD COLUMN meio_gorjeta   TEXT DEFAULT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_reservas_meio_pagamento ON reservas(meio_pagamento, status, data_hora);
