@@ -193,7 +193,7 @@ export default function HomePage() {
             <div className="relative flex justify-center">
               {/* Altura e largura máximas da foto do about */}
               <div className="overflow-hidden rounded-3xl shadow-xl" style={{ maxWidth: 350, maxHeight: 350 }}>
-                <img src={aboutImg} alt="Brooklyn Barbearia" className="w-full h-full object-cover" />
+                <img src={aboutImg} alt="Barbearia" className="w-full h-full object-cover" />
               </div>
               {about.rating && (
                 <div className="absolute -bottom-4 bg-secondary-500 rounded-2xl p-4 shadow-xl">
