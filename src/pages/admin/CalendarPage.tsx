@@ -511,7 +511,7 @@ export default function CalendarPage() {
                             height: SLOT_H,
                             background: blocked ? undefined : colBg,
                             backgroundImage: blocked
-                              ? `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.5)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.5)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.2)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.2)} 12px)`
+                              ? `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.4)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.4)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.4)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.2)} 12px)`
                               : undefined,
                           }}
                           onClick={blocked ? (e => openCtx(e, { kind: 'unavailable', unavailable: blocked })) : undefined}
