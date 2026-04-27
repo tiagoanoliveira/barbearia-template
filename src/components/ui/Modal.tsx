@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 export interface ModalProps {
   open:        boolean
   onClose:     () => void
-  title:       string
+  title:       ReactNode
   children:    ReactNode
   size?:       'sm' | 'md' | 'lg' | 'xl'
   footer?:     ReactNode
@@ -47,7 +47,6 @@ export default function Modal({
   if (!open) return null
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Fecha apenas se o clique foi diretamente no overlay e não dentro do dialog
     if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
       onClose()
     }

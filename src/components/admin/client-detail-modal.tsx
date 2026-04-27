@@ -197,12 +197,14 @@ export function ClientDetailModal({
   const handleSave = async () => {
     setSaving(true); setSaveError(null)
     try {
+      // nif: string vazia → enviar '' para o backend apagar; número → converter
+      const nifPayload = form.nif.trim() === '' ? '' : form.nif
       const res = await clientsApi.update(clientId, {
         name:  form.name,
-        email: form.email,   // string vazia aceite (apaga)
-        phone: form.phone,   // string vazia aceite (apaga)
-        nif:   form.nif,     // string vazia aceite (apaga)
-        notes: form.notes,   // string vazia aceite (apaga)
+        email: form.email,
+        phone: form.phone,
+        nif:   nifPayload as unknown as number,  // backend aceita string vazia para apagar
+        notes: form.notes,
         reservas_concluidas: form.reservas_concluidas,
         reservas_gratuitas_disponiveis: form.reservas_gratuitas_disponiveis,
       })
@@ -251,16 +253,21 @@ export function ClientDetailModal({
     )
   }
 
+  const modalTitle = editMode
+    ? `Editar ${clientData.name}`
+    : (
+        <span className="flex items-center gap-2">
+          {clientData.name}
+          <span className="text-xs font-normal text-gray-400">#{clientData.id}</span>
+        </span>
+      )
+
   return (
     <>
       <Modal
         open={true}
         onClose={onClose}
-        title={
-          editMode
-            ? `Editar ${clientData.name}`
-            : <span className="flex items-center gap-2">{clientData.name}<span className="text-xs font-normal text-gray-400">#{clientData.id}</span></span>
-        }
+        title={modalTitle}
         footer={
           editMode
             ? <>
@@ -309,7 +316,7 @@ export function ClientDetailModal({
                 <label className="block text-xs text-gray-500 mb-1">NIF</label>
                 <input type="text" value={form.nif}
                   onChange={e => { setForm(f => ({...f, nif: e.target.value})); setSaveError(null) }}
-                  className="input text-sm w-full" />
+                  className="input text-sm w-full" placeholder="Ex: 123456789" />
               </div>
             </div>
             {/* Reservas concluídas + Reservas gratuitas (2 colunas) */}
@@ -507,7 +514,7 @@ export function ClientDetailModal({
           invalidateKey="client"
           onClose={closeResModal}
           onCancelRequest={() => setResModal({ type: 'status', r: resModal.r, action: 'cancelada' })}
-          onOpenCheckout={pendingForm =>
+          onOpenCheckout={_pendingForm =>
             setResModal({ type: 'checkout', r: resModal.r, editMode: false })
           }
         />
