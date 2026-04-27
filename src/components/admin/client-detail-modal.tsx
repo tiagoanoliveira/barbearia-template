@@ -7,7 +7,7 @@ import { clientsApi } from '@/api/clients'
 import Modal from '@/components/ui/Modal'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { StatusBadge } from '@/components/ui/Badge'
-import type { Client } from '@/types'
+import type { Client, ReservationStatus } from '@/types'
 
 type ClientModalData = {
   id: number
@@ -27,7 +27,7 @@ type ClientModalData = {
 type ClientReservation = {
   id: number
   data_hora: string
-  status: string
+  status: ReservationStatus
   service_name: string
   barber_name: string
   service_price?: number
@@ -172,8 +172,10 @@ export function ClientDetailModal({
     try { return formatDistanceToNow(parseISO(iso), { addSuffix: true, locale: pt }) } catch { return null }
   }
 
-  // Separar reservas passadas / futuras
-  const allReservations: ClientReservation[] = clientData?.reservations ?? []
+  const allReservations: ClientReservation[] = (clientData?.reservations ?? []).map(r => ({
+    ...r,
+    status: r.status as ReservationStatus,
+  }))
   const futureReservations = allReservations.filter(r => isFuture(parseISO(r.data_hora)))
   const pastReservations   = allReservations.filter(r => isPast(parseISO(r.data_hora)))
 
@@ -345,7 +347,6 @@ export function ClientDetailModal({
                 <p className="text-xs text-gray-400 text-center py-6">Sem reservas registadas.</p>
               ) : (
                 <>
-                  {/* Futuras */}
                   {futureReservations.length > 0 && (
                     <section>
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
@@ -357,8 +358,6 @@ export function ClientDetailModal({
                       </div>
                     </section>
                   )}
-
-                  {/* Passadas */}
                   {pastReservations.length > 0 && (
                     <section>
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">

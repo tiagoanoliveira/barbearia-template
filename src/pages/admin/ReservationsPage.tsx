@@ -31,14 +31,13 @@ const STATUS_OPTIONS = [
 ]
 
 type ModalMode =
-  | { type: 'detail';  r: Reservation }
-  | { type: 'edit';    r: Reservation }
-  | { type: 'status';  r: Reservation; action: 'faltou' | 'cancelada' }
+  | { type: 'detail';   r: Reservation }
+  | { type: 'edit';     r: Reservation }
+  | { type: 'status';   r: Reservation; action: 'faltou' | 'cancelada' }
   | { type: 'checkout'; r: Reservation }
-  | { type: 'client';  clientId: number; clientName: string; clientPhoto?: string }
+  | { type: 'client';   clientId: number; clientName: string; clientPhoto?: string }
   | null
 
-// Avatar inline (sem dependência de ClientsPage)
 function ReservationClientAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
   const [err, setErr] = useState(false)
   if (photoUrl && !err) {
@@ -182,7 +181,7 @@ export default function ReservationsPage() {
                       <div className="flex items-center gap-2.5">
                         <ReservationClientAvatar
                           name={r.client_name}
-                          photoUrl={(r as any).client_photo_url}
+                          photoUrl={r.client_photo_url}
                         />
                         <div>
                           <p className="text-sm font-medium text-gray-900">
@@ -203,14 +202,13 @@ export default function ReservationsPage() {
                     <td className="px-5 py-3"><StatusBadge status={r.status} /></td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Botão: ver dados do cliente */}
                         {r.client_id && (
                           <button
                             onClick={() => setModal({
                               type: 'client',
-                              clientId: r.client_id!,
+                              clientId: r.client_id,
                               clientName: r.client_name,
-                              clientPhoto: (r as any).client_photo_url,
+                              clientPhoto: r.client_photo_url,
                             })}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
                             title="Ver cliente">
@@ -275,6 +273,7 @@ export default function ReservationsPage() {
           reservation={modal.r}
           invalidateKey="reservations"
           onClose={close}
+          onCancelRequest={() => setModal({ type: 'status', r: modal.r, action: 'cancelada' })}
         />
       )}
 
