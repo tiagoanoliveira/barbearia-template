@@ -26,8 +26,9 @@ CREATE TABLE IF NOT EXISTS clientes (
   auth_methods              TEXT    DEFAULT 'password',
   token_verificacao_expira  TEXT,
   reservas_concluidas       INTEGER DEFAULT 0,
-  -- Número de cortes gratuitos acumulados ainda por usar
-  -- Gerido automaticamente pelos triggers tr_fidelidade_*
+  -- Número de cortes gratuitos acumulados ainda por usar.
+  -- Gerido automaticamente pelos triggers tr_fidelidade_*.
+  -- Pode ser editado manualmente pelo admin para oferecer cortes extra.
   reservas_gratuitas_disponiveis INTEGER DEFAULT 0,
   nif                       INTEGER,
   next_appointment_date     DATETIME,
@@ -235,15 +236,14 @@ BEGIN
 END;
 
 -- ── reservas_gratuitas_disponiveis ──────────────────────────────────────────
--- Recalcula o número de cortes gratuitos por usar sempre que
--- reservas_concluidas muda (incremento ou decremento).
+-- Quando reservas_concluidas sobe: adiciona as novas gratuitas ganhas
+-- por progressão (ex: passou de 9 para 10 → ganha 1 gratuita).
 --
--- Lógica:
---   earned  = FLOOR(reservas_concluidas / LOYALTY_EVERY)
---   (LOYALTY_EVERY é definido no site-config; aqui fica fixo em 10
---    e deve ser actualizado manualmente se o config mudar)
---   O campo nunca desce abaixo de 0 e nunca sobe acima de earned
---   (caso o admin tenha decrementado reservas_concluidas manualmente).
+-- Quando reservas_concluidas desce: remove apenas as gratuitas que
+-- foram ganhas por progressão nesse intervalo revertido.
+-- NÃO há limite superior — o admin pode oferecer gratuitas extra
+-- editando o campo directamente, e essas não são tocadas por este trigger.
+-- O único limite é MAX(0, ...) para nunca ficar negativo.
 
 CREATE TRIGGER IF NOT EXISTS tr_fidelidade_increment
 AFTER UPDATE ON clientes FOR EACH ROW
@@ -251,7 +251,6 @@ WHEN NEW.reservas_concluidas > OLD.reservas_concluidas
 BEGIN
   UPDATE clientes
   SET reservas_gratuitas_disponiveis =
-    -- novas gratuitas ganhas neste incremento
     reservas_gratuitas_disponiveis +
     (NEW.reservas_concluidas / 10) - (OLD.reservas_concluidas / 10)
   WHERE id = NEW.id;
@@ -264,11 +263,8 @@ BEGIN
   UPDATE clientes
   SET reservas_gratuitas_disponiveis = MAX(
     0,
-    -- não pode ter mais gratuitas disponíveis do que as ganhas totais
-    MIN(
-      reservas_gratuitas_disponiveis,
-      NEW.reservas_concluidas / 10
-    )
+    reservas_gratuitas_disponiveis -
+      ((OLD.reservas_concluidas / 10) - (NEW.reservas_concluidas / 10))
   )
   WHERE id = NEW.id;
 END;
