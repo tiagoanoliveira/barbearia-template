@@ -486,7 +486,7 @@ export default function CalendarPage() {
                       const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
                       const baseCellClasses = isHourEnd
                         ? 'relative border-l border-b-2 border-slate-400'
-                        : 'relative border-l border-b border-slate-300'
+                        : 'relative border-l border-b border-gray-400'
 
                       if (!blocked && rList.length === 0) {
                         return (
