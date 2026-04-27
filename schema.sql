@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS reservas (
   -- Meio de pagamento do serviço (null = ainda não pago / não registado)
   meio_pagamento         TEXT    DEFAULT NULL
                            CHECK(meio_pagamento IS NULL OR meio_pagamento IN
-                             ('dinheiro','multibanco','mbway','cartao','transferencia','outro')),
+                             ('dinheiro','multibanco','mbway','cartao','transferencia','outro','oferta')),
   -- Valor efectivamente pago em cêntimos (INTEGER evita erros de vírgula flutuante)
   valor_pago             INTEGER DEFAULT NULL,
   -- Gorjeta em cêntimos (null = sem gorjeta registada)
@@ -113,7 +113,9 @@ CREATE TABLE IF NOT EXISTS reservas (
   -- Meio de pagamento da gorjeta (pode diferir do meio principal)
   meio_gorjeta           TEXT    DEFAULT NULL
                            CHECK(meio_gorjeta IS NULL OR meio_gorjeta IN
-                             ('dinheiro','multibanco','mbway','cartao','transferencia','outro'))
+                             ('dinheiro','multibanco','mbway','cartao','transferencia','outro','oferta')),
+  -- Comentário livre sobre o pagamento (obrigatório quando meio = 'outro')
+  comentario_pagamento   TEXT    DEFAULT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_reservas_cliente_data          ON reservas(cliente_id, data_hora);
@@ -269,6 +271,21 @@ BEGIN
   WHERE id = NEW.id;
 END;
 
+-- ── reserva gratuita usada ───────────────────────────────────────────────────
+-- Quando uma reserva é concluída com meio_pagamento = 'oferta',
+-- decrementa reservas_gratuitas_disponiveis do cliente (mínimo 0).
+CREATE TRIGGER IF NOT EXISTS tr_fidelidade_usar
+AFTER UPDATE ON reservas FOR EACH ROW
+WHEN NEW.status = 'concluida'
+  AND NEW.meio_pagamento = 'oferta'
+  AND (OLD.meio_pagamento IS NULL OR OLD.meio_pagamento != 'oferta')
+BEGIN
+  UPDATE clientes
+  SET reservas_gratuitas_disponiveis = MAX(0, reservas_gratuitas_disponiveis - 1),
+      atualizado_em = CURRENT_TIMESTAMP
+  WHERE id = NEW.cliente_id;
+END;
+
 -- ── next / last appointment ───────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_reserva_insert_next_appointment
 AFTER INSERT ON reservas FOR EACH ROW
@@ -378,6 +395,7 @@ END;
 -- ================================================
 -- ALTER TABLE clientes ADD COLUMN reservas_gratuitas_disponiveis INTEGER DEFAULT 0;
 -- UPDATE clientes SET reservas_gratuitas_disponiveis = MAX(0, (reservas_concluidas / 10));
+-- ALTER TABLE reservas ADD COLUMN comentario_pagamento TEXT DEFAULT NULL;
 
 -- ================================================
 -- VIEWS
@@ -393,6 +411,7 @@ SELECT
   r.valor_pago,
   r.gorjeta,
   r.meio_gorjeta,
+  r.comentario_pagamento,
   c.nome     AS cliente_nome,
   c.email    AS cliente_email,
   c.telefone AS cliente_telefone,

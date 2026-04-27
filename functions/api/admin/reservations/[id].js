@@ -8,6 +8,7 @@ import {
 } from '../../../utils/reservationEmails.js'
 
 const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou']
+const VALID_MEIOS    = ['multibanco', 'dinheiro', 'outro', 'oferta']
 
 export async function onRequest(context) {
   const { request, env, params } = context
@@ -23,11 +24,15 @@ export async function onRequest(context) {
     `SELECT r.id, r.status, r.data_hora, r.comentario, r.nota_privada,
             r.resend_lembrete_id,
             r.cliente_id, r.barbeiro_id, r.servico_id,
+            r.meio_pagamento, r.valor_pago, r.gorjeta, r.meio_gorjeta,
+            r.comentario_pagamento,
             v.cliente_nome, v.cliente_email,
             (SELECT foto_perfil FROM clientes c WHERE c.id = r.cliente_id) AS client_photo_url,
             v.barbeiro_nome,
             v.servico_nome,
-            v.duracao_efetiva AS service_duration
+            v.duracao_efetiva AS service_duration,
+            v.servico_preco   AS service_price,
+            (SELECT reservas_gratuitas_disponiveis FROM clientes c WHERE c.id = r.cliente_id) AS client_free_reservations
      FROM reservas r
      JOIN v_reservas_complete v ON v.id = r.id
      WHERE r.id = ?`
@@ -55,6 +60,7 @@ export async function onRequest(context) {
         valor_pago,
         gorjeta,
         meio_gorjeta,
+        comentario_pagamento,
       } = body
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
@@ -63,6 +69,18 @@ export async function onRequest(context) {
       if (data_hora   !== undefined) {
         const [d, h] = data_hora.split('T')
         if (!isValidDate(d) || !isValidTime(h?.slice(0, 5))) return badRequest('Data/hora inválida')
+      }
+
+      // Validar comentário obrigatório quando o método é 'outro'
+      const effectiveMeio = meio_pagamento ?? reservation.meio_pagamento
+      const effectiveMeioGorjeta = meio_gorjeta ?? reservation.meio_gorjeta
+      const effectiveComentario = comentario_pagamento ?? reservation.comentario_pagamento ?? ''
+
+      if (meio_pagamento === 'outro' && !effectiveComentario.trim()) {
+        return badRequest('O campo "Observações de Pagamento" é obrigatório quando o método é "Outro".')
+      }
+      if (meio_gorjeta === 'outro' && !effectiveComentario.trim()) {
+        return badRequest('O campo "Observações de Pagamento" é obrigatório quando o método de gorjeta é "Outro".')
       }
 
       const updates = []
@@ -80,14 +98,17 @@ export async function onRequest(context) {
         updates.push('duracao_minutos = ?')
         vals.push(Number(service_duration))
       }
-      const VALID_MEIOS = ['multibanco', 'dinheiro', 'outro']
 
       if (meio_pagamento !== undefined) {
         if (!VALID_MEIOS.includes(meio_pagamento)) return badRequest('Meio de pagamento inválido')
         updates.push('meio_pagamento = ?')
         vals.push(meio_pagamento)
       }
-      if (valor_pago !== undefined && Number.isFinite(Number(valor_pago))) {
+      // Quando é oferta, forçar valor_pago = 0 independentemente do que vier no body
+      if (meio_pagamento === 'oferta') {
+        updates.push('valor_pago = ?')
+        vals.push(0)
+      } else if (valor_pago !== undefined && Number.isFinite(Number(valor_pago))) {
         updates.push('valor_pago = ?')
         vals.push(Number(valor_pago))
       }
@@ -100,6 +121,10 @@ export async function onRequest(context) {
         updates.push('meio_gorjeta = ?')
         vals.push(meio_gorjeta)
       }
+      if (comentario_pagamento !== undefined) {
+        updates.push('comentario_pagamento = ?')
+        vals.push(sanitize(comentario_pagamento, 1000))
+      }
 
       if (!updates.length) return badRequest('Nada para actualizar')
 
@@ -111,9 +136,7 @@ export async function onRequest(context) {
 
       // ── Acções pós-update ────────────────────────────────────────────────
 
-      // 1. Cancelamento: APENAS cancelar o lembrete agendado.
-      //    O email de cancelamento é enviado exclusivamente por cancel-email.js
-      //    para evitar duplicados quando o frontend chama ambos os endpoints.
+      // 1. Cancelamento
       if (status === 'cancelada') {
         const lembreteId = reservation.resend_lembrete_id ?? null
         console.log(

@@ -9,7 +9,7 @@ import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
 import { adminApi } from '@/api/client'
 import Modal from '@/components/ui/Modal'
-import type { Reservation, ReservationStatus, Service } from '@/types'
+import type { Reservation, ReservationStatus, Service, MeioPagamento } from '@/types'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
 // ─── Constantes partilhadas ───────────────────────────────────────────────────
@@ -27,9 +27,15 @@ export const STATUS_COLORS: Record<string, string> = {
 // para garantir motivo obrigatório e envio de email.
 export const EDIT_STATUSES: ReservationStatus[] = ['confirmada', 'concluida', 'faltou']
 
+const MEIO_OPTIONS: { value: MeioPagamento; label: string }[] = [
+  { value: 'multibanco', label: '💳 Multibanco' },
+  { value: 'dinheiro',   label: '💵 Dinheiro'   },
+  { value: 'outro',      label: '❓ Outro'       },
+]
+
 // ─── ReservationDetailModal ───────────────────────────────────────────────────
 export function ReservationDetailModal({
-  reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout,
+  reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout, onEditPayment,
 }: {
   reservation: Reservation
   onClose: () => void
@@ -37,6 +43,7 @@ export function ReservationDetailModal({
   onChangeStatus: (action: 'faltou') => void
   onCancel: () => void
   onCheckout: () => void
+  onEditPayment?: () => void
 }) {
   const r = reservation
   const dt    = new Date(r.data_hora)
@@ -81,6 +88,12 @@ export function ReservationDetailModal({
               ✅ Chegou
             </button>
           )}
+          {r.status === 'concluida' && onEditPayment && (
+            <button onClick={onEditPayment}
+              className="text-xs px-3 py-1.5 rounded-full bg-purple-100 text-purple-700 font-medium hover:bg-purple-200">
+              💳 Editar Pagamento
+            </button>
+          )}
           {r.status !== 'faltou' && r.status !== 'cancelada' && (
             <button onClick={() => onChangeStatus('faltou')}
               className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 font-medium hover:bg-gray-200">
@@ -105,13 +118,14 @@ export function ReservationDetailModal({
 
 // ─── ReservationEditModal ─────────────────────────────────────────────────────
 export function ReservationEditModal({
-  reservation, invalidateKey, onClose, onCancelRequest,
+  reservation, invalidateKey, onClose, onCancelRequest, onOpenCheckout,
 }: {
   reservation: Reservation
   invalidateKey: string
   onClose: () => void
-  /** Chamado quando o utilizador quer cancelar — abre o ReservationStatusModal com motivo obrigatório. */
   onCancelRequest?: () => void
+  /** Chamado quando o status muda para 'concluida' — abre o CheckoutModal antes de guardar. */
+  onOpenCheckout?: (pendingForm: Partial<Reservation & { sendEmail: boolean }>) => void
 }) {
   const qc = useQueryClient()
   const [form, setForm] = useState<Partial<Reservation & { sendEmail: boolean }>>({ ...reservation, sendEmail: false })
@@ -134,6 +148,11 @@ export function ReservationEditModal({
   }
 
   const handleSave = async () => {
+    // Se o status vai mudar para 'concluida', interceptar e abrir CheckoutModal primeiro
+    if (form.status === 'concluida' && reservation.status !== 'concluida') {
+      onOpenCheckout?.(form)
+      return
+    }
     setSaving(true)
     try {
       await reservationsApi.update(reservation.id, {
@@ -154,7 +173,6 @@ export function ReservationEditModal({
     <Modal open onClose={onClose} title={`Editar reserva #${reservation.id}`}
       footer={
         <div className="flex items-center justify-between w-full gap-2">
-          {/* Esquerda: botão de cancelamento (só se não estiver já cancelada) */}
           <div>
             {!isCancelled && onCancelRequest && (
               <button
@@ -165,11 +183,10 @@ export function ReservationEditModal({
               </button>
             )}
           </div>
-          {/* Direita: Fechar + Guardar */}
           <div className="flex gap-2">
             <button className="btn-secondary text-xs" onClick={onClose}>Fechar</button>
             <button className="btn-primary text-xs" onClick={handleSave} disabled={saving}>
-              {saving ? 'A guardar...' : 'Guardar'}
+              {saving ? 'A guardar...' : form.status === 'concluida' && reservation.status !== 'concluida' ? 'Guardar & Pagamento →' : 'Guardar'}
             </button>
           </div>
         </div>
@@ -189,7 +206,10 @@ export function ReservationEditModal({
             {EDIT_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
             {isCancelled && <option value="cancelada" disabled>{STATUS_LABEL['cancelada']}</option>}
           </select>
-          {!isCancelled && (
+          {form.status === 'concluida' && reservation.status !== 'concluida' && (
+            <p className="text-[10px] text-amber-600 mt-1">⚠️ Ao guardar será pedido o preenchimento do pagamento.</p>
+          )}
+          {!isCancelled && form.status !== 'concluida' && (
             <p className="text-[10px] text-gray-400 mt-1">
               Para cancelar usa o botão <span className="text-red-500">Cancelar reserva</span>.
             </p>
@@ -301,29 +321,89 @@ export function ReservationStatusModal({
 }
 
 // ─── CheckoutModal ────────────────────────────────────────────────────────────
+// Usado tanto para o checkout inicial ("Chegou") como para editar o pagamento
+// de uma reserva já concluída, e também quando o ReservationEditModal
+// transita o status para 'concluida' — nesse caso recebe pendingEditForm
+// para guardar os restantes campos após o pagamento.
 export function CheckoutModal({
-  reservation, invalidateKey, onClose,
+  reservation,
+  invalidateKey,
+  onClose,
+  editMode = false,
+  pendingEditForm,
 }: {
   reservation: Reservation
   invalidateKey: string
   onClose: () => void
+  /** true = estamos a editar o pagamento de uma reserva já concluída */
+  editMode?: boolean
+  /** Campos do ReservationEditModal a guardar juntamente com o pagamento */
+  pendingEditForm?: Partial<Reservation & { sendEmail: boolean }>
 }) {
   const qc = useQueryClient()
-  const [meioPagamento, setMeioPagamento] = useState<'multibanco' | 'dinheiro' | 'outro'>('multibanco')
-  const [valorPago, setValorPago]         = useState<number>(reservation.service_price ?? 0)
-  const [temGorjeta, setTemGorjeta]       = useState(false)
-  const [gorjeta, setGorjeta]             = useState<number>(0)
-  const [meioGorjeta, setMeioGorjeta]     = useState<'multibanco' | 'dinheiro' | 'outro'>('dinheiro')
-  const [saving, setSaving]               = useState(false)
+
+  // Pré-preencher com os valores existentes se estivermos em modo edição
+  const [meioPagamento, setMeioPagamento] = useState<MeioPagamento>(
+    reservation.meio_pagamento ?? 'multibanco'
+  )
+  const [valorPago, setValorPago]     = useState<number>(reservation.valor_pago ?? reservation.service_price ?? 0)
+  const [temGorjeta, setTemGorjeta]   = useState(!!reservation.gorjeta && reservation.gorjeta > 0)
+  const [gorjeta, setGorjeta]         = useState<number>(reservation.gorjeta ?? 0)
+  const [meioGorjeta, setMeioGorjeta] = useState<MeioPagamento>(reservation.meio_gorjeta ?? 'dinheiro')
+  const [comentario, setComentario]   = useState<string>(reservation.comentario_pagamento ?? '')
+  const [error, setError]             = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
+
+  const freeReservations = reservation.client_free_reservations ?? 0
+  const isOferta = meioPagamento === 'oferta'
+
+  const handleDescontarGratuita = () => {
+    setMeioPagamento('oferta')
+    setValorPago(0)
+  }
+
+  const validate = (): string | null => {
+    if (meioPagamento === 'outro' && !comentario.trim())
+      return 'Por favor, descreve o método de pagamento usado em "Observações de Pagamento".'
+    if (temGorjeta && meioGorjeta === 'outro' && !comentario.trim())
+      return 'Por favor, descreve o método de gorjeta usado em "Observações de Pagamento".'
+    return null
+  }
 
   const handleConfirm = async () => {
+    const err = validate()
+    if (err) { setError(err); return }
     setSaving(true)
     try {
-      await reservationsApi.update(reservation.id, {
-        status: 'concluida', meio_pagamento: meioPagamento, valor_pago: valorPago,
+      const paymentPayload = {
+        meio_pagamento: meioPagamento,
+        valor_pago: isOferta ? 0 : valorPago,
         gorjeta: temGorjeta ? gorjeta : undefined,
         meio_gorjeta: temGorjeta ? meioGorjeta : undefined,
-      })
+        comentario_pagamento: comentario.trim() || undefined,
+      }
+
+      if (pendingEditForm) {
+        // Vindo do ReservationEditModal com status→concluida:
+        // guarda todos os campos do edit + o pagamento numa só chamada
+        await reservationsApi.update(reservation.id, {
+          barber_id:        pendingEditForm.barber_id,
+          service_id:       pendingEditForm.service_id,
+          status:           'concluida',
+          data_hora:        pendingEditForm.data_hora,
+          comentario:       pendingEditForm.comentario,
+          nota_privada:     pendingEditForm.nota_privada,
+          send_email:       pendingEditForm.sendEmail,
+          service_duration: pendingEditForm.service_duration,
+          ...paymentPayload,
+        })
+      } else {
+        await reservationsApi.update(reservation.id, {
+          ...(!editMode && { status: 'concluida' }),
+          ...paymentPayload,
+        })
+      }
+
       qc.invalidateQueries({ queryKey: [invalidateKey] })
       onClose()
     } catch {}
@@ -331,12 +411,15 @@ export function CheckoutModal({
   }
 
   return (
-    <Modal open onClose={onClose} title="💰 Pagamento & Checkout"
+    <Modal
+      open
+      onClose={onClose}
+      title={editMode ? '💳 Editar Pagamento' : '💰 Pagamento & Checkout'}
       footer={
         <>
           <button className="btn-secondary text-sm" onClick={onClose}>Cancelar</button>
           <button className="btn-primary text-sm" onClick={handleConfirm} disabled={saving}>
-            {saving ? 'A guardar...' : 'Confirmar'}
+            {saving ? 'A guardar...' : editMode ? 'Guardar Pagamento' : 'Confirmar'}
           </button>
         </>
       }>
@@ -344,24 +427,66 @@ export function CheckoutModal({
         <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
           {reservation.client_name} · {reservation.service_name}
         </div>
+
+        {/* Banner de reserva gratuita disponível */}
+        {freeReservations > 0 && !editMode && (
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800">
+            <span className="text-base">🎁</span>
+            <span>
+              Este cliente tem <strong>{freeReservations}</strong> reserva{freeReservations > 1 ? 's' : ''} gratuita{freeReservations > 1 ? 's' : ''} por descontar.
+            </span>
+          </div>
+        )}
+
+        {/* Meio de pagamento */}
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Meio de pagamento</label>
-          <div className="flex gap-2">
-            {(['multibanco', 'dinheiro', 'outro'] as const).map(op => (
-              <button key={op} type="button" onClick={() => setMeioPagamento(op)}
-                className={`flex-1 py-2 rounded-lg border text-xs font-medium capitalize transition-colors ${
-                  meioPagamento === op ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
+          <label className="block text-xs text-gray-500 mb-2">Meio de pagamento</label>
+          <div className="flex flex-wrap gap-2">
+            {MEIO_OPTIONS.map(op => (
+              <button key={op.value} type="button" onClick={() => {
+                setMeioPagamento(op.value)
+                if (op.value !== 'oferta') setValorPago(reservation.service_price ?? 0)
+              }}
+                className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  meioPagamento === op.value
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
                 }`}>
-                {op === 'multibanco' ? '💳 Multibanco' : op === 'dinheiro' ? '💵 Dinheiro' : 'Outro'}
+                {op.label}
               </button>
             ))}
           </div>
+          {/* Botão de desconto de reserva gratuita */}
+          {freeReservations > 0 && !editMode && (
+            <button
+              type="button"
+              onClick={handleDescontarGratuita}
+              className={`mt-2 w-full py-2 rounded-lg border text-xs font-medium transition-colors ${
+                isOferta
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-white text-emerald-700 border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50'
+              }`}>
+              🎁 Descontar reserva gratuita
+            </button>
+          )}
         </div>
+
+        {/* Valor cobrado — bloqueado a 0€ se oferta */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Valor cobrado (€)</label>
-          <input type="number" min={0} step={0.5} className="input text-sm w-full"
-            value={valorPago} onChange={e => setValorPago(Number(e.target.value))} />
+          <input
+            type="number" min={0} step={0.5}
+            className={`input text-sm w-full ${isOferta ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
+            value={isOferta ? 0 : valorPago}
+            disabled={isOferta}
+            onChange={e => setValorPago(Number(e.target.value))}
+          />
+          {isOferta && (
+            <p className="text-[10px] text-emerald-600 mt-1">✓ Reserva gratuita — valor definido a 0 €.</p>
+          )}
         </div>
+
+        {/* Gorjeta */}
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" checked={temGorjeta} onChange={e => setTemGorjeta(e.target.checked)} className="rounded" />
           <span className="font-medium">🎁 Gorjeta?</span>
@@ -376,13 +501,45 @@ export function CheckoutModal({
             <div>
               <label className="block text-xs text-gray-500 mb-1">Como foi recebida a gorjeta</label>
               <select className="input text-sm w-full bg-white" value={meioGorjeta}
-                onChange={e => setMeioGorjeta(e.target.value as 'multibanco' | 'dinheiro' | 'outro')}>
+                onChange={e => setMeioGorjeta(e.target.value as MeioPagamento)}>
                 <option value="dinheiro">💵 Dinheiro</option>
                 <option value="multibanco">💳 Multibanco</option>
-                <option value="outro">Outro</option>
+                <option value="outro">❓ Outro</option>
               </select>
             </div>
           </div>
+        )}
+
+        {/* Comentário de pagamento */}
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">
+            Observações de pagamento
+            {(meioPagamento === 'outro' || (temGorjeta && meioGorjeta === 'outro')) && (
+              <span className="text-red-500 ml-1">*</span>
+            )}
+          </label>
+          <textarea
+            rows={2}
+            className={`input text-sm w-full resize-none ${
+              error && (meioPagamento === 'outro' || (temGorjeta && meioGorjeta === 'outro')) && !comentario.trim()
+                ? 'border-red-400'
+                : ''
+            }`}
+            placeholder={
+              meioPagamento === 'outro'
+                ? 'Ex.: Transferência MB Way pessoal, vale, etc.'
+                : 'Notas opcionais sobre o pagamento'
+            }
+            value={comentario}
+            onChange={e => { setComentario(e.target.value); setError(null) }}
+          />
+          {(meioPagamento === 'outro' || (temGorjeta && meioGorjeta === 'outro')) && (
+            <p className="text-[10px] text-amber-600 mt-1">⚠️ Campo obrigatório quando o método é "Outro".</p>
+          )}
+        </div>
+
+        {error && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
       </div>
     </Modal>

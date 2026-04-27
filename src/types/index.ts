@@ -38,7 +38,7 @@ export interface Client {
 
 // ─── Reserva ─────────────────────────────────────────────────────────────────
 export type ReservationStatus = 'confirmada' | 'concluida' | 'cancelada' | 'faltou'
-export type MeioPagamento = 'multibanco' | 'dinheiro' | 'outro'
+export type MeioPagamento = 'multibanco' | 'dinheiro' | 'outro' | 'oferta'
 
 export interface Reservation {
   id: number
@@ -47,6 +47,7 @@ export interface Reservation {
   client_phone?: string
   client_email?: string
   client_photo_url?: string
+  client_free_reservations?: number
   barber_id: number
   barber_name: string
   barber_color?: string
@@ -66,6 +67,7 @@ export interface Reservation {
   valor_pago?: number
   gorjeta?: number
   meio_gorjeta?: MeioPagamento
+  comentario_pagamento?: string
 }
 
 // ─── Indisponibilidade ───────────────────────────────────────────────────────
