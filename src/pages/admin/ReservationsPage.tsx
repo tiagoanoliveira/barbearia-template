@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Pencil, Eye, Filter } from 'lucide-react'
+import { Search, Pencil, Eye, Filter, User } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
@@ -20,6 +20,7 @@ import {
   ReservationStatusModal,
   CheckoutModal,
 } from '@/components/admin/reservation-modals'
+import { ClientDetailModal } from '@/components/admin/client-detail-modal'
 
 const STATUS_OPTIONS = [
   { value: '',           label: 'Todos os estados' },
@@ -30,11 +31,32 @@ const STATUS_OPTIONS = [
 ]
 
 type ModalMode =
-  | { type: 'detail'; r: Reservation }
-  | { type: 'edit';   r: Reservation }
-  | { type: 'status'; r: Reservation; action: 'faltou' | 'cancelada' }
+  | { type: 'detail';  r: Reservation }
+  | { type: 'edit';    r: Reservation }
+  | { type: 'status';  r: Reservation; action: 'faltou' | 'cancelada' }
   | { type: 'checkout'; r: Reservation }
+  | { type: 'client';  clientId: number; clientName: string; clientPhoto?: string }
   | null
+
+// Avatar inline (sem dependência de ClientsPage)
+function ReservationClientAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
+  const [err, setErr] = useState(false)
+  if (photoUrl && !err) {
+    return (
+      <img
+        src={photoUrl}
+        alt={name}
+        className="w-8 h-8 rounded-xl object-cover flex-shrink-0"
+        onError={() => setErr(true)}
+      />
+    )
+  }
+  return (
+    <div className="w-8 h-8 bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0">
+      <span className="text-brand-700 text-xs font-bold">{name.charAt(0)}</span>
+    </div>
+  )
+}
 
 export default function ReservationsPage() {
   const adminUser = useAdminUser()
@@ -158,9 +180,10 @@ export default function ReservationsPage() {
                   <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <span className="text-brand-700 text-xs font-bold">{r.client_name.charAt(0)}</span>
-                        </div>
+                        <ReservationClientAvatar
+                          name={r.client_name}
+                          photoUrl={(r as any).client_photo_url}
+                        />
                         <div>
                           <p className="text-sm font-medium text-gray-900">
                             {r.created_by === 'online' && <span className="text-blue-600 mr-0.5">@</span>}
@@ -180,6 +203,20 @@ export default function ReservationsPage() {
                     <td className="px-5 py-3"><StatusBadge status={r.status} /></td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
+                        {/* Botão: ver dados do cliente */}
+                        {r.client_id && (
+                          <button
+                            onClick={() => setModal({
+                              type: 'client',
+                              clientId: r.client_id!,
+                              clientName: r.client_name,
+                              clientPhoto: (r as any).client_photo_url,
+                            })}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
+                            title="Ver cliente">
+                            <User size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={() => setModal({ type: 'detail', r })}
                           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"
@@ -215,22 +252,22 @@ export default function ReservationsPage() {
       </Card>
 
       {modal?.type === 'detail' && (
-          <ReservationDetailModal
-              reservation={modal.r}
-              onClose={close}
-              onEdit={() => setModal({ type: 'edit', r: modal.r })}
-              onChangeStatus={action => setModal({ type: 'status', r: modal.r, action })}
-              onCancel={() => setModal({ type: 'status', r: modal.r, action: 'cancelada' })}
-              onCheckout={() => setModal({ type: 'checkout', r: modal.r })}  // NOVO
-          />
+        <ReservationDetailModal
+          reservation={modal.r}
+          onClose={close}
+          onEdit={() => setModal({ type: 'edit', r: modal.r })}
+          onChangeStatus={action => setModal({ type: 'status', r: modal.r, action })}
+          onCancel={() => setModal({ type: 'status', r: modal.r, action: 'cancelada' })}
+          onCheckout={() => setModal({ type: 'checkout', r: modal.r })}
+        />
       )}
 
       {modal?.type === 'checkout' && (
-          <CheckoutModal
-              reservation={modal.r}
-              invalidateKey="reservations"
-              onClose={close}
-          />
+        <CheckoutModal
+          reservation={modal.r}
+          invalidateKey="reservations"
+          onClose={close}
+        />
       )}
 
       {modal?.type === 'edit' && (
@@ -240,11 +277,20 @@ export default function ReservationsPage() {
           onClose={close}
         />
       )}
+
       {modal?.type === 'status' && (
         <ReservationStatusModal
           reservation={modal.r}
           action={modal.action}
           invalidateKey="reservations"
+          onClose={close}
+        />
+      )}
+
+      {modal?.type === 'client' && (
+        <ClientDetailModal
+          clientId={modal.clientId}
+          initialClient={{ id: modal.clientId, name: modal.clientName, photo_url: modal.clientPhoto }}
           onClose={close}
         />
       )}

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { format, formatDistanceToNow, parseISO } from 'date-fns'
+import { format, formatDistanceToNow, parseISO, isFuture, isPast } from 'date-fns'
 import { pt } from 'date-fns/locale'
-import { Mail, Pencil, Phone, Star } from 'lucide-react'
+import { Mail, Pencil, Phone, Star, CalendarClock, CalendarCheck } from 'lucide-react'
 import { clientsApi } from '@/api/clients'
 import Modal from '@/components/ui/Modal'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { StatusBadge } from '@/components/ui/Badge'
 import type { Client } from '@/types'
 
 type ClientModalData = {
@@ -20,7 +21,20 @@ type ClientModalData = {
   reservas_concluidas?: number
   next_appointment_date?: string
   last_appointment_date?: string
+  reservations?: ClientReservation[]
 }
+
+type ClientReservation = {
+  id: number
+  data_hora: string
+  status: string
+  service_name: string
+  barber_name: string
+  service_price?: number
+  comentario?: string
+}
+
+type Tab = 'info' | 'reservations'
 
 function ClientAvatar({ client, size = 16 }: { client: ClientModalData; size?: 8 | 16 }) {
   const sizeClass = size === 16 ? 'w-16 h-16' : 'w-8 h-8'
@@ -56,6 +70,26 @@ function FidelityStamps({ count }: { count: number }) {
   )
 }
 
+function ReservationRow({ r }: { r: ClientReservation }) {
+  const fmtDt = (iso: string) => {
+    try { return format(parseISO(iso), "d MMM yyyy 'às' HH:mm", { locale: pt }) } catch { return iso }
+  }
+  return (
+    <div className="flex items-start justify-between gap-2 py-2.5 border-b border-gray-50 last:border-0">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">{r.service_name}</p>
+        <p className="text-xs text-gray-500">{r.barber_name} · {fmtDt(r.data_hora)}</p>
+      </div>
+      <div className="flex-shrink-0 flex items-center gap-2">
+        {r.service_price != null && (
+          <span className="text-xs font-semibold text-gray-700">{r.service_price}€</span>
+        )}
+        <StatusBadge status={r.status} />
+      </div>
+    </div>
+  )
+}
+
 export function ClientDetailModal({
   clientId,
   initialClient,
@@ -71,9 +105,10 @@ export function ClientDetailModal({
     queryFn: () => clientsApi.get(clientId),
     enabled: !!clientId,
   })
-  const currentClient = clientRes?.data ?? initialClient ?? null
+  const currentClient = (clientRes?.data as ClientModalData | undefined) ?? initialClient ?? null
   const [clientData, setClientData] = useState<ClientModalData | null>(currentClient)
   const [editMode, setEditMode] = useState(false)
+  const [activeTab, setActiveTab] = useState<Tab>('info')
   const [form, setForm] = useState({
     name: currentClient?.name ?? '',
     email: currentClient?.email ?? '',
@@ -137,6 +172,11 @@ export function ClientDetailModal({
     try { return formatDistanceToNow(parseISO(iso), { addSuffix: true, locale: pt }) } catch { return null }
   }
 
+  // Separar reservas passadas / futuras
+  const allReservations: ClientReservation[] = clientData?.reservations ?? []
+  const futureReservations = allReservations.filter(r => isFuture(parseISO(r.data_hora)))
+  const pastReservations   = allReservations.filter(r => isPast(parseISO(r.data_hora)))
+
   if (!clientData) {
     return (
       <Modal open={true} onClose={onClose} title="Cliente">
@@ -146,7 +186,10 @@ export function ClientDetailModal({
   }
 
   return (
-    <Modal open={true} onClose={onClose} title={editMode ? `Editar ${clientData.name}` : clientData.name}
+    <Modal
+      open={true}
+      onClose={onClose}
+      title={editMode ? `Editar ${clientData.name}` : clientData.name}
       footer={
         editMode
           ? <>
@@ -157,7 +200,7 @@ export function ClientDetailModal({
             </>
           : <>
               <button
-                  onClick={() => { if (window.confirm(`Eliminar "${clientData.name}"? Esta acção é irreversível.`)) deleteM.mutate() }}
+                onClick={() => { if (window.confirm(`Eliminar "${clientData.name}"? Esta acção é irreversível.`)) deleteM.mutate() }}
                 disabled={deleteM.isPending}
                 className="text-xs text-red-500 hover:text-red-700 mr-auto disabled:opacity-50">
                 {deleteM.isPending ? 'A eliminar...' : '🗑️ Eliminar'}
@@ -165,7 +208,8 @@ export function ClientDetailModal({
               <button onClick={() => setEditMode(true)} className="btn-secondary"><Pencil size={14} className="inline mr-1" />Editar</button>
               <button onClick={onClose} className="btn-secondary">Fechar</button>
             </>
-      }>
+      }
+    >
       {editMode ? (
         <div className="space-y-3 text-sm">
           <div>
@@ -193,6 +237,7 @@ export function ClientDetailModal({
         </div>
       ) : (
         <div className="space-y-4 text-sm">
+          {/* Cabeçalho com avatar */}
           <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
             <ClientAvatar client={clientData} size={16} />
             <div>
@@ -201,67 +246,134 @@ export function ClientDetailModal({
             </div>
           </div>
 
-          <section>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contactos</p>
-            <div className="space-y-1.5">
-              {clientData.email && (
-                <div className="flex items-center gap-2">
-                  <Mail size={14} className="text-gray-400" />
-                  <a href={`mailto:${clientData.email}`} className="text-brand-600 hover:underline">{clientData.email}</a>
-                </div>
+          {/* Tabs */}
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            <button
+              onClick={() => setActiveTab('info')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeTab === 'info' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Star size={12} /> Informações
+            </button>
+            <button
+              onClick={() => setActiveTab('reservations')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeTab === 'reservations' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <CalendarClock size={12} /> Reservas
+              {allReservations.length > 0 && (
+                <span className="bg-brand-100 text-brand-700 text-[10px] font-bold px-1.5 rounded-full">
+                  {allReservations.length}
+                </span>
               )}
-              {clientData.phone && (
-                <div className="flex items-center gap-2">
-                  <Phone size={14} className="text-gray-400" />
-                  <a href={`tel:${clientData.phone}`} className="text-brand-600 hover:underline">{clientData.phone}</a>
+            </button>
+          </div>
+
+          {/* Tab: Informações */}
+          {activeTab === 'info' && (
+            <>
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contactos</p>
+                <div className="space-y-1.5">
+                  {clientData.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail size={14} className="text-gray-400" />
+                      <a href={`mailto:${clientData.email}`} className="text-brand-600 hover:underline">{clientData.email}</a>
+                    </div>
+                  )}
+                  {clientData.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone size={14} className="text-gray-400" />
+                      <a href={`tel:${clientData.phone}`} className="text-brand-600 hover:underline">{clientData.phone}</a>
+                    </div>
+                  )}
+                  {clientData.nif && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 text-xs">NIF</span>
+                      <span>{clientData.nif}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-              {clientData.nif && (
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 text-xs">NIF</span>
-                  <span>{clientData.nif}</span>
+              </section>
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fidelização</p>
+                <div className="flex items-center gap-3">
+                  <Star size={14} className="text-amber-500" />
+                  <span>{clientData.reservas_concluidas ?? 0} visitas no total</span>
                 </div>
-              )}
-            </div>
-          </section>
-          <section>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fidelização</p>
-            <div className="flex items-center gap-3">
-              <Star size={14} className="text-amber-500" />
-               <span>{clientData.reservas_concluidas ?? 0} visitas no total</span>
-             </div>
-             <div className="mt-2">
-               <FidelityStamps count={clientData.reservas_concluidas ?? 0} />
-               <p className="text-xs text-gray-400 mt-1">
-                 {10 - ((clientData.reservas_concluidas ?? 0) % 10)} visitas para o próximo corte grátis
-               </p>
-             </div>
-           </section>
-          <section>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Reservas</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-gray-50 rounded-lg p-2">
-                <p className="text-gray-500">Última visita</p>
-                <p className="font-medium">
-                   {fmtDate(clientData.last_appointment_date)}
-                   {fmtAgo(clientData.last_appointment_date) && (
-                     <span className="text-gray-400"> ({fmtAgo(clientData.last_appointment_date)})</span>
-                    )}
+                <div className="mt-2">
+                  <FidelityStamps count={clientData.reservas_concluidas ?? 0} />
+                  <p className="text-xs text-gray-400 mt-1">
+                    {10 - ((clientData.reservas_concluidas ?? 0) % 10)} visitas para o próximo corte grátis
                   </p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-2">
-                  <p className="text-gray-500">Próxima reserva</p>
-                 <p className="font-medium">{fmtDate(clientData.next_appointment_date)}</p>
-                </div>
-              </div>
-            </section>
-           {clientData.notes && (
-             <section>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Notas</p>
-                <p className="text-xs bg-amber-50 rounded-lg px-3 py-2 text-amber-800">{clientData.notes}</p>
               </section>
-            )}
-           <p className="text-xs text-gray-400">Cliente desde {fmtDate(clientData.created_at)}</p>
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Resumo</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-gray-50 rounded-lg p-2">
+                    <p className="text-gray-500">Última visita</p>
+                    <p className="font-medium">
+                      {fmtDate(clientData.last_appointment_date)}
+                      {fmtAgo(clientData.last_appointment_date) && (
+                        <span className="text-gray-400"> ({fmtAgo(clientData.last_appointment_date)})</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-2">
+                    <p className="text-gray-500">Próxima reserva</p>
+                    <p className="font-medium">{fmtDate(clientData.next_appointment_date)}</p>
+                  </div>
+                </div>
+              </section>
+              {clientData.notes && (
+                <section>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Notas</p>
+                  <p className="text-xs bg-amber-50 rounded-lg px-3 py-2 text-amber-800">{clientData.notes}</p>
+                </section>
+              )}
+              <p className="text-xs text-gray-400">Cliente desde {fmtDate(clientData.created_at)}</p>
+            </>
+          )}
+
+          {/* Tab: Reservas */}
+          {activeTab === 'reservations' && (
+            <div className="space-y-4">
+              {allReservations.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-6">Sem reservas registadas.</p>
+              ) : (
+                <>
+                  {/* Futuras */}
+                  {futureReservations.length > 0 && (
+                    <section>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                        <CalendarClock size={12} className="text-emerald-500" />
+                        Próximas ({futureReservations.length})
+                      </p>
+                      <div className="bg-emerald-50/50 rounded-xl px-3">
+                        {futureReservations.map(r => <ReservationRow key={r.id} r={r} />)}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Passadas */}
+                  {pastReservations.length > 0 && (
+                    <section>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                        <CalendarCheck size={12} className="text-gray-400" />
+                        Passadas ({pastReservations.length})
+                      </p>
+                      <div className="bg-gray-50 rounded-xl px-3">
+                        {pastReservations.map(r => <ReservationRow key={r.id} r={r} />)}
+                      </div>
+                    </section>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Modal>
