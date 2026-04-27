@@ -460,7 +460,7 @@ export default function CalendarPage() {
               {barbers.map(b => (
                 <div key={b.id} className="sticky top-0 z-10 h-10 flex items-center justify-center border-b border-l"
                   style={{ background: b.color ?? '#d4a017', borderColor: hexToRgba(b.color ?? '#d4a017', 0.4) }}>
-                  <span className="text-xs font-bold text-white drop-shadow-sm">{b.name}</span>
+                  <span className="text-sm font-bold text-white drop-shadow-sm">{b.name}</span>
                 </div>
               ))}
 
@@ -485,8 +485,8 @@ export default function CalendarPage() {
                       const rList   = resByBarberSlot.get(key) ?? []
                       const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
                       const baseCellClasses = isHourEnd
-                        ? 'relative border-l border-b-2 border-slate-500'
-                        : 'relative border-l border-b border-slate-400'
+                        ? 'relative border-l border-b-2 border-slate-400'
+                        : 'relative border-l border-b border-slate-300'
 
                       if (!blocked && rList.length === 0) {
                         return (
