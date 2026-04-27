@@ -191,7 +191,7 @@ export function ReservationEditModal({
           </select>
           {!isCancelled && (
             <p className="text-[10px] text-gray-400 mt-1">
-              Para cancelar usa o botão em baixo à esquerda — será pedido o motivo e enviado email ao cliente.
+              Para cancelar usa o botão <span className="text-red-500">Cancelar reserva</span>.
             </p>
           )}
         </div>
