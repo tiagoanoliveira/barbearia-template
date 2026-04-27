@@ -12,7 +12,7 @@ import Modal from '@/components/ui/Modal'
 import type { Reservation, ReservationStatus, Service } from '@/types'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
-// ─── Constantes partilhadas ────────────────────────────────────────────────
+// ─── Constantes partilhadas ───────────────────────────────────────────────────
 export const STATUS_LABEL: Record<string, string> = {
   confirmada: 'Confirmada',
   concluida:  'Concluída',
@@ -27,7 +27,7 @@ export const STATUS_COLORS: Record<string, string> = {
 // para garantir motivo obrigatório e envio de email.
 export const EDIT_STATUSES: ReservationStatus[] = ['confirmada', 'concluida', 'faltou']
 
-// ─── ReservationDetailModal ────────────────────────────────────────────────
+// ─── ReservationDetailModal ───────────────────────────────────────────────────
 export function ReservationDetailModal({
   reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout,
 }: {
@@ -103,20 +103,18 @@ export function ReservationDetailModal({
   )
 }
 
-// ─── ReservationEditModal ─────────────────────────────────────────────────
+// ─── ReservationEditModal ─────────────────────────────────────────────────────
 export function ReservationEditModal({
   reservation, invalidateKey, onClose, onCancelRequest,
 }: {
   reservation: Reservation
   invalidateKey: string
   onClose: () => void
-  /** Chamado quando o utilizador selecciona "cancelada" no select de estado. */
+  /** Chamado quando o utilizador quer cancelar — abre o ReservationStatusModal com motivo obrigatório. */
   onCancelRequest?: () => void
 }) {
   const qc = useQueryClient()
-  const [form, setForm] = useState<Partial<Reservation & { sendEmail: boolean }>>({
-    ...reservation, sendEmail: false,
-  })
+  const [form, setForm] = useState<Partial<Reservation & { sendEmail: boolean }>>({ ...reservation, sendEmail: false })
   const [saving, setSaving] = useState(false)
   const upd = <K extends keyof typeof form>(k: K, v: typeof form[K]) => setForm(f => ({ ...f, [k]: v }))
 
@@ -127,19 +125,11 @@ export function ReservationEditModal({
 
   const handleServiceChange = (serviceId: number) => {
     const service = services.find(s => s.id === serviceId)
-    setForm(f => ({
-      ...f,
-      service_id: serviceId,
-      service_duration: service?.duration ?? f.service_duration,
-    }))
+    setForm(f => ({ ...f, service_id: serviceId, service_duration: service?.duration ?? f.service_duration }))
   }
 
   const handleStatusChange = (value: string) => {
-    if (value === 'cancelada') {
-      // Redirige para o fluxo correcto (motivo obrigatório + email)
-      onCancelRequest?.()
-      return
-    }
+    if (value === 'cancelada') { onCancelRequest?.(); return }
     upd('status', value as ReservationStatus)
   }
 
@@ -147,14 +137,9 @@ export function ReservationEditModal({
     setSaving(true)
     try {
       await reservationsApi.update(reservation.id, {
-        barber_id:        form.barber_id,
-        service_id:       form.service_id,
-        status:           form.status,
-        data_hora:        form.data_hora,
-        comentario:       form.comentario,
-        nota_privada:     form.nota_privada,
-        send_email:       form.sendEmail,
-        service_duration: form.service_duration,
+        barber_id: form.barber_id, service_id: form.service_id, status: form.status,
+        data_hora: form.data_hora, comentario: form.comentario, nota_privada: form.nota_privada,
+        send_email: form.sendEmail, service_duration: form.service_duration,
       })
       qc.invalidateQueries({ queryKey: [invalidateKey] })
       onClose()
@@ -163,16 +148,31 @@ export function ReservationEditModal({
   }
 
   const nowLocal = new Date().toISOString().slice(0, 16)
+  const isCancelled = form.status === 'cancelada' || reservation.status === 'cancelada'
 
   return (
     <Modal open onClose={onClose} title={`Editar reserva #${reservation.id}`}
       footer={
-        <>
-          <button className="btn-secondary text-xs" onClick={onClose}>Fechar</button>
-          <button className="btn-primary text-xs" onClick={handleSave} disabled={saving}>
-            {saving ? 'A guardar...' : 'Guardar'}
-          </button>
-        </>
+        <div className="flex items-center justify-between w-full gap-2">
+          {/* Esquerda: botão de cancelamento (só se não estiver já cancelada) */}
+          <div>
+            {!isCancelled && onCancelRequest && (
+              <button
+                className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 font-medium hover:bg-red-100 transition-colors"
+                onClick={onCancelRequest}
+              >
+                Cancelar reserva
+              </button>
+            )}
+          </div>
+          {/* Direita: Fechar + Guardar */}
+          <div className="flex gap-2">
+            <button className="btn-secondary text-xs" onClick={onClose}>Fechar</button>
+            <button className="btn-primary text-xs" onClick={handleSave} disabled={saving}>
+              {saving ? 'A guardar...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
       }>
       <div className="space-y-3 text-sm">
         <div className="bg-gray-50 rounded-lg px-3 py-2">
@@ -186,17 +186,12 @@ export function ReservationEditModal({
             value={form.status ?? reservation.status}
             onChange={e => handleStatusChange(e.target.value)}
           >
-            {EDIT_STATUSES.map(s => (
-              <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-            ))}
-            {/* Cancelada só aparece como opção de leitura se já estiver nesse estado */}
-            {(form.status === 'cancelada' || reservation.status === 'cancelada') && (
-              <option value="cancelada" disabled>{STATUS_LABEL['cancelada']}</option>
-            )}
+            {EDIT_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+            {isCancelled && <option value="cancelada" disabled>{STATUS_LABEL['cancelada']}</option>}
           </select>
-          {form.status !== 'cancelada' && reservation.status !== 'cancelada' && (
+          {!isCancelled && (
             <p className="text-[10px] text-gray-400 mt-1">
-              Para cancelar usa o botão “Cancelar reserva” — será pedido o motivo e enviado email ao cliente.
+              Para cancelar usa o botão em baixo à esquerda — será pedido o motivo e enviado email ao cliente.
             </p>
           )}
         </div>
@@ -216,24 +211,15 @@ export function ReservationEditModal({
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Duração (min)</label>
-          <input
-            type="number"
-            min={5}
-            step={5}
-            className="input text-sm w-full"
+          <input type="number" min={5} step={5} className="input text-sm w-full"
             value={form.service_duration ?? reservation.service_duration ?? 60}
-            onChange={e => upd('service_duration', Number(e.target.value))}
-          />
+            onChange={e => upd('service_duration', Number(e.target.value))} />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
-          <input
-            type="datetime-local"
-            className="input text-sm w-full"
-            value={(form.data_hora ?? '').substring(0,16)}
-            min={nowLocal}
-            onChange={e => upd('data_hora', e.target.value+':00')}
-          />
+          <input type="datetime-local" className="input text-sm w-full"
+            value={(form.data_hora ?? '').substring(0,16)} min={nowLocal}
+            onChange={e => upd('data_hora', e.target.value+':00')} />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Nota do cliente</label>
@@ -246,8 +232,7 @@ export function ReservationEditModal({
             value={form.nota_privada ?? ''} onChange={e => upd('nota_privada', e.target.value)} />
         </div>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={!!form.sendEmail}
-            onChange={e => upd('sendEmail', e.target.checked)} />
+          <input type="checkbox" checked={!!form.sendEmail} onChange={e => upd('sendEmail', e.target.checked)} />
           <span>Reenviar email de confirmação ao cliente</span>
         </label>
       </div>
@@ -255,9 +240,7 @@ export function ReservationEditModal({
   )
 }
 
-// ─── ReservationStatusModal ─────────────────────────────────────────────────
-// Modal dedicado à alteração de estado. Para 'cancelada' pede motivo obrigatório.
-// Para 'faltou' pede confirmação simples.
+// ─── ReservationStatusModal ───────────────────────────────────────────────────
 export function ReservationStatusModal({
   reservation, action, invalidateKey, onClose,
 }: {
@@ -270,33 +253,15 @@ export function ReservationStatusModal({
   const [reason, setReason] = useState('')
   const [error,  setError]  = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-
   const isCancel = action === 'cancelada'
 
-  const titles: Record<typeof action, string> = {
-    faltou:    '👤 Confirmar falta',
-    cancelada: '❌ Cancelar reserva',
-  }
-  const confirmLabels: Record<typeof action, string> = {
-    faltou:    'Confirmar falta',
-    cancelada: 'Confirmar cancelamento',
-  }
-
   const handleConfirm = async () => {
-    if (isCancel && !reason.trim()) {
-      setError('O motivo de cancelamento é obrigatório.')
-      return
-    }
+    if (isCancel && !reason.trim()) { setError('O motivo de cancelamento é obrigatório.'); return }
     setSaving(true)
     try {
       if (isCancel) {
-        await reservationsApi.update(reservation.id, {
-          status: 'cancelada',
-          nota_privada: `[Cancelamento] ${reason}`,
-        })
-        await adminApi.post('/api/admin/reservations/cancel-email', {
-          reservation_id: reservation.id, reason,
-        }).catch(() => {})
+        await reservationsApi.update(reservation.id, { status: 'cancelada', nota_privada: `[Cancelamento] ${reason}` })
+        await adminApi.post('/api/admin/reservations/cancel-email', { reservation_id: reservation.id, reason }).catch(() => {})
       } else {
         await reservationsApi.updateStatus(reservation.id, action as ReservationStatus)
       }
@@ -307,49 +272,35 @@ export function ReservationStatusModal({
   }
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={titles[action]}
+    <Modal open onClose={onClose}
+      title={isCancel ? '❌ Cancelar reserva' : '👤 Confirmar falta'}
       footer={
         <>
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button
-            className={isCancel ? 'btn-danger' : 'btn-primary'}
-            onClick={handleConfirm}
-            disabled={saving}
-          >
-            {saving ? 'A guardar...' : confirmLabels[action]}
+          <button className={isCancel ? 'btn-danger' : 'btn-primary'} onClick={handleConfirm} disabled={saving}>
+            {saving ? 'A guardar...' : isCancel ? 'Confirmar cancelamento' : 'Confirmar falta'}
           </button>
         </>
-      }
-    >
+      }>
       <div className="space-y-3 text-sm">
         {isCancel ? (
           <>
-            <p className="text-gray-600">
-              Indica o motivo do cancelamento. O cliente receberá um email com essa informação.
-            </p>
-            <textarea
-              rows={3}
-              value={reason}
+            <p className="text-gray-600">Indica o motivo do cancelamento. O cliente receberá um email com essa informação.</p>
+            <textarea rows={3} value={reason}
               onChange={e => { setReason(e.target.value); setError(null) }}
               placeholder="Ex.: Barbeiro indisponível por motivo de saúde"
-              className={`input text-sm w-full resize-none ${error ? 'border-red-400' : ''}`}
-            />
+              className={`input text-sm w-full resize-none ${error ? 'border-red-400' : ''}`} />
             {error && <p className="text-xs text-red-500">{error}</p>}
           </>
         ) : (
-          <p className="text-gray-700">
-            {`Confirmas que ${reservation.client_name} não compareceu a esta reserva?`}
-          </p>
+          <p className="text-gray-700">{`Confirmas que ${reservation.client_name} não compareceu a esta reserva?`}</p>
         )}
       </div>
     </Modal>
   )
 }
 
-// ─── CheckoutModal ───────────────────────────────────────────────────
+// ─── CheckoutModal ────────────────────────────────────────────────────────────
 export function CheckoutModal({
   reservation, invalidateKey, onClose,
 }: {
@@ -358,7 +309,6 @@ export function CheckoutModal({
   onClose: () => void
 }) {
   const qc = useQueryClient()
-
   const [meioPagamento, setMeioPagamento] = useState<'multibanco' | 'dinheiro' | 'outro'>('dinheiro')
   const [valorPago, setValorPago]         = useState<number>(reservation.service_price ?? 0)
   const [temGorjeta, setTemGorjeta]       = useState(false)
@@ -370,11 +320,9 @@ export function CheckoutModal({
     setSaving(true)
     try {
       await reservationsApi.update(reservation.id, {
-        status:          'concluida',
-        meio_pagamento:  meioPagamento,
-        valor_pago:      valorPago,
-        gorjeta:         temGorjeta ? gorjeta : undefined,
-        meio_gorjeta:    temGorjeta ? meioGorjeta : undefined,
+        status: 'concluida', meio_pagamento: meioPagamento, valor_pago: valorPago,
+        gorjeta: temGorjeta ? gorjeta : undefined,
+        meio_gorjeta: temGorjeta ? meioGorjeta : undefined,
       })
       qc.invalidateQueries({ queryKey: [invalidateKey] })
       onClose()
@@ -383,10 +331,7 @@ export function CheckoutModal({
   }
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title="💰 Pagamento & Checkout"
+    <Modal open onClose={onClose} title="💰 Pagamento & Checkout"
       footer={
         <>
           <button className="btn-secondary text-sm" onClick={onClose}>Cancelar</button>
@@ -394,8 +339,7 @@ export function CheckoutModal({
             {saving ? 'A guardar...' : 'Confirmar'}
           </button>
         </>
-      }
-    >
+      }>
       <div className="space-y-4 text-sm">
         <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
           {reservation.client_name} · {reservation.service_name}
@@ -404,16 +348,10 @@ export function CheckoutModal({
           <label className="block text-xs text-gray-500 mb-1">Meio de pagamento</label>
           <div className="flex gap-2">
             {(['multibanco', 'dinheiro', 'outro'] as const).map(op => (
-              <button
-                key={op}
-                type="button"
-                onClick={() => setMeioPagamento(op)}
+              <button key={op} type="button" onClick={() => setMeioPagamento(op)}
                 className={`flex-1 py-2 rounded-lg border text-xs font-medium capitalize transition-colors ${
-                  meioPagamento === op
-                    ? 'bg-brand-600 text-white border-brand-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
-                }`}
-              >
+                  meioPagamento === op ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
+                }`}>
                 {op === 'multibanco' ? '💳 Multibanco' : op === 'dinheiro' ? '💵 Dinheiro' : 'Outro'}
               </button>
             ))}
@@ -421,44 +359,24 @@ export function CheckoutModal({
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Valor cobrado (€)</label>
-          <input
-            type="number"
-            min={0}
-            step={0.5}
-            className="input text-sm w-full"
-            value={valorPago}
-            onChange={e => setValorPago(Number(e.target.value))}
-          />
+          <input type="number" min={0} step={0.5} className="input text-sm w-full"
+            value={valorPago} onChange={e => setValorPago(Number(e.target.value))} />
         </div>
         <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={temGorjeta}
-            onChange={e => setTemGorjeta(e.target.checked)}
-            className="rounded"
-          />
+          <input type="checkbox" checked={temGorjeta} onChange={e => setTemGorjeta(e.target.checked)} className="rounded" />
           <span className="font-medium">🎁 Gorjeta?</span>
         </label>
         {temGorjeta && (
           <div className="space-y-3 pl-5 border-l-2 border-emerald-200">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Valor da gorjeta (€)</label>
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                className="input text-sm w-full"
-                value={gorjeta}
-                onChange={e => setGorjeta(Number(e.target.value))}
-              />
+              <input type="number" min={0} step={0.5} className="input text-sm w-full"
+                value={gorjeta} onChange={e => setGorjeta(Number(e.target.value))} />
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Como foi recebida a gorjeta</label>
-              <select
-                className="input text-sm w-full bg-white"
-                value={meioGorjeta}
-                onChange={e => setMeioGorjeta(e.target.value as 'multibanco' | 'dinheiro' | 'outro')}
-              >
+              <select className="input text-sm w-full bg-white" value={meioGorjeta}
+                onChange={e => setMeioGorjeta(e.target.value as 'multibanco' | 'dinheiro' | 'outro')}>
                 <option value="dinheiro">💵 Dinheiro</option>
                 <option value="multibanco">💳 Multibanco</option>
                 <option value="outro">Outro</option>
@@ -471,7 +389,7 @@ export function CheckoutModal({
   )
 }
 
-// ─── Helpers internos ───────────────────────────────────────────────────
+// ─── Helpers internos ─────────────────────────────────────────────────────────
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">
