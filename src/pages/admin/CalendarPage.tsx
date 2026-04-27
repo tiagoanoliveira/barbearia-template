@@ -511,7 +511,7 @@ export default function CalendarPage() {
                             height: SLOT_H,
                             background: blocked ? undefined : colBg,
                             backgroundImage: blocked
-                              ? `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.18)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.18)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.06)} 12px)`
+                              ? `repeating-linear-gradient(135deg,${hexToRgba(b.color ?? '#d4a017', 0.5)} 0px,${hexToRgba(b.color ?? '#d4a017', 0.5)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.2)} 4px,${hexToRgba(b.color ?? '#d4a017', 0.2)} 12px)`
                               : undefined,
                           }}
                           onClick={blocked ? (e => openCtx(e, { kind: 'unavailable', unavailable: blocked })) : undefined}
@@ -519,7 +519,7 @@ export default function CalendarPage() {
                           {blocked && isFirstBlockedSlot && (
                             <div className="absolute inset-x-1 top-0.5 flex items-center gap-1 z-10">
                               <span className="text-sm leading-none">{TIPO_ICON[blocked.tipo]}</span>
-                              <span className="text-[13px] font-medium text-gray-700 truncate">
+                              <span className="text-[14px] font-bold text-black truncate">
                                 {TIPO_LABEL[blocked.tipo]}{blocked.motivo ? ` · ${blocked.motivo}` : ''}
                                 {blocked.recurrence_group_id ? ' 🔁' : ''}
                               </span>
