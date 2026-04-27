@@ -29,8 +29,7 @@ export const barberShopConfig = {
   supportIframeSrc: 'https://tiagoanoliveira.pt/support/988b8a8a745c445fbaff596ad5be54dd',
 
   // ─ Cloudflare Turnstile ─────────────────────────────────────────────────
-  // Obter em: https://dash.cloudflare.com -> Turnstile -> Sites
-  turnstileSiteKey: '0x4AAAAAAC77HIBeGCioAqAq',
+  turnstileSiteKey: '0x4AAAAAACob-aLDgwmHRXUO',
 
   // Dados legais
   nif:           '515753300',
