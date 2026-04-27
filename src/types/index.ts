@@ -30,6 +30,8 @@ export interface Client {
   nif?: number
   created_at: string
   reservas_concluidas?: number
+  /** Cortes gratuitos acumulados ainda por usar (gerido por triggers SQL) */
+  reservas_gratuitas_disponiveis?: number
   next_appointment_date?: string
   last_appointment_date?: string
 }

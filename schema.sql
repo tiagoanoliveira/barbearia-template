@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS clientes (
   auth_methods              TEXT    DEFAULT 'password',
   token_verificacao_expira  TEXT,
   reservas_concluidas       INTEGER DEFAULT 0,
+  -- Número de cortes gratuitos acumulados ainda por usar
+  -- Gerido automaticamente pelos triggers tr_fidelidade_*
+  reservas_gratuitas_disponiveis INTEGER DEFAULT 0,
   nif                       INTEGER,
   next_appointment_date     DATETIME,
   last_appointment_date     DATETIME,
@@ -208,6 +211,8 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_data_range ON daily_stats(data, barbe
 -- ================================================
 -- TRIGGERS
 -- ================================================
+
+-- ── reservas_concluidas ──────────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_increment
 AFTER UPDATE ON reservas FOR EACH ROW
 WHEN NEW.status = 'concluida' AND OLD.status != 'concluida'
@@ -229,6 +234,46 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
+-- ── reservas_gratuitas_disponiveis ──────────────────────────────────────────
+-- Recalcula o número de cortes gratuitos por usar sempre que
+-- reservas_concluidas muda (incremento ou decremento).
+--
+-- Lógica:
+--   earned  = FLOOR(reservas_concluidas / LOYALTY_EVERY)
+--   (LOYALTY_EVERY é definido no site-config; aqui fica fixo em 10
+--    e deve ser actualizado manualmente se o config mudar)
+--   O campo nunca desce abaixo de 0 e nunca sobe acima de earned
+--   (caso o admin tenha decrementado reservas_concluidas manualmente).
+
+CREATE TRIGGER IF NOT EXISTS tr_fidelidade_increment
+AFTER UPDATE ON clientes FOR EACH ROW
+WHEN NEW.reservas_concluidas > OLD.reservas_concluidas
+BEGIN
+  UPDATE clientes
+  SET reservas_gratuitas_disponiveis =
+    -- novas gratuitas ganhas neste incremento
+    reservas_gratuitas_disponiveis +
+    (NEW.reservas_concluidas / 10) - (OLD.reservas_concluidas / 10)
+  WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tr_fidelidade_decrement
+AFTER UPDATE ON clientes FOR EACH ROW
+WHEN NEW.reservas_concluidas < OLD.reservas_concluidas
+BEGIN
+  UPDATE clientes
+  SET reservas_gratuitas_disponiveis = MAX(
+    0,
+    -- não pode ter mais gratuitas disponíveis do que as ganhas totais
+    MIN(
+      reservas_gratuitas_disponiveis,
+      NEW.reservas_concluidas / 10
+    )
+  )
+  WHERE id = NEW.id;
+END;
+
+-- ── next / last appointment ───────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_reserva_insert_next_appointment
 AFTER INSERT ON reservas FOR EACH ROW
 WHEN NEW.status = 'confirmada' AND datetime(NEW.data_hora) > datetime('now')
@@ -275,7 +320,7 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- Sincronização de daily_stats
+-- ── daily_stats ───────────────────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_daily_stats_insert
 AFTER INSERT ON reservas FOR EACH ROW
 BEGIN
@@ -333,6 +378,12 @@ BEGIN
 END;
 
 -- ================================================
+-- MIGRATION (executar em instâncias existentes)
+-- ================================================
+-- ALTER TABLE clientes ADD COLUMN reservas_gratuitas_disponiveis INTEGER DEFAULT 0;
+-- UPDATE clientes SET reservas_gratuitas_disponiveis = MAX(0, (reservas_concluidas / 10));
+
+-- ================================================
 -- VIEWS
 -- ================================================
 CREATE VIEW IF NOT EXISTS v_reservas_complete AS
@@ -351,6 +402,7 @@ SELECT
   c.telefone AS cliente_telefone,
   c.nif      AS cliente_nif,
   c.reservas_concluidas AS cliente_total_reservas,
+  c.reservas_gratuitas_disponiveis AS cliente_gratuitas_disponiveis,
   b.nome  AS barbeiro_nome,
   b.foto  AS barbeiro_foto,
   b.color AS barbeiro_color,

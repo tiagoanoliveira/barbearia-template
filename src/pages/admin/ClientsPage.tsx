@@ -9,7 +9,10 @@ import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
 import { ClientDetailModal } from '@/components/admin/client-detail-modal'
+import { barberShopConfig } from '@/config/theme'
 import type { Client } from '@/types'
+
+const LOYALTY = barberShopConfig.loyalty
 
 const CLIENT_AVATAR_SIZE_CLASS: Record<8 | 16, string> = {
   8: 'w-8 h-8',
@@ -37,15 +40,13 @@ function ClientAvatar({ client, size = 8 }: { client: Client; size?: 8 | 16 }) {
   )
 }
 
-function FidelityStamps({ count }: { count: number }) {
-  const stamps = (count ?? 0) % 10
-  const full   = Math.floor((count ?? 0) / 10)
+function FidelityStamps({ count, everyN }: { count: number; everyN: number }) {
+  const progress = (count ?? 0) % everyN
   return (
     <div className="flex items-center gap-1">
-      {Array.from({ length: 10 }).map((_, i) => (
-        <span key={i} className={`inline-block w-2 h-2 rounded-full ${i < stamps ? 'bg-brand-500' : 'bg-gray-200'}`} />
+      {Array.from({ length: everyN }).map((_, i) => (
+        <span key={i} className={`inline-block w-2 h-2 rounded-full ${i < progress ? 'bg-brand-500' : 'bg-gray-200'}`} />
       ))}
-      {full > 0 && <span className="text-[10px] text-brand-600 font-semibold ml-1">{full}× 🎁</span>}
     </div>
   )
 }
@@ -96,7 +97,9 @@ export default function ClientsPage() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Contacto</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Visitas</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Fidelização</th>
+                  {LOYALTY.enabled && (
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Fidelização</th>
+                  )}
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Última visita</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell">Próxima reserva</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell">Cliente desde</th>
@@ -123,10 +126,14 @@ export default function ClientsPage() {
                     </td>
                     <td className="px-4 py-3 text-center hidden sm:table-cell">
                       <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                        (c.reservas_concluidas ?? 0) >= 10 ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'
+                        (c.reservas_concluidas ?? 0) >= LOYALTY.everyN ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'
                       }`}>{c.reservas_concluidas ?? 0}</span>
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell"><FidelityStamps count={c.reservas_concluidas ?? 0} /></td>
+                    {LOYALTY.enabled && (
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <FidelityStamps count={c.reservas_concluidas ?? 0} everyN={LOYALTY.everyN} />
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-xs text-gray-600 hidden lg:table-cell">{fmtDate(c.last_appointment_date)}</td>
                     <td className="px-4 py-3 text-xs hidden xl:table-cell">
                       {c.next_appointment_date

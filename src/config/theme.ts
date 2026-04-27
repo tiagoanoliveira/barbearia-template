@@ -91,6 +91,23 @@ export const barberShopConfig = {
 
   slotDuration: 30,
 
+  // ─ Sistema de fidelização ────────────────────────────────────────────────
+  // Ativar/desativar em toda a aplicação (frontend + backend).
+  // Quando false, toda a UI de fidelização fica oculta.
+  loyalty: {
+    /** Activar sistema de fidelização */
+    enabled: true,
+    /**
+     * De quantas em quantas reservas CONCLUÍDAS o cliente ganha
+     * um corte gratuito.
+     * Ex: 10 → a 10.ª, 20.ª, 30.ª reserva concluída é gratuita.
+     * ⚠️  Este valor deve coincidir com o hardcoded nos triggers SQL
+     *     (tr_fidelidade_increment / tr_fidelidade_decrement).
+     *     Se alterar aqui, actualizar também o schema.sql e o site-config.js.
+     */
+    everyN: 10,
+  },
+
   // ─ Personalização visual ─────────────────────────────────────────────────
   theme: {
     navbarBg:       'bg-primary-900 backdrop-blur-md',

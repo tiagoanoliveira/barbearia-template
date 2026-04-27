@@ -3,7 +3,7 @@ import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from
 import { hashPassword, verifyPassword, generateToken } from '../utils/crypto.js'
 import { sanitize } from '../utils/validators.js'
 import { buildEmailChangeEmail, sendEmail } from '../utils/email.js'
-import { EMAIL_SUBJECTS } from '../utils/site-config.js'
+import { EMAIL_SUBJECTS, LOYALTY } from '../utils/site-config.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -17,7 +17,8 @@ export async function onRequest(context) {
     try {
       const client = await env.DB.prepare(
           `SELECT id, nome, email, email_pendente, telefone, nif, foto_perfil,
-                  reservas_concluidas, next_appointment_date, last_appointment_date,
+                  reservas_concluidas, reservas_gratuitas_disponiveis,
+                  next_appointment_date, last_appointment_date,
                   criado_em, auth_methods, email_verificado, token_verificacao_expira
            FROM clientes WHERE id = ?`
       ).bind(auth.clientId).first()
@@ -48,6 +49,11 @@ export async function onRequest(context) {
         nif:                    client.nif,
         photo_url:              client.foto_perfil,
         completed_reservations: client.reservas_concluidas,
+        // Apenas exposto se o sistema de fidelização estiver activo
+        ...(LOYALTY.enabled ? {
+          free_reservations_available: client.reservas_gratuitas_disponiveis ?? 0,
+          loyalty_every_n:             LOYALTY.everyN,
+        } : {}),
         next_appointment:       client.next_appointment_date,
         last_appointment:       client.last_appointment_date,
         created_at:             client.criado_em,

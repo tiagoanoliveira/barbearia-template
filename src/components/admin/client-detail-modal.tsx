@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow, parseISO, isFuture, isPast } from 'date-fns'
 import { pt } from 'date-fns/locale'
-import { Mail, Pencil, Phone, Star, CalendarClock, CalendarCheck } from 'lucide-react'
+import { Mail, Pencil, Phone, Star, CalendarClock, CalendarCheck, Gift } from 'lucide-react'
 import { clientsApi } from '@/api/clients'
 import Modal from '@/components/ui/Modal'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -14,6 +14,9 @@ import {
   ReservationStatusModal,
   CheckoutModal,
 } from '@/components/admin/reservation-modals'
+import { barberShopConfig } from '@/config/theme'
+
+const LOYALTY = barberShopConfig.loyalty
 
 type ClientModalData = {
   id: number
@@ -25,6 +28,7 @@ type ClientModalData = {
   notes?: string
   created_at?: string
   reservas_concluidas?: number
+  reservas_gratuitas_disponiveis?: number
   next_appointment_date?: string
   last_appointment_date?: string
   reservations?: ClientReservation[]
@@ -60,7 +64,6 @@ type ReservationModal =
   | { type: 'checkout'; r: Reservation }
   | null
 
-/** Converte um ClientReservation (vindo do campo reservations do cliente) para o shape completo de Reservation */
 function toReservation(r: ClientReservation, client: ClientModalData): Reservation {
   return {
     id:               r.id,
@@ -101,15 +104,18 @@ function ClientAvatar({ client, size = 16 }: { client: ClientModalData; size?: 8
   )
 }
 
-function FidelityStamps({ count }: { count: number }) {
-  const stamps = (count ?? 0) % 10
-  const full   = Math.floor((count ?? 0) / 10)
+function FidelityStamps({ count, everyN }: { count: number; everyN: number }) {
+  const progress = (count ?? 0) % everyN
   return (
-    <div className="flex items-center gap-1">
-      {Array.from({ length: 10 }).map((_, i) => (
-        <span key={i} className={`inline-block w-2 h-2 rounded-full ${i < stamps ? 'bg-brand-500' : 'bg-gray-200'}`} />
+    <div className="flex items-center gap-1 flex-wrap">
+      {Array.from({ length: everyN }).map((_, i) => (
+        <span
+          key={i}
+          className={`inline-block w-2 h-2 rounded-full ${
+            i < progress ? 'bg-brand-500' : 'bg-gray-200'
+          }`}
+        />
       ))}
-      {full > 0 && <span className="text-[10px] text-brand-600 font-semibold ml-1">{full}× 🎁</span>}
     </div>
   )
 }
@@ -225,6 +231,11 @@ export function ClientDetailModal({
   }
 
   const closeResModal = () => setResModal(null)
+
+  const concluded     = clientData?.reservas_concluidas ?? 0
+  const freeAvailable = clientData?.reservas_gratuitas_disponiveis ?? 0
+  const progressInCycle = concluded % LOYALTY.everyN
+  const toNextFree = LOYALTY.everyN - progressInCycle
 
   if (!clientData) {
     return (
@@ -352,19 +363,29 @@ export function ClientDetailModal({
                     )}
                   </div>
                 </section>
-                <section>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fidelização</p>
-                  <div className="flex items-center gap-3">
-                    <Star size={14} className="text-amber-500" />
-                    <span>{clientData.reservas_concluidas ?? 0} visitas no total</span>
-                  </div>
-                  <div className="mt-2">
-                    <FidelityStamps count={clientData.reservas_concluidas ?? 0} />
+
+                {/* Fidelização — só aparece se o sistema estiver activo */}
+                {LOYALTY.enabled && (
+                  <section>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fidelização</p>
+                    <div className="flex items-center gap-3 mb-2">
+                      <Star size={14} className="text-amber-500" />
+                      <span>{concluded} visitas no total</span>
+                      {freeAvailable > 0 && (
+                        <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">
+                          <Gift size={11} /> {freeAvailable}× grátis disponível
+                        </span>
+                      )}
+                    </div>
+                    <FidelityStamps count={concluded} everyN={LOYALTY.everyN} />
                     <p className="text-xs text-gray-400 mt-1">
-                      {10 - ((clientData.reservas_concluidas ?? 0) % 10)} visitas para o próximo corte grátis
+                      {toNextFree === LOYALTY.everyN
+                        ? `A contar para o próximo corte grátis (${LOYALTY.everyN} visitas)`
+                        : `${toNextFree} visita${toNextFree !== 1 ? 's' : ''} para o próximo corte grátis`}
                     </p>
-                  </div>
-                </section>
+                  </section>
+                )}
+
                 <section>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Resumo</p>
                   <div className="grid grid-cols-2 gap-2 text-xs">

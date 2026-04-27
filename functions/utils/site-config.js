@@ -59,6 +59,21 @@ export const WORKING_HOURS = {
 }
 
 /**
+ * Sistema de fidelização.
+ * Espelho de barberShopConfig.loyalty em src/config/theme.ts.
+ *
+ * enabled  — activar/desactivar em toda a aplicação
+ * everyN   — de quantas em quantas reservas concluídas há um corte gratuito
+ *
+ * ⚠️  Se alterar everyN, actualizar também os triggers SQL
+ *     tr_fidelidade_increment e tr_fidelidade_decrement no schema.sql.
+ */
+export const LOYALTY = {
+  enabled: true,
+  everyN:  10,
+}
+
+/**
  * Assuntos dos emails transacionais.
  * Centralizados aqui para que mudar o nome da barbearia
  * actualize automaticamente todos os subjects.
