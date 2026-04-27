@@ -159,7 +159,6 @@ export default function CalendarPage() {
   }, [selectedDate, searchParams, setSearchParams])
 
   // ── Filtro de barbeiro (apenas 1 coluna) ─────────────────────────────────
-  // Se o user é barbeiro, forçar o seu id e não permitir alterar
   const [barberFilterId, setBarberFilterId] = useState<number | null>(loggedBarberId)
   const effectiveBarberId = loggedBarberId ?? barberFilterId
 
@@ -184,7 +183,6 @@ export default function CalendarPage() {
   const [uError, setUError]   = useState<string | null>(null)
   const [uSaving, setUSaving] = useState(false)
 
-  // Conflict modal state
   const [conflictModal, setConflictModal]               = useState(false)
   const [conflictReservations, setConflictReservations] = useState<ConflictReservation[]>([])
   const [pendingUForm, setPendingUForm]                 = useState<Partial<Unavailable> | null>(null)
@@ -287,7 +285,6 @@ export default function CalendarPage() {
         payload.data_hora_fim    = `${dayEnd}T${String(CLOSE_H).padStart(2,'0')}:00:00`
       }
       if (isNew || !uForm.id) {
-        // Check for conflicting reservations before creating
         const conflictsRes = await barbersApi.checkConflicts({
           barber_id:  payload.barbeiro_id!,
           start:      payload.data_hora_inicio!,
@@ -391,7 +388,6 @@ export default function CalendarPage() {
     return barberU.find(u => u.data_hora_inicio < slotEnd && u.data_hora_fim > slotISO) ?? null
   }
 
-  // Abrir automaticamente a reserva passada via query string (reservationId)
   useEffect(() => {
     if (!pendingReservationIdRef.current || !reservations.length) return
     const id = pendingReservationIdRef.current
@@ -561,7 +557,8 @@ export default function CalendarPage() {
                                       {hasMeaningfulReservationComment(r.comentario) && <span className="mr-0.5">💬</span>}
                                       {r.client_name}
                                     </p>
-                                    <p className="text-[12px] leading-4 truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>                                  </>
+                                    <p className="text-[12px] leading-4 truncate text-black/90">{r.service_name} - {format(new Date(r.data_hora),'HH:mm')}–{format(addMinutes(new Date(r.data_hora),dur),'HH:mm')}</p>
+                                  </>
                                 )}
                               </div>
                             )
@@ -635,28 +632,33 @@ export default function CalendarPage() {
       )}
 
       {modal?.type === 'res_detail' && (
-          <ReservationDetailModal
-              reservation={modal.r}
-              onClose={close}
-              onEdit={() => setModal({ type: 'res_edit', r: modal.r })}
-              onChangeStatus={action => setModal({ type: 'res_status', r: modal.r, action })}
-              onCancel={() => setModal({ type: 'res_status', r: modal.r, action: 'cancelada' })}
-              onCheckout={() => setModal({ type: 'res_checkout', r: modal.r })}  // NOVO
-          />
+        <ReservationDetailModal
+          reservation={modal.r}
+          onClose={close}
+          onEdit={() => setModal({ type: 'res_edit', r: modal.r })}
+          onChangeStatus={action => setModal({ type: 'res_status', r: modal.r, action })}
+          onCancel={() => setModal({ type: 'res_status', r: modal.r, action: 'cancelada' })}
+          onCheckout={() => setModal({ type: 'res_checkout', r: modal.r })}
+        />
       )}
 
-      {/* NOVO — modal de checkout/pagamento */}
       {modal?.type === 'res_checkout' && (
-          <CheckoutModal
-              reservation={modal.r}
-              invalidateKey="cal-reservations"   // usa a queryKey do calendário
-              onClose={close}
-          />
+        <CheckoutModal
+          reservation={modal.r}
+          invalidateKey="cal-reservations"
+          onClose={close}
+        />
       )}
 
       {modal?.type === 'res_edit' && (
-        <ReservationEditModal reservation={modal.r} invalidateKey="cal-reservations" onClose={close} />
+        <ReservationEditModal
+          reservation={modal.r}
+          invalidateKey="cal-reservations"
+          onClose={close}
+          onCancelRequest={() => setModal({ type: 'res_status', r: modal.r, action: 'cancelada' })}
+        />
       )}
+
       {modal?.type === 'client_detail' && (
         <ClientDetailModal
           clientId={modal.clientId}
@@ -669,8 +671,14 @@ export default function CalendarPage() {
           onClose={close}
         />
       )}
+
       {modal?.type === 'res_status' && (
-        <ReservationStatusModal reservation={modal.r} action={modal.action} invalidateKey="cal-reservations" onClose={close} />
+        <ReservationStatusModal
+          reservation={modal.r}
+          action={modal.action}
+          invalidateKey="cal-reservations"
+          onClose={close}
+        />
       )}
 
       <Modal open={modal?.type === 'res_copy'} onClose={close} title="Copiar reserva"
