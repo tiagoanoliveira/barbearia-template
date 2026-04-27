@@ -31,11 +31,11 @@ const STATUS_OPTIONS = [
 ]
 
 type ModalMode =
-  | { type: 'detail';   r: Reservation }
-  | { type: 'edit';     r: Reservation }
-  | { type: 'status';   r: Reservation; action: 'faltou' | 'cancelada' }
-  | { type: 'checkout'; r: Reservation }
-  | { type: 'client';   clientId: number; clientName: string; clientPhoto?: string }
+  | { type: 'detail';        r: Reservation }
+  | { type: 'edit';          r: Reservation }
+  | { type: 'status';        r: Reservation; action: 'faltou' | 'cancelada' }
+  | { type: 'checkout';      r: Reservation; editMode?: boolean; pendingEditForm?: Partial<Reservation & { sendEmail: boolean }> }
+  | { type: 'client';        clientId: number; clientName: string; clientPhoto?: string }
   | null
 
 function ReservationClientAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
@@ -257,6 +257,7 @@ export default function ReservationsPage() {
           onChangeStatus={action => setModal({ type: 'status', r: modal.r, action })}
           onCancel={() => setModal({ type: 'status', r: modal.r, action: 'cancelada' })}
           onCheckout={() => setModal({ type: 'checkout', r: modal.r })}
+          onEditPayment={() => setModal({ type: 'checkout', r: modal.r, editMode: true })}
         />
       )}
 
@@ -265,6 +266,8 @@ export default function ReservationsPage() {
           reservation={modal.r}
           invalidateKey="reservations"
           onClose={close}
+          editMode={modal.editMode ?? false}
+          pendingEditForm={modal.pendingEditForm}
         />
       )}
 
@@ -274,6 +277,9 @@ export default function ReservationsPage() {
           invalidateKey="reservations"
           onClose={close}
           onCancelRequest={() => setModal({ type: 'status', r: modal.r, action: 'cancelada' })}
+          onOpenCheckout={pendingForm =>
+            setModal({ type: 'checkout', r: modal.r, pendingEditForm: pendingForm })
+          }
         />
       )}
 

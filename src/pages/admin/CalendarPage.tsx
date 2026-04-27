@@ -96,14 +96,14 @@ type ContextTarget =
   | { kind: 'unavailable'; unavailable: Unavailable }
 
 type CalModal =
-  | { type: 'res_detail';  r: Reservation }
-  | { type: 'res_edit';    r: Reservation }
-  | { type: 'res_status';  r: Reservation; action: 'faltou' | 'cancelada' }
-  | { type: 'res_checkout'; r: Reservation }
-  | { type: 'res_copy';    source: Reservation }
-  | { type: 'res_new';     barberId: number; slot: number }
-  | { type: 'unavail';     data: Partial<Unavailable>; isNew: boolean }
-  | { type: 'client_detail'; clientId: number; initialClientName: string; initialClientPhone?: string; initialClientEmail?: string }
+  | { type: 'res_detail';     r: Reservation }
+  | { type: 'res_edit';       r: Reservation }
+  | { type: 'res_status';     r: Reservation; action: 'faltou' | 'cancelada' }
+  | { type: 'res_checkout';   r: Reservation; editMode?: boolean; pendingEditForm?: Partial<Reservation & { sendEmail: boolean }> }
+  | { type: 'res_copy';       source: Reservation }
+  | { type: 'res_new';        barberId: number; slot: number }
+  | { type: 'unavail';        data: Partial<Unavailable>; isNew: boolean }
+  | { type: 'client_detail';  clientId: number; initialClientName: string; initialClientPhone?: string; initialClientEmail?: string }
   | null
 
 function useDebouncedDate(initial: string, delay = 600) {
@@ -639,6 +639,7 @@ export default function CalendarPage() {
           onChangeStatus={action => setModal({ type: 'res_status', r: modal.r, action })}
           onCancel={() => setModal({ type: 'res_status', r: modal.r, action: 'cancelada' })}
           onCheckout={() => setModal({ type: 'res_checkout', r: modal.r })}
+          onEditPayment={() => setModal({ type: 'res_checkout', r: modal.r, editMode: true })}
         />
       )}
 
@@ -647,6 +648,8 @@ export default function CalendarPage() {
           reservation={modal.r}
           invalidateKey="cal-reservations"
           onClose={close}
+          editMode={modal.editMode ?? false}
+          pendingEditForm={modal.pendingEditForm}
         />
       )}
 
@@ -656,6 +659,9 @@ export default function CalendarPage() {
           invalidateKey="cal-reservations"
           onClose={close}
           onCancelRequest={() => setModal({ type: 'res_status', r: modal.r, action: 'cancelada' })}
+          onOpenCheckout={pendingForm =>
+            setModal({ type: 'res_checkout', r: modal.r, pendingEditForm: pendingForm })
+          }
         />
       )}
 
