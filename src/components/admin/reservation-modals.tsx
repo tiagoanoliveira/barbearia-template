@@ -309,7 +309,7 @@ export function CheckoutModal({
   onClose: () => void
 }) {
   const qc = useQueryClient()
-  const [meioPagamento, setMeioPagamento] = useState<'multibanco' | 'dinheiro' | 'outro'>('dinheiro')
+  const [meioPagamento, setMeioPagamento] = useState<'multibanco' | 'dinheiro' | 'outro'>('multibanco')
   const [valorPago, setValorPago]         = useState<number>(reservation.service_price ?? 0)
   const [temGorjeta, setTemGorjeta]       = useState(false)
   const [gorjeta, setGorjeta]             = useState<number>(0)

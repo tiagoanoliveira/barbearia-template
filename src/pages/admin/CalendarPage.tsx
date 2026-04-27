@@ -423,10 +423,10 @@ export default function CalendarPage() {
             </div>
             <div className="flex items-center gap-2">
               <input type="date" value={dateDisplay} onChange={e => onDateInput(e.target.value)}
-                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white
+                className="border border-slate-400 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white
                            focus:outline-none focus:ring-2 focus:ring-brand-400" />
               <select
-                className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white min-w-[160px]
+                className="border border-slate-400 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white min-w-[160px]
                            focus:outline-none focus:ring-2 focus:ring-brand-400"
                 value={effectiveBarberId ?? ''}
                 onChange={e => setBarberFilterId(e.target.value ? Number(e.target.value) : null)}
@@ -470,7 +470,7 @@ export default function CalendarPage() {
                   <>
                     <div key={`t_${slot}`}
                       className={`flex items-top justify-center ${
-                        isHourEnd ? 'border-b-2 border-gray-200' : 'border-b border-gray-100'
+                        isHourEnd ? 'border-b-2 border-slate-400' : 'border-b border-slate-200'
                       }`}
                       style={{ height: SLOT_H }}
                     >
@@ -485,8 +485,8 @@ export default function CalendarPage() {
                       const rList   = resByBarberSlot.get(key) ?? []
                       const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
                       const baseCellClasses = isHourEnd
-                        ? 'relative border-l border-b-2 border-gray-300'
-                        : 'relative border-l border-b border-gray-200'
+                        ? 'relative border-l border-b-2 border-slate-500'
+                        : 'relative border-l border-b border-slate-400'
 
                       if (!blocked && rList.length === 0) {
                         return (
