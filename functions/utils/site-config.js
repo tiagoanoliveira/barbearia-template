@@ -4,8 +4,8 @@
  * Fonte de verdade das constantes da barbearia para o backend (Cloudflare Workers).
  *
  * ⚠️  Este ficheiro é o equivalente backend de src/config/theme.ts.
- *     Sempre que alterar dados no theme.ts (nome, domínio, contacto, etc.),
- *     actualize também este ficheiro para manter coerência nos emails.
+ *     Sempre que alterar dados no theme.ts (nome, domínio, contacto, horário, etc.),
+ *     actualize também este ficheiro para manter coerência.
  *
  * O Worker não consegue importar TypeScript/Vite do frontend, por isso
  * mantemos aqui uma cópia das constantes necessárias.
@@ -39,6 +39,24 @@ export const LOGO_ALT = SHOP.name
 
 /** Ano corrente (recalculado em cada deploy) */
 export const CURRENT_YEAR = new Date().getFullYear()
+
+/**
+ * Horário de funcionamento da barbearia.
+ * Espelho de barberShopConfig.workingHours em src/config/theme.ts.
+ *
+ * Chaves: 0 = Domingo, 1 = Segunda, ..., 6 = Sábado  (convenção JS getDay())
+ * open / close: hora em número inteiro (ex: 10 = 10:00, 18 = 18:00)
+ * closed: true para dias fechados
+ */
+export const WORKING_HOURS = {
+  0: { closed: true },                        // Domingo
+  1: { open: 10, close: 20, closed: false },  // Segunda
+  2: { open: 10, close: 20, closed: false },  // Terça
+  3: { open: 10, close: 20, closed: false },  // Quarta
+  4: { open: 10, close: 20, closed: false },  // Quinta
+  5: { open: 10, close: 20, closed: false },  // Sexta
+  6: { open:  9, close: 18, closed: false },  // Sábado
+}
 
 /**
  * Assuntos dos emails transacionais.

@@ -3,6 +3,7 @@
  * Reutilizável por qualquer rota
  */
 import { getNowLisboa } from './time.js'
+import { WORKING_HOURS } from './site-config.js'
 
 export function computeSlots({
   date,
@@ -75,8 +76,13 @@ function parseDateTime(str) {
   return new Date(str.includes('T') ? str : str.replace(' ', 'T'))
 }
 
+/**
+ * Devolve { open, close } para o dia da semana indicado (0=Dom, 6=Sáb),
+ * ou null se a barbearia estiver fechada nesse dia.
+ * Lido a partir de WORKING_HOURS em site-config.js.
+ */
 export function getOpenClose(dayOfWeek) {
-  if (dayOfWeek === 0) return null                  // Domingo: fechado
-  if (dayOfWeek === 6) return { open: 9, close: 18 } // Sábado
-  return { open: 10, close: 20 }                    // Seg-Sex
+  const day = WORKING_HOURS[dayOfWeek]
+  if (!day || day.closed) return null
+  return { open: day.open, close: day.close }
 }
