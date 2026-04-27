@@ -193,7 +193,7 @@ export default function CalendarPage() {
   const [copySaving, setCopySaving] = useState(false)
   const [copyEmail, setCopyEmail]   = useState(false)
 
-  const [newResForm, setNewResForm]     = useState<Partial<Reservation & { sendEmail: boolean }>>({})
+  const [newResForm, setNewResForm]     = useState<Partial<Reservation & { sendEmail: boolean; nota_privada: string }>>({})
   const [newResSaving, setNewResSaving] = useState(false)
 
   const gridRef = useRef<HTMLDivElement>(null)
@@ -241,7 +241,7 @@ export default function CalendarPage() {
     const MENU_HEIGHT_BY_KIND: Record<ContextTarget['kind'], number> = {
       slot: 110,
       unavailable: 110,
-      reservation: 280,
+      reservation: 320,
     }
     const menuHeight = MENU_HEIGHT_BY_KIND[target.kind] ?? 220
     const x = Math.max(8, Math.min(e.clientX, window.innerWidth  - MENU_WIDTH  - 8))
@@ -607,8 +607,11 @@ export default function CalendarPage() {
                 <CtxItem icon="✏️" label="Editar Reserva" onClick={() => { setModal({ type: 'res_edit',   r }); closeCtx() }} />
                 <CtxItem icon="📋" label="Copiar Reserva" onClick={() => { setCopyDate(selectedDate); setCopyTime(format(new Date(r.data_hora),'HH:mm')); setCopyEmail(true); setModal({ type: 'res_copy', source: r }); closeCtx() }} />
                 <div className="border-t border-gray-100 my-1" />
+                {r.status === 'concluida' && (
+                  <CtxItem icon="💳" label="Editar Pagamento" onClick={() => { setModal({ type: 'res_checkout', r, editMode: true }); closeCtx() }} />
+                )}
                 {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
-                    <CtxItem icon="✅" label="Chegou" onClick={() => { setModal({ type: 'res_checkout', r }); closeCtx() }} />
+                  <CtxItem icon="✅" label="Chegou" onClick={() => { setModal({ type: 'res_checkout', r }); closeCtx() }} />
                 )}
                 {r.status !== 'faltou' && r.status !== 'cancelada' && (
                   <CtxItem icon="👤" label="Faltou" onClick={() => { setModal({ type: 'res_status', r, action: 'faltou'    }); closeCtx() }} />
@@ -728,9 +731,14 @@ export default function CalendarPage() {
               setNewResSaving(true)
               try {
                 await adminApi.post('/api/admin/reservations', {
-                  client_id: newResForm.client_id, service_id: newResForm.service_id,
-                  barber_id: newResForm.barber_id, date, time,
-                  notes: newResForm.comentario ?? '', send_email: newResForm.sendEmail ?? false,
+                  client_id:        newResForm.client_id,
+                  service_id:       newResForm.service_id,
+                  barber_id:        newResForm.barber_id,
+                  date,
+                  time,
+                  notes:            newResForm.comentario ?? '',
+                  nota_privada:     newResForm.nota_privada ?? '',
+                  send_email:       newResForm.sendEmail ?? false,
                   service_duration: newResForm.service_duration,
                 })
                 qc.invalidateQueries({ queryKey: ['cal-reservations'] }); close()
