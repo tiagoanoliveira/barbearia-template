@@ -26,9 +26,6 @@ CREATE TABLE IF NOT EXISTS clientes (
   auth_methods              TEXT    DEFAULT 'password',
   token_verificacao_expira  TEXT,
   reservas_concluidas       INTEGER DEFAULT 0,
-  -- Número de cortes gratuitos acumulados ainda por usar.
-  -- Gerido automaticamente pelos triggers tr_fidelidade_*.
-  -- Pode ser editado manualmente pelo admin para oferecer cortes extra.
   reservas_gratuitas_disponiveis INTEGER DEFAULT 0,
   nif                       INTEGER,
   next_appointment_date     DATETIME,
@@ -103,17 +100,13 @@ CREATE TABLE IF NOT EXISTS reservas (
 
   -- ── Pagamento ──────────────────────────────────────────────────────────────
   -- Meio de pagamento do serviço (null = ainda não pago / não registado)
-  meio_pagamento         TEXT    DEFAULT NULL
-                           CHECK(meio_pagamento IS NULL OR meio_pagamento IN
-                             ('dinheiro','multibanco','mbway','cartao','transferencia','outro','oferta')),
+  meio_pagamento         TEXT    DEFAULT NULL,
   -- Valor efectivamente pago em cêntimos (INTEGER evita erros de vírgula flutuante)
   valor_pago             INTEGER DEFAULT NULL,
   -- Gorjeta em cêntimos (null = sem gorjeta registada)
   gorjeta                INTEGER DEFAULT NULL,
   -- Meio de pagamento da gorjeta (pode diferir do meio principal)
-  meio_gorjeta           TEXT    DEFAULT NULL
-                           CHECK(meio_gorjeta IS NULL OR meio_gorjeta IN
-                             ('dinheiro','multibanco','mbway','cartao','transferencia','outro','oferta')),
+  meio_gorjeta           TEXT    DEFAULT NULL,
   -- Comentário livre sobre o pagamento (obrigatório quando meio = 'outro')
   comentario_pagamento   TEXT    DEFAULT NULL
 );
@@ -126,7 +119,6 @@ CREATE INDEX IF NOT EXISTS idx_reservas_disponibilidade       ON reservas(barbei
 CREATE INDEX IF NOT EXISTS idx_reservas_cliente_status_data   ON reservas(cliente_id, status, data_hora);
 CREATE INDEX IF NOT EXISTS idx_reservas_moloni_document       ON reservas(moloni_document_id);
 CREATE INDEX IF NOT EXISTS idx_reservas_resend_lembrete       ON reservas(resend_lembrete_id);
--- Índice para queries de relatórios/faturação por meio de pagamento
 CREATE INDEX IF NOT EXISTS idx_reservas_meio_pagamento        ON reservas(meio_pagamento, status, data_hora);
 
 -- ================================================
