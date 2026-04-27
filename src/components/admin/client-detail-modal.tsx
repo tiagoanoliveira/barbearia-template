@@ -61,7 +61,7 @@ type ReservationModal =
   | { type: 'detail';   r: Reservation }
   | { type: 'edit';     r: Reservation }
   | { type: 'status';   r: Reservation; action: 'faltou' | 'cancelada' }
-  | { type: 'checkout'; r: Reservation }
+  | { type: 'checkout'; r: Reservation; editMode?: boolean }
   | null
 
 function toReservation(r: ClientReservation, client: ClientModalData): Reservation {
@@ -168,6 +168,8 @@ export function ClientDetailModal({
     phone: currentClient?.phone ?? '',
     nif:   currentClient?.nif ? String(currentClient.nif) : '',
     notes: currentClient?.notes ?? '',
+    reservas_concluidas: currentClient?.reservas_concluidas ?? 0,
+    reservas_gratuitas_disponiveis: currentClient?.reservas_gratuitas_disponiveis ?? 0,
   })
   const [saving, setSaving]       = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -180,6 +182,8 @@ export function ClientDetailModal({
       phone: currentClient?.phone ?? '',
       nif:   currentClient?.nif ? String(currentClient.nif) : '',
       notes: currentClient?.notes ?? '',
+      reservas_concluidas: currentClient?.reservas_concluidas ?? 0,
+      reservas_gratuitas_disponiveis: currentClient?.reservas_gratuitas_disponiveis ?? 0,
     })
     setEditMode(false)
     setSaveError(null)
@@ -195,10 +199,12 @@ export function ClientDetailModal({
     try {
       const res = await clientsApi.update(clientId, {
         name:  form.name,
-        email: form.email || undefined,
-        phone: form.phone || undefined,
-        nif:   form.nif ? Number(form.nif) : undefined,
-        notes: form.notes || undefined,
+        email: form.email,   // string vazia aceite (apaga)
+        phone: form.phone,   // string vazia aceite (apaga)
+        nif:   form.nif,     // string vazia aceite (apaga)
+        notes: form.notes,   // string vazia aceite (apaga)
+        reservas_concluidas: form.reservas_concluidas,
+        reservas_gratuitas_disponiveis: form.reservas_gratuitas_disponiveis,
       })
       if (!res.success || !res.data) throw new Error(res.error ?? 'Não foi possível guardar as alterações.')
       qc.invalidateQueries({ queryKey: ['clients'] })
@@ -250,7 +256,11 @@ export function ClientDetailModal({
       <Modal
         open={true}
         onClose={onClose}
-        title={editMode ? `Editar ${clientData.name}` : clientData.name}
+        title={
+          editMode
+            ? `Editar ${clientData.name}`
+            : <span className="flex items-center gap-2">{clientData.name}<span className="text-xs font-normal text-gray-400">#{clientData.id}</span></span>
+        }
         footer={
           editMode
             ? <>
@@ -273,30 +283,51 @@ export function ClientDetailModal({
       >
         {editMode ? (
           <div className="space-y-3 text-sm">
+            {/* Nome */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Nome <span className="text-red-400">*</span></label>
               <input type="text" value={form.name}
                 onChange={e => { setForm(f => ({...f, name: e.target.value})); setSaveError(null) }}
                 className="input text-sm w-full" />
             </div>
+            {/* Email */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Email</label>
               <input type="email" value={form.email}
                 onChange={e => { setForm(f => ({...f, email: e.target.value})); setSaveError(null) }}
                 className="input text-sm w-full" />
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Telefone</label>
-              <input type="tel" value={form.phone}
-                onChange={e => { setForm(f => ({...f, phone: e.target.value})); setSaveError(null) }}
-                className="input text-sm w-full" />
+            {/* Telefone + NIF (2 colunas) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Telefone</label>
+                <input type="tel" value={form.phone}
+                  onChange={e => { setForm(f => ({...f, phone: e.target.value})); setSaveError(null) }}
+                  className="input text-sm w-full" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">NIF</label>
+                <input type="text" value={form.nif}
+                  onChange={e => { setForm(f => ({...f, nif: e.target.value})); setSaveError(null) }}
+                  className="input text-sm w-full" />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">NIF</label>
-              <input type="text" value={form.nif}
-                onChange={e => { setForm(f => ({...f, nif: e.target.value})); setSaveError(null) }}
-                className="input text-sm w-full" />
+            {/* Reservas concluídas + Reservas gratuitas (2 colunas) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Reservas concluídas</label>
+                <input type="number" min={0} value={form.reservas_concluidas}
+                  onChange={e => { setForm(f => ({...f, reservas_concluidas: Number(e.target.value)})); setSaveError(null) }}
+                  className="input text-sm w-full" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Gratuitas disponíveis</label>
+                <input type="number" min={0} value={form.reservas_gratuitas_disponiveis}
+                  onChange={e => { setForm(f => ({...f, reservas_gratuitas_disponiveis: Number(e.target.value)})); setSaveError(null) }}
+                  className="input text-sm w-full" />
+              </div>
             </div>
+            {/* Notas */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Notas internas</label>
               <textarea rows={3} value={form.notes}
@@ -311,7 +342,10 @@ export function ClientDetailModal({
             <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
               <ClientAvatar client={clientData} size={16} />
               <div>
-                <p className="font-semibold text-gray-900 text-base">{clientData.name}</p>
+                <p className="font-semibold text-gray-900 text-base">
+                  {clientData.name}
+                  <span className="ml-2 text-xs font-normal text-gray-400">#{clientData.id}</span>
+                </p>
                 {clientData.email && <p className="text-xs text-gray-500">{clientData.email}</p>}
               </div>
             </div>
@@ -464,6 +498,7 @@ export function ClientDetailModal({
           onChangeStatus={action => setResModal({ type: 'status', r: resModal.r, action })}
           onCancel={() => setResModal({ type: 'status', r: resModal.r, action: 'cancelada' })}
           onCheckout={() => setResModal({ type: 'checkout', r: resModal.r })}
+          onEditPayment={() => setResModal({ type: 'checkout', r: resModal.r, editMode: true })}
         />
       )}
       {resModal?.type === 'edit' && (
@@ -472,6 +507,9 @@ export function ClientDetailModal({
           invalidateKey="client"
           onClose={closeResModal}
           onCancelRequest={() => setResModal({ type: 'status', r: resModal.r, action: 'cancelada' })}
+          onOpenCheckout={pendingForm =>
+            setResModal({ type: 'checkout', r: resModal.r, editMode: false })
+          }
         />
       )}
       {resModal?.type === 'status' && (
@@ -487,6 +525,7 @@ export function ClientDetailModal({
           reservation={resModal.r}
           invalidateKey="client"
           onClose={closeResModal}
+          editMode={resModal.editMode ?? false}
         />
       )}
     </>

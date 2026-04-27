@@ -1,6 +1,6 @@
 import { authenticateAdmin } from '../../../utils/auth.js'
 import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from '../../../utils/response.js'
-import { sanitize, isValidNif } from '../../../utils/validators.js'
+import { sanitize } from '../../../utils/validators.js'
 
 export async function onRequest(context) {
   const { request, env, params } = context
@@ -18,6 +18,7 @@ export async function onRequest(context) {
         env.DB.prepare(
           `SELECT id, nome AS name, email, telefone AS phone, nif,
                   foto_perfil AS photo_url, reservas_concluidas,
+                  reservas_gratuitas_disponiveis,
                   next_appointment_date, last_appointment_date, notas AS notes, criado_em AS created_at
            FROM clientes WHERE id = ?`
         ).bind(id).first(),
@@ -61,14 +62,35 @@ export async function onRequest(context) {
         vals.push(sanitize(body.phone ?? '', 50) || null)
       }
       if (body.nif !== undefined) {
-        const nifRaw = sanitize(String(body.nif ?? ''), 20)
-        if (!isValidNif(nifRaw)) return badRequest('NIF inválido')
-        updates.push('nif = ?')
-        vals.push(nifRaw ? Number(nifRaw) : null)
+        // Aceitar string vazia ou null para apagar o NIF
+        const nifStr = String(body.nif ?? '').trim()
+        if (nifStr === '' || body.nif === null) {
+          updates.push('nif = ?')
+          vals.push(null)
+        } else {
+          const nifNum = Number(nifStr)
+          if (!Number.isFinite(nifNum) || nifNum < 100000000 || nifNum > 999999999) {
+            return badRequest('NIF inválido')
+          }
+          updates.push('nif = ?')
+          vals.push(nifNum)
+        }
       }
       if (body.notes !== undefined) {
         updates.push('notas = ?')
-        vals.push(sanitize(body.notes ?? '', 2000) || null)
+        vals.push(body.notes === '' || body.notes === null ? null : sanitize(String(body.notes), 2000))
+      }
+      if (body.reservas_concluidas !== undefined) {
+        const v = parseInt(body.reservas_concluidas)
+        if (!Number.isFinite(v) || v < 0) return badRequest('Número de reservas concluídas inválido')
+        updates.push('reservas_concluidas = ?')
+        vals.push(v)
+      }
+      if (body.reservas_gratuitas_disponiveis !== undefined) {
+        const v = parseInt(body.reservas_gratuitas_disponiveis)
+        if (!Number.isFinite(v) || v < 0) return badRequest('Número de reservas gratuitas inválido')
+        updates.push('reservas_gratuitas_disponiveis = ?')
+        vals.push(v)
       }
 
       if (!updates.length) return badRequest('Nada para actualizar')
@@ -83,6 +105,7 @@ export async function onRequest(context) {
       const updated = await env.DB.prepare(
         `SELECT id, nome AS name, email, telefone AS phone, nif,
                 foto_perfil AS photo_url, reservas_concluidas,
+                reservas_gratuitas_disponiveis,
                 next_appointment_date, last_appointment_date, notas AS notes, criado_em AS created_at
          FROM clientes WHERE id = ?`
       ).bind(id).first()
