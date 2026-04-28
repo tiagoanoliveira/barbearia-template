@@ -30,13 +30,13 @@
       "name": "Reservar",
       "short_name": "Reservar",
       "url": "/reservar",
-      "icons": [{ "src": "/icons/logo-192px.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [{ "src": "/media/images/logos/logo-192px.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "O meu perfil",
       "short_name": "Perfil",
       "url": "/perfil",
-      "icons": [{ "src": "/icons/logo-192px.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [{ "src": "/media/images/logos/logo-192px.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }
