@@ -142,6 +142,13 @@ export default function ProfilePage() {
         phone: (user as any).phone ?? '',
         nif:   (user as any).nif   ?? '',
       }))
+      const photoUrl = (user as any).photo_url ?? null
+      if (photoUrl) {
+        localStorage.setItem('user_photo', photoUrl)
+      } else {
+        localStorage.removeItem('user_photo')
+      }
+      window.dispatchEvent(new Event('storage'))
     }
   }, [user])
 
@@ -200,7 +207,7 @@ export default function ProfilePage() {
     updateProfile.mutate(payload)
   }
 
-  const handleLogout = () => { localStorage.removeItem('user_token'); navigate('/login') }
+  const handleLogout = () => { localStorage.removeItem('user_token'); localStorage.removeItem('user_photo'); navigate('/login') }
   const field = (key: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [key]: e.target.value }))
 
@@ -220,6 +227,10 @@ export default function ProfilePage() {
       })
       const data = await res.json()
       if (data.success) {
+        if (data.data?.photo_url) {
+          localStorage.setItem('user_photo', data.data.photo_url)
+          window.dispatchEvent(new Event('storage'))
+        }
         qc.invalidateQueries({ queryKey: ['me'] })
       } else {
         setPhotoError(data.error ?? 'Erro ao fazer upload da foto.')
