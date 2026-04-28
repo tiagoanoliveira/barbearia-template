@@ -72,7 +72,7 @@ function useAdminNotifications() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const audio = new Audio('/media/notification.mp3')
+    const audio = new Audio('../../media/notification.mp3')
     audio.preload = 'auto'
     audioRef.current = audio
   }, [])
