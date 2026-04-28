@@ -9,6 +9,10 @@
  *
  * O Worker não consegue importar TypeScript/Vite do frontend, por isso
  * mantemos aqui uma cópia das constantes necessárias.
+ *
+ * ⚠️  NÃO exportar `new Date()` nem `Date.now()` como constantes de topo:
+ *     são avaliadas em build-time pelo bundler (esbuild/wrangler) e ficam
+ *     congeladas em 1970. Usar sempre `new Date()` inline dentro de funções.
  */
 
 export const SHOP = {
@@ -37,8 +41,9 @@ export const LOGO_URL = `${SHOP.baseUrl}${SHOP.logoPath}`
 /** Alt text do logo */
 export const LOGO_ALT = SHOP.name
 
-/** Ano corrente (recalculado em cada deploy) */
-export const CURRENT_YEAR = new Date().getFullYear()
+// NOTA: CURRENT_YEAR foi removido intencionalmente.
+// Usar `new Date().getFullYear()` directamente dentro das funções
+// para garantir que é avaliado em runtime (não em build-time).
 
 /**
  * Horário de funcionamento da barbearia.
@@ -67,11 +72,7 @@ export const WORKING_HOURS = {
  *
  * Semântica exacta:
  *   O cliente paga as primeiras (everyN - 1) reservas do ciclo.
- *   A everyN-ésima reserva concluída é GRATUITA (tr_fidelidade_increment dispara).
- *
- * Exemplo com everyN = 10:
- *   reservas_concluidas 1–9  → pagas normalmente
- *   reservas_concluidas = 10 → reservas_gratuitas_disponiveis += 1
+ *   Ao concluir a (everyN - 1)ª, a gratuita fica disponível para usar na everyN-ésima.
  *
  * ⚠️  SE ALTERAR everyN: actualizar TAMBÉM os triggers SQL
  *     tr_fidelidade_increment e tr_fidelidade_decrement no schema.sql
