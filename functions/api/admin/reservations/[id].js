@@ -1,4 +1,5 @@
 import { authenticateAdmin } from '../../../utils/auth.js'
+import { canAccessReservation } from '../../../utils/authz.js'
 import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from '../../../utils/response.js'
 import { sanitize, isValidDate, isValidTime, isValidId } from '../../../utils/validators.js'
 import {
@@ -39,6 +40,12 @@ export async function onRequest(context) {
   ).bind(id).first()
 
   if (!reservation) return notFound('Reserva não encontrada')
+
+  // Barbeiros só podem aceder às suas próprias reservas
+  if (!canAccessReservation(auth, reservation.barbeiro_id)) {
+    console.warn('admin/reservations/[id]: acesso negado', { role: auth.user?.role, barbeiro_id: auth.user?.barbeiro_id, reservaBarbeiroId: reservation.barbeiro_id })
+    return unauthorized('Sem permissões para aceder a esta reserva')
+  }
 
   if (request.method === 'GET') return ok(reservation)
 
