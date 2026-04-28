@@ -1,57 +1,71 @@
 /**
- * Utilitários de criptografia
- * - hashPassword / verifyPassword com PBKDF2 + fallback legacy SHA-256
- * - generateToken: token hex aleatório (síncrono via crypto.getRandomValues)
+ * funções de criptografia
+ * - hashPassword / verifyPassword: PBKDF2 + SHA-256 (compatível com barbearia-brooklyn)
+ * - generateToken: token hex aleatório
+ *
+ * ⚠️  IMPORTANTE: não alterar o algoritmo sem migrar as passwords existentes.
+ *     O salt é guardado como hex mas deve ser convertido para Uint8Array (bytes binários)
+ *     antes de ser passado ao PBKDF2. Usar enc.encode(saltHex) como salt é ERRADO
+ *     e gera hashes incompatíveis com o site antigo.
  */
 
-// ─── PBKDF2 helpers ───────────────────────────────────────────────────────────
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
 function bufToHex(buf) {
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
-async function pbkdf2Hash(password, saltHex) {
-  const enc      = new TextEncoder()
-  const keyMat   = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits'])
-  const bits     = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: enc.encode(saltHex), iterations: 100000, hash: 'SHA-256' },
+/** Converte string hex (ex: "a3f1...") para Uint8Array de bytes binários */
+function hexToBytes(hex) {
+  return new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b, 16)))
+}
+
+// ─── PBKDF2 ──────────────────────────────────────────────────────────────────
+
+async function pbkdf2Hash(password, saltBytes) {
+  const enc    = new TextEncoder()
+  const keyMat = await crypto.subtle.importKey(
+    'raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']
+  )
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: saltBytes, iterations: 100000, hash: 'SHA-256' },
     keyMat, 256
   )
   return bufToHex(bits)
 }
 
-// ─── Legacy SHA-256 (site antigo) ─────────────────────────────────────────────────
-async function legacySha256Hash(password, saltHex) {
-  const enc  = new TextEncoder()
-  const buf  = await crypto.subtle.digest('SHA-256', enc.encode(saltHex + password))
-  return bufToHex(buf)
-}
+// ─── exports públicos ─────────────────────────────────────────────────────────
 
-// ─── Exports ─────────────────────────────────────────────────────────────────────
+/**
+ * Gera hash de password no formato "saltHex:hashHex".
+ * Compatível com barbearia-brooklyn/functions/utils/crypto.js.
+ */
 export async function hashPassword(password) {
   const saltBuf = new Uint8Array(16)
   crypto.getRandomValues(saltBuf)
   const saltHex = bufToHex(saltBuf.buffer)
-  const hash    = await pbkdf2Hash(password, saltHex)
+  const hash    = await pbkdf2Hash(password, saltBuf)   // bytes binários, não a string hex
   return `${saltHex}:${hash}`
 }
 
+/**
+ * Verifica password contra hash guardado no formato "saltHex:hashHex".
+ * Compatível com barbearia-brooklyn/functions/utils/crypto.js.
+ */
 export async function verifyPassword(password, stored) {
   if (!stored || !password) return false
   const [saltHex, storedHash] = stored.split(':')
   if (!saltHex || !storedHash) return false
 
-  // Tentar PBKDF2 primeiro (novo esquema)
-  const pbkdf2 = await pbkdf2Hash(password, saltHex)
-  if (pbkdf2 === storedHash) return true
-
-  // Fallback: esquema legacy SHA-256(saltHex + password)
-  const legacy = await legacySha256Hash(password, saltHex)
-  return legacy === storedHash
+  const saltBytes = hexToBytes(saltHex)          // ← bytes binários, como o site antigo
+  const hash      = await pbkdf2Hash(password, saltBytes)
+  return hash === storedHash
 }
 
 /**
- * Gera um token hex aleatório de 32 bytes (64 caracteres).
- * Síncrono — não precisa de await.
+ * Gera token hex aleatório de 32 bytes (64 caracteres).
  */
 export function generateToken() {
   const buf = new Uint8Array(32)
