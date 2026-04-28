@@ -12,7 +12,7 @@ import Modal from '@/components/ui/Modal'
 import type { Reservation, ReservationStatus, Service, MeioPagamento } from '@/types'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
-// ─── Constantes partilhadas ───────────────────────────────────────────────────
+// ─── Constantes partilhadas ────────────────────────────────────────────────────────────
 export const STATUS_LABEL: Record<string, string> = {
   confirmada: 'Confirmada',
   concluida:  'Concluída',
@@ -24,7 +24,6 @@ export const STATUS_COLORS: Record<string, string> = {
 }
 
 // Cancelada não aparece aqui: cancelar deve sempre passar pelo ReservationStatusModal
-// para garantir motivo obrigatório e envio de email.
 export const EDIT_STATUSES: ReservationStatus[] = ['confirmada', 'concluida', 'faltou']
 
 const MEIO_OPTIONS: { value: MeioPagamento; label: string }[] = [
@@ -33,7 +32,7 @@ const MEIO_OPTIONS: { value: MeioPagamento; label: string }[] = [
   { value: 'outro',      label: '❓ Outro'       },
 ]
 
-// ─── ReservationDetailModal ───────────────────────────────────────────────────
+// ─── ReservationDetailModal ──────────────────────────────────────────────────────
 export function ReservationDetailModal({
   reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout, onEditPayment,
 }: {
@@ -116,7 +115,7 @@ export function ReservationDetailModal({
   )
 }
 
-// ─── ReservationEditModal ─────────────────────────────────────────────────────
+// ─── ReservationEditModal ───────────────────────────────────────────────────────────
 export function ReservationEditModal({
   reservation, invalidateKey, onClose, onCancelRequest, onOpenCheckout,
 }: {
@@ -124,7 +123,6 @@ export function ReservationEditModal({
   invalidateKey: string
   onClose: () => void
   onCancelRequest?: () => void
-  /** Chamado quando o status muda para 'concluida' — abre o CheckoutModal antes de guardar. */
   onOpenCheckout?: (pendingForm: Partial<Reservation & { sendEmail: boolean }>) => void
 }) {
   const qc = useQueryClient()
@@ -148,7 +146,6 @@ export function ReservationEditModal({
   }
 
   const handleSave = async () => {
-    // Se o status vai mudar para 'concluida', interceptar e abrir CheckoutModal primeiro
     if (form.status === 'concluida' && reservation.status !== 'concluida') {
       onOpenCheckout?.(form)
       return
@@ -157,7 +154,7 @@ export function ReservationEditModal({
     try {
       await reservationsApi.update(reservation.id, {
         barber_id: form.barber_id, service_id: form.service_id, status: form.status,
-        data_hora: form.data_hora, comentario: form.comentario, nota_privada: form.nota_privada,
+        data_hora: form.data_hora, nota_privada: form.nota_privada,
         send_email: form.sendEmail, service_duration: form.service_duration,
       })
       qc.invalidateQueries({ queryKey: [invalidateKey] })
@@ -192,65 +189,83 @@ export function ReservationEditModal({
         </div>
       }>
       <div className="space-y-3 text-sm">
+        {/* Cliente (read-only) */}
         <div className="bg-gray-50 rounded-lg px-3 py-2">
           <p className="text-xs text-gray-400 mb-0.5">Cliente</p>
           <p className="font-medium">{reservation.client_name}</p>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Estado</label>
-          <select
-            className="input text-sm w-full bg-white text-gray-900"
-            value={form.status ?? reservation.status}
-            onChange={e => handleStatusChange(e.target.value)}
-          >
-            {EDIT_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-            {isCancelled && <option value="cancelada" disabled>{STATUS_LABEL['cancelada']}</option>}
-          </select>
-          {form.status === 'concluida' && reservation.status !== 'concluida' && (
-            <p className="text-[10px] text-amber-600 mt-1">⚠️ Ao guardar será pedido o preenchimento do pagamento.</p>
-          )}
-          {!isCancelled && form.status !== 'concluida' && (
-            <p className="text-[10px] text-gray-400 mt-1">
-              Para cancelar usa o botão <span className="text-red-500">Cancelar reserva</span>.
-            </p>
-          )}
+
+        {/* Estado + Barbeiro */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Estado</label>
+            <select
+              className="input text-sm w-full bg-white text-gray-900"
+              value={form.status ?? reservation.status}
+              onChange={e => handleStatusChange(e.target.value)}
+            >
+              {EDIT_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+              {isCancelled && <option value="cancelada" disabled>{STATUS_LABEL['cancelada']}</option>}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
+            <select className="input text-sm w-full" value={form.barber_id ?? ''}
+              onChange={e => upd('barber_id', Number(e.target.value))}>
+              {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
-          <select className="input text-sm w-full" value={form.barber_id ?? ''}
-            onChange={e => upd('barber_id', Number(e.target.value))}>
-            {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+
+        {form.status === 'concluida' && reservation.status !== 'concluida' && (
+          <p className="text-[10px] text-amber-600">⚠️ Ao guardar será pedido o preenchimento do pagamento.</p>
+        )}
+        {!isCancelled && form.status !== 'concluida' && (
+          <p className="text-[10px] text-gray-400">
+            Para cancelar usa o botão <span className="text-red-500">Cancelar reserva</span>.
+          </p>
+        )}
+
+        {/* Serviço + Duração */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Serviço</label>
+            <select className="input text-sm w-full bg-white text-gray-900" value={form.service_id ?? ''}
+              onChange={e => handleServiceChange(Number(e.target.value))}>
+              {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Duração (min)</label>
+            <input type="number" min={5} step={5} className="input text-sm w-full"
+              value={form.service_duration ?? reservation.service_duration ?? 60}
+              onChange={e => upd('service_duration', Number(e.target.value))} />
+          </div>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Serviço</label>
-          <select className="input text-sm w-full bg-white text-gray-900" value={form.service_id ?? ''}
-            onChange={e => handleServiceChange(Number(e.target.value))}>
-            {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Duração (min)</label>
-          <input type="number" min={5} step={5} className="input text-sm w-full"
-            value={form.service_duration ?? reservation.service_duration ?? 60}
-            onChange={e => upd('service_duration', Number(e.target.value))} />
-        </div>
+
+        {/* Data e hora */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
           <input type="datetime-local" className="input text-sm w-full"
             value={(form.data_hora ?? '').substring(0,16)} min={nowLocal}
             onChange={e => upd('data_hora', e.target.value+':00')} />
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Nota do cliente</label>
-          <textarea rows={2} className="input text-sm w-full resize-none"
-            value={form.comentario ?? ''} onChange={e => upd('comentario', e.target.value)} />
-        </div>
+
+        {/* Nota do cliente (read-only se existir) */}
+        {hasMeaningfulReservationComment(reservation.comentario) && (
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Nota do cliente</p>
+            <p className="text-xs bg-gray-50 rounded-lg px-3 py-2 text-gray-700">{reservation.comentario}</p>
+          </div>
+        )}
+
+        {/* Nota privada */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Nota privada</label>
           <textarea rows={2} className="input text-sm w-full resize-none"
             value={form.nota_privada ?? ''} onChange={e => upd('nota_privada', e.target.value)} />
         </div>
+
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input type="checkbox" checked={!!form.sendEmail} onChange={e => upd('sendEmail', e.target.checked)} />
           <span>Reenviar email de confirmação ao cliente</span>
@@ -260,7 +275,7 @@ export function ReservationEditModal({
   )
 }
 
-// ─── ReservationStatusModal ───────────────────────────────────────────────────
+// ─── ReservationStatusModal ──────────────────────────────────────────────────────────
 export function ReservationStatusModal({
   reservation, action, invalidateKey, onClose,
 }: {
@@ -320,11 +335,7 @@ export function ReservationStatusModal({
   )
 }
 
-// ─── CheckoutModal ────────────────────────────────────────────────────────────
-// Usado tanto para o checkout inicial ("Chegou") como para editar o pagamento
-// de uma reserva já concluída, e também quando o ReservationEditModal
-// transita o status para 'concluida' — nesse caso recebe pendingEditForm
-// para guardar os restantes campos após o pagamento.
+// ─── CheckoutModal ────────────────────────────────────────────────────────────────
 export function CheckoutModal({
   reservation,
   invalidateKey,
@@ -335,14 +346,11 @@ export function CheckoutModal({
   reservation: Reservation
   invalidateKey: string
   onClose: () => void
-  /** true = estamos a editar o pagamento de uma reserva já concluída */
   editMode?: boolean
-  /** Campos do ReservationEditModal a guardar juntamente com o pagamento */
   pendingEditForm?: Partial<Reservation & { sendEmail: boolean }>
 }) {
   const qc = useQueryClient()
 
-  // Pré-preencher com os valores existentes se estivermos em modo edição
   const [meioPagamento, setMeioPagamento] = useState<MeioPagamento>(
     reservation.meio_pagamento ?? 'multibanco'
   )
@@ -384,14 +392,11 @@ export function CheckoutModal({
       }
 
       if (pendingEditForm) {
-        // Vindo do ReservationEditModal com status→concluida:
-        // guarda todos os campos do edit + o pagamento numa só chamada
         await reservationsApi.update(reservation.id, {
           barber_id:        pendingEditForm.barber_id,
           service_id:       pendingEditForm.service_id,
           status:           'concluida',
           data_hora:        pendingEditForm.data_hora,
-          comentario:       pendingEditForm.comentario,
           nota_privada:     pendingEditForm.nota_privada,
           send_email:       pendingEditForm.sendEmail,
           service_duration: pendingEditForm.service_duration,
@@ -428,7 +433,6 @@ export function CheckoutModal({
           {reservation.client_name} · {reservation.service_name}
         </div>
 
-        {/* Banner de reserva gratuita disponível */}
         {freeReservations > 0 && !editMode && (
           <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800">
             <span className="text-base">🎁</span>
@@ -438,7 +442,6 @@ export function CheckoutModal({
           </div>
         )}
 
-        {/* Meio de pagamento */}
         <div>
           <label className="block text-xs text-gray-500 mb-2">Meio de pagamento</label>
           <div className="flex flex-wrap gap-2">
@@ -456,7 +459,6 @@ export function CheckoutModal({
               </button>
             ))}
           </div>
-          {/* Botão de desconto de reserva gratuita */}
           {freeReservations > 0 && !editMode && (
             <button
               type="button"
@@ -471,7 +473,6 @@ export function CheckoutModal({
           )}
         </div>
 
-        {/* Valor cobrado — bloqueado a 0€ se oferta */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Valor cobrado (€)</label>
           <input
@@ -486,7 +487,6 @@ export function CheckoutModal({
           )}
         </div>
 
-        {/* Gorjeta */}
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" checked={temGorjeta} onChange={e => setTemGorjeta(e.target.checked)} className="rounded" />
           <span className="font-medium">🎁 Gorjeta?</span>
@@ -510,7 +510,6 @@ export function CheckoutModal({
           </div>
         )}
 
-        {/* Comentário de pagamento */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">
             Observações de pagamento
@@ -546,7 +545,7 @@ export function CheckoutModal({
   )
 }
 
-// ─── Helpers internos ─────────────────────────────────────────────────────────
+// ─── Helpers internos ──────────────────────────────────────────────────────────────
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">

@@ -5,8 +5,6 @@ import { adminApi } from '@/api/client'
 import type { ApiResponse } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface NotificationDto {
   id: number
   type: string
@@ -23,8 +21,6 @@ interface NotificationDto {
 
 interface NotificationsResponse extends ApiResponse<NotificationDto[]> {}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function getNotifIcon(type: string): string {
   const t = (type ?? '').toLowerCase()
   if (t.includes('cancel'))                       return '❌'
@@ -36,8 +32,6 @@ function getNotifIcon(type: string): string {
 function isoToLocalDateStr(iso: string): string {
   return iso.slice(0, 10)
 }
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 const SEEN_IDS_KEY = 'notif_seen_ids'
 
@@ -68,11 +62,12 @@ function useAdminNotifications() {
   const lastSeenIdsRef  = useRef<Set<number>>(loadSeenIds())
   const isFirstFetchRef = useRef(true)
 
-  // Audio: tenta usar media/notification.mp3; fallback para síntese Web Audio
+  // Audio: usa src/media/notification.mp3 (servido como /media/notification.mp3 pelo Vite)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const audio = new Audio('../../media/notification.mp3')
+    // Vite serve src/media como asset estático via import; usar URL pública direta
+    const audio = new Audio(new URL('/src/media/notification.mp3', import.meta.url).href)
     audio.preload = 'auto'
     audioRef.current = audio
   }, [])
@@ -82,7 +77,6 @@ function useAdminNotifications() {
     if (!audio) return
     audio.currentTime = 0
     audio.play().catch(() => {
-      // Fallback Web Audio se o ficheiro não existir ou autoplay for bloqueado
       try {
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
         const t = ctx.currentTime
@@ -107,7 +101,6 @@ function useAdminNotifications() {
     })
   }, [])
 
-  // Polling — apenas não lidas
   const fetchUnread = useCallback(async () => {
     const params = new URLSearchParams()
     params.set('unread', 'true')
@@ -121,7 +114,6 @@ function useAdminNotifications() {
 
     const data = res.data
     lastFetchAtRef.current = new Date().toISOString()
-
     const currentIds = new Set(data.map(n => n.id))
 
     if (isFirstFetchRef.current) {
@@ -167,14 +159,12 @@ function useAdminNotifications() {
     setNotifications(res.data)
   }, [barberId])
 
-  // Arranque + polling de 30s
   useEffect(() => {
     fetchUnread().catch(() => {})
     const interval = setInterval(() => fetchUnread().catch(() => {}), 30000)
     return () => clearInterval(interval)
   }, [fetchUnread])
 
-  // Auto-dismiss de cada toast ao fim de 10s
   useEffect(() => {
     if (toasts.length === 0) return
     const oldest = toasts[0]
@@ -201,7 +191,7 @@ function useAdminNotifications() {
         lastSeenIdsRef.current = new Set()
         saveSeenIds(new Set())
       }
-    } catch { /* silencioso */ }
+    } catch {}
   }, [])
 
   const markAsUnread = useCallback(async (id: number) => {
@@ -209,38 +199,19 @@ function useAdminNotifications() {
       await adminApi.patch('/api/admin/notifications', { id, unread: true })
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 0 } : n))
       await fetchUnread()
-    } catch { /* silencioso */ }
+    } catch {}
   }, [fetchUnread])
 
   const dismissToast = useCallback((id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id))
   }, [])
 
-  return {
-    notifications,
-    unreadCount,
-    toasts,
-    dismissToast,
-    fetchPanel,
-    markAsRead,
-    markAsUnread,
-  }
+  return { notifications, unreadCount, toasts, dismissToast, fetchPanel, markAsRead, markAsUnread }
 }
-
-// ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function NotificationBell() {
   const navigate = useNavigate()
-  const {
-    notifications,
-    unreadCount,
-    toasts,
-    dismissToast,
-    fetchPanel,
-    markAsRead,
-    markAsUnread,
-  } = useAdminNotifications()
-
+  const { notifications, unreadCount, toasts, dismissToast, fetchPanel, markAsRead, markAsUnread } = useAdminNotifications()
   const [open, setOpen] = useState(false)
 
   const handleOpenToggle = () => {
@@ -272,8 +243,8 @@ export default function NotificationBell() {
   return (
       <div className="relative flex items-center">
 
-        {/* ── Stack de toasts — canto superior direito, cresce para baixo ── */}
-        <div className="hidden sm:flex flex-col gap-2 fixed top-16 right-4 z-[220] items-end pointer-events-none">
+        {/* Toasts */}
+        <div className="hidden sm:flex flex-col gap-2 fixed top-16 right-4 z-[9000] items-end pointer-events-none">
           {toasts.map(t => (
               <div
                   key={t.id}
@@ -282,41 +253,29 @@ export default function NotificationBell() {
               >
                 <span className="text-xl flex-shrink-0 mt-0.5">{getNotifIcon(t.type)}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-gray-900 leading-snug line-clamp-2">
-                    {t.message}
-                  </p>
-                  {t.client_name && (
-                      <p className="text-[11px] text-gray-400 mt-0.5">{t.client_name}</p>
-                  )}
+                  <p className="text-[13px] font-medium text-gray-900 leading-snug line-clamp-2">{t.message}</p>
+                  {t.client_name && <p className="text-[11px] text-gray-400 mt-0.5">{t.client_name}</p>}
                 </div>
                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-1">
                   {t.reservation_id && (
-                      <button
-                          className="text-xs text-brand-600 hover:underline whitespace-nowrap font-medium"
-                          onClick={() => handleToastClick(t)}
-                      >
+                      <button className="text-xs text-brand-600 hover:underline whitespace-nowrap font-medium" onClick={() => handleToastClick(t)}>
                         Ver reserva
                       </button>
                   )}
-                  <button
-                      className="text-[11px] text-gray-400 hover:text-gray-600"
-                      onClick={() => dismissToast(t.id)}
-                  >
-                    Fechar
-                  </button>
+                  <button className="text-[11px] text-gray-400 hover:text-gray-600" onClick={() => dismissToast(t.id)}>Fechar</button>
                 </div>
               </div>
           ))}
         </div>
 
         <style>{`
-        @keyframes notifSlideIn {
-          from { opacity: 0; transform: translateY(-12px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+          @keyframes notifSlideIn {
+            from { opacity: 0; transform: translateY(-12px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
 
-        {/* ── Sino ── */}
+        {/* Sino */}
         <button
             type="button"
             className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
@@ -326,30 +285,23 @@ export default function NotificationBell() {
           <Bell size={18} className="text-gray-700" />
           {unreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-[10px] leading-4 text-white text-center font-semibold">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
           )}
         </button>
 
-        {/* ── Dropdown — fixed para não ficar atrás de elementos com z-index ── */}
+        {/* Painel de notificações — fixed com z-index alto para ficar sempre por cima */}
         {open && (
             <>
-              <div className="fixed inset-0 z-[200]" onClick={() => setOpen(false)} />
+              <div className="fixed inset-0 z-[8000]" onClick={() => setOpen(false)} />
               <div
-                className="fixed z-[210] w-80 bg-white border border-gray-200 rounded-xl shadow-xl text-xs overflow-hidden"
-                style={{
-                  top: '56px',
-                  right: '16px',
-                }}
+                  className="fixed w-80 bg-white border border-gray-200 rounded-xl shadow-xl text-xs overflow-hidden"
+                  style={{ top: '56px', right: '16px', zIndex: 8500 }}
               >
-
                 <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
                   <span className="font-semibold text-gray-800 text-[13px]">Notificações</span>
                   {notifications.some(n => !n.is_read) && (
-                      <button
-                          className="text-[11px] text-brand-600 hover:underline"
-                          onClick={() => markAsRead(null)}
-                      >
+                      <button className="text-[11px] text-brand-600 hover:underline" onClick={() => markAsRead(null)}>
                         Marcar todas como lidas
                       </button>
                   )}
@@ -357,47 +309,28 @@ export default function NotificationBell() {
 
                 <div className="max-h-96 overflow-y-auto divide-y divide-gray-50">
                   {notifications.length === 0 ? (
-                      <p className="px-3 py-5 text-gray-400 text-[11px] text-center">
-                        Sem notificações recentes.
-                      </p>
+                      <p className="px-3 py-5 text-gray-400 text-[11px] text-center">Sem notificações recentes.</p>
                   ) : (
                       notifications.map(n => {
                         const isUnread = !n.is_read
                         const created  = n.created_at ? new Date(n.created_at) : null
-                        const dateStr  = created
-                            ? created.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })
-                            : ''
-                        const timeStr  = created
-                            ? created.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
-                            : ''
-
+                        const dateStr  = created ? created.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' }) : ''
+                        const timeStr  = created ? created.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : ''
                         return (
-                            <div
-                                key={n.id}
-                                className={`flex items-start gap-2 px-3 py-2.5 transition-colors ${
-                                    isUnread ? 'bg-blue-50/40 hover:bg-blue-50/70' : 'hover:bg-gray-50'
-                                }`}
-                            >
-                      <span className="text-base flex-shrink-0 mt-0.5 select-none">
-                        {getNotifIcon(n.type)}
-                      </span>
-
-                              <button
-                                  className="min-w-0 flex-1 text-left"
-                                  onClick={() => handleClickNotification(n)}
-                              >
+                            <div key={n.id} className={`flex items-start gap-2 px-3 py-2.5 transition-colors ${
+                                isUnread ? 'bg-blue-50/40 hover:bg-blue-50/70' : 'hover:bg-gray-50'
+                            }`}>
+                              <span className="text-base flex-shrink-0 mt-0.5 select-none">{getNotifIcon(n.type)}</span>
+                              <button className="min-w-0 flex-1 text-left" onClick={() => handleClickNotification(n)}>
                                 <p className={`text-[11px] leading-snug line-clamp-2 ${
                                     isUnread ? 'text-gray-900 font-medium' : 'text-gray-500'
-                                }`}>
-                                  {n.message}
-                                </p>
+                                }`}>{n.message}</p>
                                 <p className="text-[10px] text-gray-400 mt-0.5">
                                   {dateStr && timeStr ? `${dateStr} · ${timeStr}` : ''}
                                   {n.client_name ? ` · ${n.client_name}` : ''}
                                   {n.is_read ? ' · lida' : ''}
                                 </p>
                               </button>
-
                               <button
                                   title={isUnread ? 'Marcar como lida' : 'Marcar como não lida'}
                                   className={`flex-shrink-0 mt-0.5 w-6 h-6 flex items-center justify-center rounded-full border transition-all ${
@@ -405,10 +338,7 @@ export default function NotificationBell() {
                                           ? 'border-gray-300 text-gray-300 hover:border-emerald-500 hover:text-emerald-500 hover:bg-emerald-50'
                                           : 'border-emerald-400 text-emerald-500 bg-emerald-50 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50'
                                   }`}
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    isUnread ? markAsRead(n.id) : markAsUnread(n.id)
-                                  }}
+                                  onClick={e => { e.stopPropagation(); isUnread ? markAsRead(n.id) : markAsUnread(n.id) }}
                               >
                                 {isUnread ? <Check size={11} /> : <RotateCcw size={11} />}
                               </button>

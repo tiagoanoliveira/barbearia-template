@@ -9,7 +9,6 @@ export async function onRequest(context) {
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
 
-  // Apenas superAdmin acede a estatísticas de pagamentos
   if (!isSuperAdmin(auth)) {
     console.warn('admin/pagamentos: acesso negado', { role: auth.user?.role })
     return unauthorized('Apenas superAdmin pode aceder a pagamentos')
@@ -39,11 +38,13 @@ export async function onRequest(context) {
 
     const { results: porBarbeiro } = await env.DB.prepare(`
       SELECT
-        b.nome            AS barbeiro_nome,
-        b.color           AS barbeiro_color,
-        COUNT(r.id)       AS total_reservas,
-        SUM(r.valor_pago) AS total_valor,
-        SUM(r.gorjeta)    AS total_gorjetas
+        b.nome                                              AS barbeiro_nome,
+        b.color                                             AS barbeiro_color,
+        COUNT(r.id)                                         AS total_reservas,
+        SUM(r.valor_pago)                                   AS total_valor,
+        SUM(r.gorjeta)                                      AS total_gorjetas,
+        SUM(CASE WHEN r.meio_pagamento = 'dinheiro'    THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_dinheiro,
+        SUM(CASE WHEN r.meio_pagamento = 'multibanco'  THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_multibanco
       FROM reservas r
       JOIN barbeiros b ON r.barbeiro_id = b.id
       WHERE r.status = 'concluida'
@@ -84,13 +85,14 @@ export async function onRequest(context) {
       SELECT
         r.id,
         r.data_hora,
-        c.nome        AS cliente_nome,
-        b.nome        AS barbeiro_nome,
-        s.nome        AS servico_nome,
+        c.nome                   AS cliente_nome,
+        b.nome                   AS barbeiro_nome,
+        s.nome                   AS servico_nome,
         r.valor_pago,
         r.meio_pagamento,
         r.gorjeta,
-        r.meio_gorjeta
+        r.meio_gorjeta,
+        r.comentario_pagamento
       FROM reservas r
       JOIN clientes  c ON r.cliente_id  = c.id
       JOIN barbeiros b ON r.barbeiro_id = b.id
