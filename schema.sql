@@ -213,22 +213,29 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_data_range ON daily_stats(data, barbe
 -- Parâmetro central: LOYALTY_EVERY_N (equivale a barberShopConfig.loyalty.everyN
 -- em src/config/theme.ts e LOYALTY.everyN em functions/utils/site-config.js).
 --
--- Semântica:
+-- Semântica CORRECTA:
 --   O cliente paga as primeiras (LOYALTY_EVERY_N - 1) reservas do ciclo.
---   A LOYALTY_EVERY_N-ésima reserva concluída é GRATUITA.
+--   Ao concluir a (LOYALTY_EVERY_N - 1)ª reserva, a gratuita fica DISPONÍVEL
+--   para ser descontada NA LOYALTY_EVERY_N-ésima reserva.
 --
 -- Exemplo com LOYALTY_EVERY_N = 10:
---   reservas_concluidas 1–9  → reserva normal
---   reservas_concluidas = 10 → reservas_gratuitas_disponiveis += 1
---   reservas_concluidas 11–19 → reserva normal
---   reservas_concluidas = 20 → reservas_gratuitas_disponiveis += 1  ...
+--   reservas_concluidas 1–8  → reservas normais, sem gratuita acumulada
+--   reservas_concluidas = 9  → reservas_gratuitas_disponiveis += 1  ← disponível!
+--   reservas_concluidas = 10 → a 10ª foi grátis; tr_fidelidade_usar desconta -1
+--   reservas_concluidas 11–18 → reservas normais
+--   reservas_concluidas = 19 → reservas_gratuitas_disponiveis += 1  ← disponível!
+--   ...
+--
+-- Fórmula usada nos triggers: (N + 1) / LOYALTY_EVERY_N
+--   N=8:  (8+1)/10 = 0   N=9:  (9+1)/10 = 1  → delta = +1 ✅
+--   N=18: (18+1)/10 = 1  N=19: (19+1)/10 = 2  → delta = +1 ✅
 --
 -- ⚠️  SE ALTERAR LOYALTY_EVERY_N: substituir o valor 10 abaixo em
 --     tr_fidelidade_increment e tr_fidelidade_decrement.
 --     O resto do código (frontend + site-config.js) usa o valor do config.
 -- ────────────────────────────────────────────────────────────────────────────
 
--- ── reservas_concluidas ─────────────────────────────────────────────────
+-- ── reservas_concluidas ─────────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_increment
 AFTER UPDATE ON reservas FOR EACH ROW
 WHEN NEW.status = 'concluida' AND OLD.status != 'concluida'
@@ -250,16 +257,13 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- ── reservas_gratuitas_disponiveis ───────────────────────────────────────
+-- ── reservas_gratuitas_disponiveis ───────────────────────────────────────────
 --
 -- ⚠️  LOYALTY_EVERY_N = 10 (alterar aqui se mudar o config)
 --
--- Incremento: quando reservas_concluidas sobe e atinge um múltiplo de
--- LOYALTY_EVERY_N, adiciona as gratuitas ganhas nesse salto.
--- Decremento: quando reservas_concluidas desce, remove as gratuitas
--- correspondentes aos múltiplos perdidos (mínimo 0).
--- NÃO toca em gratuitas adicionadas manualmente pelo admin acima
--- dos múltiplos (só garante MAX(0, ...)).
+-- Usa (reservas_concluidas + 1) / LOYALTY_EVERY_N para que a gratuita
+-- fique disponível AO CONCLUIR a (N-1)ª reserva, pronta a usar NA Nª.
+-- (ao contrário de N/LOYALTY_EVERY_N que só disponibiliza DEPOIS da Nª)
 
 CREATE TRIGGER IF NOT EXISTS tr_fidelidade_increment
 AFTER UPDATE ON clientes FOR EACH ROW
@@ -268,7 +272,7 @@ BEGIN
   UPDATE clientes
   SET reservas_gratuitas_disponiveis =
     reservas_gratuitas_disponiveis +
-    (NEW.reservas_concluidas / 10) - (OLD.reservas_concluidas / 10)
+    ((NEW.reservas_concluidas + 1) / 10) - ((OLD.reservas_concluidas + 1) / 10)
   WHERE id = NEW.id;
 END;
 
@@ -280,7 +284,7 @@ BEGIN
   SET reservas_gratuitas_disponiveis = MAX(
     0,
     reservas_gratuitas_disponiveis -
-      ((OLD.reservas_concluidas / 10) - (NEW.reservas_concluidas / 10))
+      (((OLD.reservas_concluidas + 1) / 10) - ((NEW.reservas_concluidas + 1) / 10))
   )
   WHERE id = NEW.id;
 END;
@@ -347,7 +351,7 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- ── daily_stats ─────────────────────────────────────────────────────────────────
+-- ── daily_stats ─────────────────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_daily_stats_insert
 AFTER INSERT ON reservas FOR EACH ROW
 BEGIN
@@ -408,7 +412,7 @@ END;
 -- MIGRATION (executar em instâncias existentes)
 -- ================================================
 -- ALTER TABLE clientes ADD COLUMN reservas_gratuitas_disponiveis INTEGER DEFAULT 0;
--- UPDATE clientes SET reservas_gratuitas_disponiveis = MAX(0, (reservas_concluidas / 10));
+-- UPDATE clientes SET reservas_gratuitas_disponiveis = MAX(0, (reservas_concluidas + 1) / 10);
 -- ALTER TABLE reservas ADD COLUMN comentario_pagamento TEXT DEFAULT NULL;
 
 -- ================================================
