@@ -1,173 +1,126 @@
 /**
  * vite-plugin-pwa-assets.ts
  *
- * Plugin Vite que gera sw.js, manifest.json e admin-manifest.json
- * dinamicamente a partir de src/config/theme.ts.
+ * Lê src/config/theme.ts em Node (build time / dev server) e:
+ *  - Injeta env vars VITE_SHOP_* para substituir placeholders no index.html
+ *  - Gera public/sw.js, public/manifest.json, public/admin-manifest.json
  *
- * Em build:  escreve os ficheiros em public/ antes do Vite copiar para dist/
- * Em dev:    serve os ficheiros via middleware HTTP
+ * NUNCA hardcode dados da barbearia aqui — tudo vem do theme.ts.
  */
 import type { Plugin, ViteDevServer } from 'vite'
 import fs   from 'node:fs'
 import path from 'node:path'
-import { createRequire } from 'node:module'
 
-// ─── Lê theme.ts via require dinâmico em tempo de build ────────────────────
-// O plugin corre em Node, não no browser — podemos importar o TS
-// através do ts-node/register que o Vite já tem no contexto.
-// Como fallback seguro, lemos os valores do ficheiro source directamente.
-function readThemeValues(root: string): {
-  name: string
-  shortName: string
+// ─── Lê os valores relevantes do theme.ts via regex simples ──────────────────
+// (O plugin corre em Node antes do Vite processar o TS, por isso usamos fs.)
+export interface ThemeValues {
+  name:        string
+  shortName:   string
   description: string
-  themeColor: string
-  cacheName: string
-} {
-  const themePath = path.join(root, 'src/config/theme.ts')
-  const src = fs.readFileSync(themePath, 'utf-8')
+  themeColor:  string
+  cacheName:   string
+}
 
-  function extract(field: string): string {
-    const m = src.match(new RegExp(`${field}:\\s*'([^']+)'`))
-    return m ? m[1] : ''
+export function readThemeValues(root: string): ThemeValues {
+  const src = fs.readFileSync(path.join(root, 'src/config/theme.ts'), 'utf-8')
+
+  // Extrai campos simples: field: 'value'
+  const field = (key: string) => {
+    const m = src.match(new RegExp(`\\b${key}:\\s*'([^']+)'`))
+    return m?.[1] ?? ''
   }
 
-  const name        = extract('name')
-  const description = extract('description')
-  const primary500  = extract('500') // primeiro match é primary.500
+  // primary[500] está dentro do bloco themeConfig.primary — apanha o primeiro
+  // '500': '#xxxxxx' que aparecer no ficheiro
+  const colorMatch = src.match(/'500':\s*'(#[0-9a-fA-F]{6})'/)
+  const themeColor = colorMatch?.[1] ?? '#16a34a'
 
-  // short_name: primeiros 12 chars do name, sem espaços extras
-  const shortName = name.split(' ').slice(-1)[0] ?? name
+  const name      = field('name')
+  // short_name = última palavra do nome (ex: "Brooklyn Barbearia" → "Brooklyn")
+  const shortName = name.split(/\s+/).filter(Boolean)[0] ?? name
 
   return {
     name,
     shortName,
-    description,
-    themeColor: primary500 || '#16a34a',
-    cacheName:  name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    description: field('description'),
+    themeColor,
+    cacheName: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
   }
 }
 
-function buildManifest(
-  theme: ReturnType<typeof readThemeValues>,
-  isAdmin: boolean,
-): string {
-  const manifest = {
-    name:             isAdmin ? `${theme.name} Admin` : theme.name,
-    short_name:       isAdmin ? 'Admin' : theme.shortName,
-    description:      isAdmin
-      ? `Painel de administração — ${theme.name}`
-      : theme.description,
+// ─── Conteúdo gerado ─────────────────────────────────────────────────────────
+
+function buildManifest(t: ThemeValues, isAdmin: boolean): string {
+  const obj = {
+    name:             isAdmin ? `${t.name} Admin` : t.name,
+    short_name:       isAdmin ? 'Admin' : t.shortName,
+    description:      isAdmin ? `Painel de administração — ${t.name}` : t.description,
     start_url:        isAdmin ? '/admin' : '/',
     scope:            isAdmin ? '/admin' : '/',
     display:          'standalone',
     orientation:      'portrait-primary',
     background_color: '#0a0a0a',
-    theme_color:      theme.themeColor,
+    theme_color:      t.themeColor,
     lang:             'pt',
     icons: [
-      {
-        src:     '/media/images/logos/logo-192px.png',
-        sizes:   '192x192',
-        type:    'image/png',
-        purpose: 'any',
-      },
-      {
-        src:     '/media/images/logos/logo-512px.png',
-        sizes:   '512x512',
-        type:    'image/png',
-        purpose: 'any maskable',
-      },
+      { src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/media/images/logos/logo-512px.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
     ],
     screenshots: [],
     categories:  ['lifestyle', 'health'],
     shortcuts: isAdmin
-      ? [
-          {
-            name:       'Dashboard',
-            short_name: 'Dashboard',
-            url:        '/admin',
-            icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }],
-          },
-        ]
+      ? [{ name: 'Dashboard', short_name: 'Dashboard', url: '/admin',
+           icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }] }]
       : [
-          {
-            name:       'Reservar',
-            short_name: 'Reservar',
-            url:        '/reservar',
-            icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }],
-          },
-          {
-            name:       'O meu perfil',
-            short_name: 'Perfil',
-            url:        '/perfil',
-            icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }],
-          },
+          { name: 'Reservar',      short_name: 'Reservar', url: '/reservar',
+            icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }] },
+          { name: 'O meu perfil', short_name: 'Perfil',   url: '/perfil',
+            icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }] },
         ],
   }
-  return JSON.stringify(manifest, null, 2) + '\n'
+  return JSON.stringify(obj, null, 2) + '\n'
 }
 
-function buildSW(theme: ReturnType<typeof readThemeValues>): string {
-  const c = theme.cacheName
+function buildSW(t: ThemeValues): string {
   return `/**
- * Service Worker — ${theme.name} PWA
- * Gerado automaticamente por vite-plugin-pwa-assets.ts
- * NÃO editar manualmente — editar src/config/theme.ts
- *
- * Estratégias de cache:
- *  - Cache-first  → assets estáticos (JS, CSS, imagens, fontes)
- *  - Network-first → chamadas à API (/api/*)
- *  - Network-first → navegação HTML (SPA shell)
+ * Service Worker — ${t.name} PWA
+ * Gerado automaticamente por vite-plugin-pwa-assets.ts a partir de src/config/theme.ts.
+ * NÃO editar manualmente.
  */
 
 const CACHE_VERSION = 'v1'
-const STATIC_CACHE  = \`${c}-static-\${CACHE_VERSION}\`
-const API_CACHE     = \`${c}-api-\${CACHE_VERSION}\`
+const STATIC_CACHE  = '${t.cacheName}-static-v1'
+const API_CACHE     = '${t.cacheName}-api-v1'
 
-const PRECACHE_URLS = [
-  '/',
-  '/offline.html',
-]
+const PRECACHE_URLS = ['/', '/offline.html']
 
-// ── Install ───────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) =>
-      cache.addAll(PRECACHE_URLS).catch((err) => {
-        console.warn('[SW] Precache falhou:', err)
-      })
-    ).then(() => self.skipWaiting())
+    caches.open(STATIC_CACHE)
+      .then((cache) => cache.addAll(PRECACHE_URLS).catch((e) => console.warn('[SW] Precache:', e)))
+      .then(() => self.skipWaiting())
   )
 })
 
-// ── Activate ──────────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => k !== STATIC_CACHE && k !== API_CACHE)
-          .map((k) => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys.filter((k) => k !== STATIC_CACHE && k !== API_CACHE).map((k) => caches.delete(k))
+      ))
+      .then(() => self.clients.claim())
   )
 })
 
-// ── Fetch ─────────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
-
-  // Ignorar extensões de browser e requests não-HTTP
   if (!url.protocol.startsWith('http')) return
 
-  // API → network-first, cache de curta duração (stale-while-revalidate)
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirst(request, API_CACHE))
     return
   }
-
-  // Assets estáticos (JS, CSS, imagens, fontes, ícones) → cache-first
   if (
     request.destination === 'script' ||
     request.destination === 'style'  ||
@@ -179,8 +132,6 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(cacheFirst(request, STATIC_CACHE))
     return
   }
-
-  // Navegação HTML (SPA) → network-first, fallback para /
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() =>
@@ -189,35 +140,23 @@ self.addEventListener('fetch', (event) => {
     )
     return
   }
-
-  // Tudo o resto → network-first
   event.respondWith(networkFirst(request, STATIC_CACHE))
 })
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request)
   if (cached) return cached
   try {
     const response = await fetch(request)
-    if (response.ok) {
-      const cache = await caches.open(cacheName)
-      cache.put(request, response.clone())
-    }
+    if (response.ok) { const cache = await caches.open(cacheName); cache.put(request, response.clone()) }
     return response
-  } catch {
-    return new Response('Offline', { status: 503 })
-  }
+  } catch { return new Response('Offline', { status: 503 }) }
 }
 
 async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request)
-    if (response.ok && request.method === 'GET') {
-      const cache = await caches.open(cacheName)
-      cache.put(request, response.clone())
-    }
+    if (response.ok && request.method === 'GET') { const cache = await caches.open(cacheName); cache.put(request, response.clone()) }
     return response
   } catch {
     const cached = await caches.match(request)
@@ -227,51 +166,88 @@ async function networkFirst(request, cacheName) {
 `
 }
 
+// ─── Plugin ───────────────────────────────────────────────────────────────────
+
 export default function pwaAssetsPlugin(): Plugin {
   let rootDir = process.cwd()
 
+  function write(root: string) {
+    const t      = readThemeValues(root)
+    const pubDir = path.join(root, 'public')
+    fs.writeFileSync(path.join(pubDir, 'sw.js'),               buildSW(t))
+    fs.writeFileSync(path.join(pubDir, 'manifest.json'),       buildManifest(t, false))
+    fs.writeFileSync(path.join(pubDir, 'admin-manifest.json'), buildManifest(t, true))
+    console.log(`[pwa-assets] "${t.name}" | theme_color ${t.themeColor} | cache "${t.cacheName}-*"`)
+    return t
+  }
+
   return {
-    name: 'vite-plugin-pwa-assets',
+    name:    'vite-plugin-pwa-assets',
     enforce: 'pre',
 
     configResolved(config) {
       rootDir = config.root
     },
 
-    // ── Build: escreve os ficheiros em public/ ─────────────────────────────
-    buildStart() {
-      const theme  = readThemeValues(rootDir)
-      const pubDir = path.join(rootDir, 'public')
-
-      fs.writeFileSync(path.join(pubDir, 'sw.js'),               buildSW(theme))
-      fs.writeFileSync(path.join(pubDir, 'manifest.json'),       buildManifest(theme, false))
-      fs.writeFileSync(path.join(pubDir, 'admin-manifest.json'), buildManifest(theme, true))
-
-      console.log(`[pwa-assets] Gerado sw.js + manifests para "${theme.name}" (${theme.themeColor})`)
+    // Injeta env vars para substituição no index.html (transformIndexHtml)
+    config(_, env) {
+      // Em modo serve o root ainda não está resolvido — usamos cwd
+      const root = rootDir || process.cwd()
+      try {
+        const t = readThemeValues(root)
+        return {
+          define: {
+            'import.meta.env.VITE_SHOP_NAME':        JSON.stringify(t.name),
+            'import.meta.env.VITE_SHOP_SHORT_NAME':  JSON.stringify(t.shortName),
+            'import.meta.env.VITE_SHOP_DESCRIPTION': JSON.stringify(t.description),
+            'import.meta.env.VITE_THEME_COLOR':      JSON.stringify(t.themeColor),
+          },
+        }
+      } catch { return {} }
     },
 
-    // ── Dev server: serve via middleware HTTP ──────────────────────────────
+    // Build: gera os ficheiros antes do Vite copiar public/ para dist/
+    buildStart() {
+      write(rootDir)
+    },
+
+    // Dev server: serve os 3 ficheiros dinamicamente (reflecte mudanças no theme.ts sem reiniciar)
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
-        const theme = readThemeValues(rootDir)
-
-        if (req.url === '/sw.js') {
-          res.setHeader('Content-Type', 'application/javascript')
-          res.end(buildSW(theme))
+        const url = req.url?.split('?')[0]
+        if (url === '/sw.js') {
+          const t = readThemeValues(rootDir)
+          res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+          res.setHeader('Cache-Control', 'no-store')
+          res.end(buildSW(t))
           return
         }
-        if (req.url === '/manifest.json') {
-          res.setHeader('Content-Type', 'application/manifest+json')
-          res.end(buildManifest(theme, false))
+        if (url === '/manifest.json') {
+          const t = readThemeValues(rootDir)
+          res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8')
+          res.setHeader('Cache-Control', 'no-store')
+          res.end(buildManifest(t, false))
           return
         }
-        if (req.url === '/admin-manifest.json') {
-          res.setHeader('Content-Type', 'application/manifest+json')
-          res.end(buildManifest(theme, true))
+        if (url === '/admin-manifest.json') {
+          const t = readThemeValues(rootDir)
+          res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8')
+          res.setHeader('Cache-Control', 'no-store')
+          res.end(buildManifest(t, true))
           return
         }
         next()
       })
+    },
+
+    // index.html: substitui os placeholders %VITE_SHOP_*%
+    transformIndexHtml(html) {
+      const t = readThemeValues(rootDir)
+      return html
+        .replace(/%VITE_SHOP_NAME%/g,        t.name)
+        .replace(/%VITE_SHOP_SHORT_NAME%/g,  t.shortName)
+        .replace(/%VITE_SHOP_DESCRIPTION%/g, t.description)
+        .replace(/%VITE_THEME_COLOR%/g,      t.themeColor)
     },
   }
 }

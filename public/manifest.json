@@ -1,23 +1,7 @@
 {
-  "_note": "Gerado por vite-plugin-pwa-assets.ts a partir de src/config/theme.ts. NÃO editar manualmente.",
-  "name": "Brooklyn Barbearia",
-  "short_name": "Brooklyn",
-  "description": "Barbearia premium no Porto. Reserva online rápida e fácil.",
-  "start_url": "/",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#0a0a0a",
-  "theme_color": "#16a34a",
-  "lang": "pt",
-  "icons": [
-    { "src": "/media/images/logos/logo-192px.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/media/images/logos/logo-512px.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
-  ],
-  "screenshots": [],
-  "categories": ["lifestyle", "health"],
-  "shortcuts": [
-    { "name": "Reservar",      "short_name": "Reservar", "url": "/reservar", "icons": [{ "src": "/media/images/logos/logo-192px.png", "sizes": "192x192", "type": "image/png" }] },
-    { "name": "O meu perfil", "short_name": "Perfil",   "url": "/perfil",   "icons": [{ "src": "/media/images/logos/logo-192px.png", "sizes": "192x192", "type": "image/png" }] }
-  ]
+  "_note": "Gerado automaticamente por vite-plugin-pwa-assets.ts. NÃO editar — editar src/config/theme.ts.",
+  "name": "",
+  "short_name": "",
+  "description": "",
+  "theme_color": ""
 }
