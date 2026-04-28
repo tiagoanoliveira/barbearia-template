@@ -12,7 +12,8 @@
     "noEmit": true,
     "strict": true,
     "noUnusedLocals": false,
-    "noUnusedParameters": false
+    "noUnusedParameters": false,
+    "types": ["node"]
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "vite-plugin-pwa-assets.ts"]
 }
