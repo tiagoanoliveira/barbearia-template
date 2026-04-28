@@ -20,7 +20,9 @@ const PRECACHE_URLS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) =>
-      cache.addAll(PRECACHE_URLS).catch(() => {/* offline.html can be missing */})
+      cache.addAll(PRECACHE_URLS).catch((err) => {
+        console.warn('[SW] Precache falhou:', err)
+      })
     ).then(() => self.skipWaiting())
   )
 })

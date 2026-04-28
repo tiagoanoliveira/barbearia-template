@@ -207,7 +207,11 @@ export default function ProfilePage() {
     updateProfile.mutate(payload)
   }
 
-  const handleLogout = () => { localStorage.removeItem('user_token'); localStorage.removeItem('user_photo'); navigate('/login') }
+  const handleLogout = () => {
+    localStorage.removeItem('user_token')
+    localStorage.removeItem('user_photo')
+    navigate('/login')
+  }
   const field = (key: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [key]: e.target.value }))
 
