@@ -41,10 +41,6 @@ export const LOGO_URL = `${SHOP.baseUrl}${SHOP.logoPath}`
 /** Alt text do logo */
 export const LOGO_ALT = SHOP.name
 
-// NOTA: CURRENT_YEAR foi removido intencionalmente.
-// Usar `new Date().getFullYear()` directamente dentro das funções
-// para garantir que é avaliado em runtime (não em build-time).
-
 /**
  * Horário de funcionamento da barbearia.
  * Espelho de barberShopConfig.workingHours em src/config/theme.ts.

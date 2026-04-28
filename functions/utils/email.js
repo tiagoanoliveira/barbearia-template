@@ -6,7 +6,7 @@
  * de functions/utils/site-config.js — edite apenas aí.
  */
 
-import { SHOP, LOGO_URL, LOGO_ALT, CURRENT_YEAR } from './site-config.js'
+import { SHOP, LOGO_URL, LOGO_ALT } from './site-config.js'
 
 /**
  * Verifica se um endereço de email é um placeholder sem contacto.
@@ -96,7 +96,7 @@ function shell(headerClass, headerTitle, body) {
   <div class="content">${body}</div>
   <div class="footer">
     <p style="font-size:12px;color:#718096">Este é um email automático, por favor não responda.</p>
-    <p>&copy; ${CURRENT_YEAR} ${SHOP.name} &ndash; Todos os direitos reservados.
+    <p>&copy; ${new Date().getFullYear()} ${SHOP.name} &ndash; Todos os direitos reservados.
        Feito com &#129820; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
   </div>
 </div></div></body></html>`

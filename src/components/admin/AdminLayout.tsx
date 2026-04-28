@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import { ROUTES } from '@/config/routes'
 import { useAdminMe } from '@/hooks/useAdminUser'
+import { useBranding } from '@/hooks/useBranding'
 
 const pageTitles: Record<string, { title: string; subtitle?: string }> = {
   '/admin/dashboard':          { title: 'Dashboard',          subtitle: 'Visão geral do negócio' },

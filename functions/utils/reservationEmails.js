@@ -16,7 +16,7 @@ import {
   buildReservationConfirmationEmail,
   buildReservationCancellationEmail,
 } from './email.js'
-import { SHOP, LOGO_URL, LOGO_ALT, CURRENT_YEAR, EMAIL_SUBJECTS } from './site-config.js'
+import { SHOP, LOGO_URL, LOGO_ALT, EMAIL_SUBJECTS } from './site-config.js'
 
 const RESEND_EMAILS_URL = 'https://api.resend.com/emails'
 
@@ -318,7 +318,7 @@ function buildReminderHtml({ clientName, data, hora, serviceName, barberName, re
   </div>
   <div class="footer">
     <p style="font-size:12px;color:#718096">Este é um email automático, por favor não responda.</p>
-    <p>&copy; ${CURRENT_YEAR} ${SHOP.name} &ndash; Todos os direitos reservados.
+    <p>&copy; ${new Date().getFullYear()} ${SHOP.name} &ndash; Todos os direitos reservados.
        Feito com &#129820; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
   </div>
 </div></div></body></html>`
