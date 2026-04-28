@@ -98,7 +98,7 @@ export const barberShopConfig = {
   // Quando false, toda a UI de fidelização fica oculta.
   loyalty: {
     /** Activar sistema de fidelização */
-    enabled: false,
+    enabled: true,
     /**
      * De quantas em quantas reservas CONCLUÍDAS o cliente ganha
      * um corte gratuito.
