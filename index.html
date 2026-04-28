@@ -7,12 +7,33 @@
     <!-- Título e favicon sobrescritos em runtime pelo hook useBranding -->
     <title>Barbearia</title>
     <meta name="description" content="Barbearia — Reservas Online" />
+    <!-- PWA manifest (dinâmico: /admin/* usa admin-manifest.json) -->
+    <link rel="manifest" href="/manifest.json" id="pwa-manifest" />
+    <meta name="theme-color" content="#16a34a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Brooklyn" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Injeta o manifest correcto antes que o browser o leia
+      ;(function () {
+        if (window.location.pathname.startsWith('/admin')) {
+          var el = document.getElementById('pwa-manifest')
+          if (el) el.setAttribute('href', '/admin-manifest.json')
+          var tm = document.querySelector('meta[name="theme-color"]')
+          if (tm) tm.setAttribute('content', '#0f172a')
+          var atitle = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+          if (atitle) atitle.setAttribute('content', 'Brooklyn Admin')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -26,6 +26,8 @@ function getProfilePicture(): string | null {
   const storage = getSafeStorage()
   if (!storage) return null
   try {
+    const stored = storage.getItem('user_photo')
+    if (stored) return stored
     const token = storage.getItem('user_token')
     if (!token) return null
     const payload = JSON.parse(atob(token.split('.')[1]))
@@ -56,6 +58,8 @@ const LogoMark = memo(function LogoMark() {
 const Navbar = memo(function Navbar() {
   const [open, setOpen]         = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [loggedIn, setLoggedIn] = useState(() => isLoggedIn())
+  const [picture, setPicture]   = useState(() => getProfilePicture())
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -67,10 +71,21 @@ const Navbar = memo(function Navbar() {
 
   useEffect(() => setOpen(false), [location])
 
+  useEffect(() => {
+    const syncAuth = () => {
+      setLoggedIn(isLoggedIn())
+      setPicture(getProfilePicture())
+    }
+    window.addEventListener('storage', syncAuth)
+    window.addEventListener('focus', syncAuth)
+    return () => {
+      window.removeEventListener('storage', syncAuth)
+      window.removeEventListener('focus', syncAuth)
+    }
+  }, [])
+
   const isHome      = location.pathname === '/'
   const transparent = isHome && !scrolled && !open
-  const loggedIn    = isLoggedIn()
-  const picture     = getProfilePicture()
 
   const handleProfile = () =>
     loggedIn ? navigate('/perfil') : navigate('/login?redirect=/perfil')
@@ -85,7 +100,8 @@ const Navbar = memo(function Navbar() {
           }>
           {picture
             ? <img src={picture} alt="perfil" className="w-7 h-7 rounded-full object-cover ring-2 ring-primary-500"
-                   loading="eager" width={28} height={28} />
+                   loading="eager" width={28} height={28}
+                   onError={() => setPicture(null)} />
             : <div className="w-7 h-7 rounded-full bg-primary-500/20 border border-primary-500/50 flex items-center justify-center">
                 <User size={14} className="text-primary-400" />
               </div>
