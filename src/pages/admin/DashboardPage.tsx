@@ -245,7 +245,7 @@ export default function DashboardPage() {
       {/* Comparar períodos */}
       <Card>
         <CardHeader title="Comparar períodos" subtitle="Analisa reservas por estado entre dois períodos" />
-        <div className="px-5 pb-4">
+        <div className="pb-4">
           <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3 grid gap-3">
             {/* Período A */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
@@ -292,7 +292,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 px-5 pb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 pb-4">
           {STATUS_CARDS.map(({ key, label, icon: Icon, color, deltaColor }) => {
             const aVal = totalsA[key]; const bVal = totalsB[key]; const delta = aVal - bVal
             return (
@@ -308,7 +308,7 @@ export default function DashboardPage() {
           })}
         </div>
 
-        <div className="px-5 pb-3 text-xs text-gray-500 flex flex-wrap gap-3">
+        <div className="pb-3 text-xs text-gray-500 flex flex-wrap gap-3">
           <span>{formatPeriodLabel(applied.periodAType)}: {periodA.start} → {periodA.end}</span>
           <span>{formatPeriodLabel(applied.periodBType)}: {periodB.start} → {periodB.end}</span>
         </div>
