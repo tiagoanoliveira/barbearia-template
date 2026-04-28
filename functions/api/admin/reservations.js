@@ -2,6 +2,7 @@ import { authenticateAdmin } from '../../utils/auth.js'
 import { ok, created, badRequest, unauthorized, serverError, corsOptions } from '../../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../../utils/validators.js'
 import { sendReservationConfirmation } from '../../utils/reservationEmails.js'
+import { isPlaceholderEmail } from '../../utils/email.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -159,8 +160,8 @@ export async function onRequest(context) {
 
       const reservaId = result.meta.last_row_id
 
-      // Envia email de confirmação + agenda lembrete (apenas se send_email=true e cliente tem email)
-      if (send_email && client?.email) {
+      // Envia email de confirmação (apenas se send_email=true, cliente tem email real)
+      if (send_email && client?.email && !isPlaceholderEmail(client.email)) {
         sendReservationConfirmation(context, {
           reservaId,
           clientEmail: client.email,

@@ -290,10 +290,6 @@ export function NewReservationForm({
         <input type="datetime-local" value={(form.data_hora ?? iso).substring(0, 16)} onChange={e => onChange('data_hora', `${e.target.value}:00`)} className="input text-sm w-full" />
       </div>
       <div>
-        <label className="block text-xs text-gray-500 mb-1">Nota do cliente (visível no email)</label>
-        <textarea rows={2} value={form.comentario ?? ''} onChange={e => onChange('comentario', e.target.value)} placeholder="Ex: prefere lado esquerdo..." className="input text-sm w-full resize-none" />
-      </div>
-      <div>
         <label className="block text-xs text-gray-500 mb-1">Nota privada do barbeiro (não visível ao cliente)</label>
         <textarea rows={2} value={form.nota_privada ?? ''} onChange={e => onChange('nota_privada', e.target.value)} placeholder="Apenas visível internamente..." className="input text-sm w-full resize-none" />
       </div>

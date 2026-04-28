@@ -64,39 +64,47 @@ function useAdminNotifications() {
   const [unreadList, setUnreadList]       = useState<NotificationDto[]>([])
   const [toasts, setToasts]               = useState<NotificationDto[]>([])
 
-  const lastFetchAtRef = useRef<string | null>(null)
-  // Carrega os IDs vistos da sessionStorage para sobreviver ao refresh
-  const lastSeenIdsRef = useRef<Set<number>>(loadSeenIds())
+  const lastFetchAtRef  = useRef<string | null>(null)
+  const lastSeenIdsRef  = useRef<Set<number>>(loadSeenIds())
   const isFirstFetchRef = useRef(true)
 
-  // Audio
-  const audioCtxRef = useRef<AudioContext | null>(null)
+  // Audio: tenta usar media/notification.mp3; fallback para síntese Web Audio
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
-    return () => { audioCtxRef.current?.close().catch(() => {}) }
+    const audio = new Audio('/media/notification.mp3')
+    audio.preload = 'auto'
+    audioRef.current = audio
   }, [])
 
-  const playCashRegisterSound = useCallback(() => {
-    const ctx = audioCtxRef.current
-    if (!ctx) return
-    const t = ctx.currentTime
-    const beep = (time: number, freq: number, dur: number, type: OscillatorType = 'square') => {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = type
-      osc.frequency.setValueAtTime(freq, time)
-      gain.gain.setValueAtTime(0.0001, time)
-      gain.gain.exponentialRampToValueAtTime(0.4, time + 0.01)
-      gain.gain.exponentialRampToValueAtTime(0.0001, time + dur)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start(time)
-      osc.stop(time + dur + 0.02)
-    }
-    beep(t + 0.00, 880, 0.08)
-    beep(t + 0.09, 660, 0.08)
-    beep(t + 0.18, 990, 0.12, 'sawtooth')
+  const playNotificationSound = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.currentTime = 0
+    audio.play().catch(() => {
+      // Fallback Web Audio se o ficheiro não existir ou autoplay for bloqueado
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+        const t = ctx.currentTime
+        const beep = (time: number, freq: number, dur: number, type: OscillatorType = 'square') => {
+          const osc  = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.type = type
+          osc.frequency.setValueAtTime(freq, time)
+          gain.gain.setValueAtTime(0.0001, time)
+          gain.gain.exponentialRampToValueAtTime(0.4, time + 0.01)
+          gain.gain.exponentialRampToValueAtTime(0.0001, time + dur)
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.start(time)
+          osc.stop(time + dur + 0.02)
+        }
+        beep(t + 0.00, 880, 0.08)
+        beep(t + 0.09, 660, 0.08)
+        beep(t + 0.18, 990, 0.12, 'sawtooth')
+        setTimeout(() => ctx.close().catch(() => {}), 1000)
+      } catch {}
+    })
   }, [])
 
   // Polling — apenas não lidas
@@ -132,7 +140,7 @@ function useAdminNotifications() {
         const existing = new Set(prev.map(t => t.id))
         return [...prev, ...newItems.filter(n => !existing.has(n.id))]
       })
-      playCashRegisterSound()
+      playNotificationSound()
       lastSeenIdsRef.current = currentIds
       saveSeenIds(currentIds)
     } else if (data.length === 0) {
@@ -147,7 +155,7 @@ function useAdminNotifications() {
           return updated ? { ...n, is_read: 0 } : n
         })
     )
-  }, [barberId, playCashRegisterSound])
+  }, [barberId, playNotificationSound])
 
   const fetchPanel = useCallback(async () => {
     const params = new URLSearchParams()
@@ -166,7 +174,7 @@ function useAdminNotifications() {
     return () => clearInterval(interval)
   }, [fetchUnread])
 
-  // Auto-dismiss de cada toast ao fim de 10s (por ordem de chegada)
+  // Auto-dismiss de cada toast ao fim de 10s
   useEffect(() => {
     if (toasts.length === 0) return
     const oldest = toasts[0]
@@ -184,7 +192,6 @@ function useAdminNotifications() {
         await adminApi.patch('/api/admin/notifications', { id })
         setUnreadList(prev => prev.filter(n => n.id !== id))
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n))
-        // Remover dos seenIds para que se reaparecer seja tratado como novo
         lastSeenIdsRef.current.delete(id)
         saveSeenIds(lastSeenIdsRef.current)
       } else {
@@ -302,7 +309,6 @@ export default function NotificationBell() {
           ))}
         </div>
 
-        {/* ── Animação (injectada inline para não depender de tailwind.config) ── */}
         <style>{`
         @keyframes notifSlideIn {
           from { opacity: 0; transform: translateY(-12px); }
@@ -325,11 +331,17 @@ export default function NotificationBell() {
           )}
         </button>
 
-        {/* ── Dropdown ── */}
+        {/* ── Dropdown — fixed para não ficar atrás de elementos com z-index ── */}
         {open && (
             <>
               <div className="fixed inset-0 z-[200]" onClick={() => setOpen(false)} />
-              <div className="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-[210] text-xs overflow-hidden">
+              <div
+                className="fixed z-[210] w-80 bg-white border border-gray-200 rounded-xl shadow-xl text-xs overflow-hidden"
+                style={{
+                  top: '56px',
+                  right: '16px',
+                }}
+              >
 
                 <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
                   <span className="font-semibold text-gray-800 text-[13px]">Notificações</span>

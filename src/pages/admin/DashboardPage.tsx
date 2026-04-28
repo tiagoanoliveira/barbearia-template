@@ -161,17 +161,17 @@ function prepareComparison(rows: StatsComparison[], periodA: PeriodRange, period
   aDays.forEach(day => {
     const row = mapA.get(day)
     totalsA.confirmadas += row?.confirmadas ?? 0
-    totalsA.concluidas += row?.concluidas ?? 0
-    totalsA.canceladas += row?.canceladas ?? 0
-    totalsA.faltas += row?.faltas ?? 0
+    totalsA.concluidas  += row?.concluidas  ?? 0
+    totalsA.canceladas  += row?.canceladas  ?? 0
+    totalsA.faltas      += row?.faltas      ?? 0
   })
 
   bDays.forEach(day => {
     const row = mapB.get(day)
     totalsB.confirmadas += row?.confirmadas ?? 0
-    totalsB.concluidas += row?.concluidas ?? 0
-    totalsB.canceladas += row?.canceladas ?? 0
-    totalsB.faltas += row?.faltas ?? 0
+    totalsB.concluidas  += row?.concluidas  ?? 0
+    totalsB.canceladas  += row?.canceladas  ?? 0
+    totalsB.faltas      += row?.faltas      ?? 0
   })
 
   return { chartData, totalsA, totalsB }
@@ -237,12 +237,25 @@ export default function DashboardPage() {
     queryFn: () => reservationsApi.list({ perPage: 6, page: 1, barberId: effectiveBarberId }),
   })
 
-  const todayStats = todayRes?.data ?? []
+  const todayStats: any[] = todayRes?.data ?? []
   const compRows = compRes?.data ?? []
   const barbers = barbersRes?.data ?? []
   const recent = recentRes?.data?.items ?? []
   const { chartData, totalsA, totalsB } = prepareComparison(compRows, periodA, periodB)
   const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt })
+
+  // Totais do dia (soma de todos os barbeiros)
+  const todayTotals = useMemo(() => {
+    return todayStats.reduce(
+      (acc: { confirmadas: number; concluidas: number; canceladas: number; faltas: number }, bs: any) => ({
+        confirmadas: acc.confirmadas + (bs.confirmadas ?? 0),
+        concluidas:  acc.concluidas  + (bs.concluidas  ?? 0),
+        canceladas:  acc.canceladas  + (bs.canceladas  ?? 0),
+        faltas:      acc.faltas      + (bs.faltas      ?? 0),
+      }),
+      { confirmadas: 0, concluidas: 0, canceladas: 0, faltas: 0 }
+    )
+  }, [todayStats])
 
   const presetOptions: { value: RangePreset; label: string }[] = [
     { value: 'week', label: 'Esta semana' },
@@ -274,6 +287,44 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* ── Totais gerais de hoje ── */}
+      {!todayLoading && todayStats.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Resumo de hoje</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white rounded-2xl border border-blue-100 p-4 shadow-sm flex items-center gap-3">
+              <Clock size={20} className="text-blue-500 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500">Confirmadas</p>
+                <p className="text-2xl font-bold text-gray-900">{todayTotals.confirmadas}</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-emerald-100 p-4 shadow-sm flex items-center gap-3">
+              <CheckCircle2 size={20} className="text-emerald-500 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500">Concluídas</p>
+                <p className="text-2xl font-bold text-gray-900">{todayTotals.concluidas}</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-red-100 p-4 shadow-sm flex items-center gap-3">
+              <XCircle size={20} className="text-red-400 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500">Canceladas</p>
+                <p className="text-2xl font-bold text-gray-900">{todayTotals.canceladas}</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-amber-100 p-4 shadow-sm flex items-center gap-3">
+              <AlertCircle size={20} className="text-amber-400 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500">Faltas</p>
+                <p className="text-2xl font-bold text-gray-900">{todayTotals.faltas}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Detalhes por barbeiro ── */}
       <div>
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Hoje por barbeiro</h3>
         {todayLoading ? (
