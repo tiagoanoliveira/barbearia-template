@@ -9,6 +9,7 @@ import faviconSrc from '@/media/images/logos/logo-96px.png'
 
 // ─ Media da HomePage ──────────────────────────────────────────────────────
 import heroVideoSrc from '@/media/video/presentation.mp4'
+import videoBackground from '@/media/video/video_background.mp4'
 import aboutImgSrc  from '@/media/images/corte-cabelo-detalhe.png'
 import gallery1Src  from '@/media/images/brooklyn/Entrada.jpg'
 import gallery2Src  from '@/media/images/brooklyn/Cadeiras.jpg'
@@ -54,6 +55,7 @@ export const barberShopConfig = {
   media: {
     // Vídeo do hero (null para usar imagem de fallback)
     heroVideo: heroVideoSrc as string,
+    videoBackground: videoBackground as string,
     // Imagem da secção "Sobre"
     aboutImage: { src: aboutImgSrc as string, alt: 'Barbearia' },
     // Galeria — adicionar/remover entradas conforme necessário

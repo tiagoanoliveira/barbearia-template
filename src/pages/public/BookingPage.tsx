@@ -237,7 +237,7 @@ export default function BookingPage() {
   return (
     <div className="min-h-screen relative flex items-start justify-center pt-24 pb-16 px-4">
       <video className="fixed inset-0 w-full h-full object-cover -z-10"
-        autoPlay muted loop playsInline src="../../media/video/video_background.mp4" />
+        autoPlay muted loop playsInline src={barberShopConfig.media.videoBackground} />
       <div className={`fixed inset-0 -z-10 ${barberShopConfig.theme.bookingOverlay}`} />
 
       <div className="w-full max-w-xl">
