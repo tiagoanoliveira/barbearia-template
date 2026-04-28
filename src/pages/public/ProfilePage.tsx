@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { Client } from '@/types'
+import { barberShopConfig } from '@/config/theme'
 
 interface ProfileForm {
   name: string; email: string; phone: string; nif: string
@@ -166,7 +167,6 @@ export default function ProfilePage() {
       qc.invalidateQueries({ queryKey: ['me'] })
       setEditOpen(false)
       setFormError(null)
-      // Reset password fields visibility
       setShowCurrentPw(false)
       setShowNewPw(false)
       setShowConfirmPw(false)
@@ -284,9 +284,21 @@ export default function ProfilePage() {
   if (isLoading) return <div className="pt-24 flex justify-center py-20"><LoadingSpinner size="lg" /></div>
   if (!user)     return <Navigate to="/login?redirect=/perfil" replace />
 
+  // ── Lógica de fidelização ─────────────────────────────────────────────────
+  // everyN: de X em X reservas PAGAS a Nª é gratuita.
+  // Ex: everyN = 10 → a 10ª reserva paga é gratuita.
+  // O cliente paga 9 reservas normais; na 10ª apresenta o cartão.
+  // Ou seja:
+  //   - currentStamps = totalCompleted % everyN (reservas pagas no ciclo atual)
+  //   - stampsNeeded  = everyN - 1 (número de reservas pagas antes de ganhar a gratuita)
+  //   - isNextFree    = currentStamps === everyN - 1
+  //                     → após pagar (everyN-1) reservas, a próxima (everyN-ésima) é gratuita
+  const { everyN } = barberShopConfig.loyalty
+  const stampsNeeded   = everyN - 1          // células pagas antes da gratuita
   const totalCompleted = user.completed_reservations ?? 0
-  const currentStamps  = totalCompleted % 10
-  const isNextFree     = currentStamps === 9
+  const currentStamps  = totalCompleted % everyN   // quantas reservas pagas no ciclo atual
+  const isNextFree     = currentStamps === stampsNeeded
+  const faltam         = stampsNeeded - currentStamps
 
   return (
       <div className="pt-24 pb-16 min-h-screen bg-gray-950 text-white">
@@ -307,36 +319,53 @@ export default function ProfilePage() {
           </Link>
 
           {/* Cartão de fidelização */}
-          <Card>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Star size={16} className="text-amber-400" />
-                <h3 className="text-sm font-semibold text-gray-900">Cartão de fidelização</h3>
+          {barberShopConfig.loyalty.enabled && (
+            <Card>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Star size={16} className="text-amber-400" />
+                  <h3 className="text-sm font-semibold text-gray-900">Cartão de fidelização</h3>
+                </div>
+                <span className="text-xs text-gray-500">{totalCompleted} cortes concluídos</span>
               </div>
-              <span className="text-xs text-gray-500">{totalCompleted} cortes concluídos</span>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">O 10º corte é por conta da casa 🍻</p>
-            <div className="grid grid-cols-5 gap-2 mb-3 max-w-md mx-auto">
-              {Array.from({ length: 10 }).map((_, i) => {
-                const isFilled = i < currentStamps
-                const isGift   = i === 9
-                const isNext   = isGift && isNextFree
-                return (
-                    <div key={i} className={`flex items-center justify-center aspect-square rounded-2xl text-xs font-semibold border ${
-                        isGift
-                            ? isNext ? 'bg-amber-500 text-white border-amber-400 animate-pulse' : 'bg-amber-500/10 text-amber-400 border-amber-400/40'
-                            : isFilled ? 'bg-primary-500 text-white border-primary-500/80' : 'bg-white/5 text-gray-500 border-white/10'
-                    }`}>
-                      {isGift ? '10' : i + 1}
-                    </div>
-                )
-              })}
-            </div>
-            {isNextFree
-                ? <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">O teu próximo corte será gratuito. Apresenta este ecrã no pagamento para aplicar a oferta.</p>
-                : <p className="text-xs text-gray-500">Faltam <span className="font-semibold text-gray-700">{10 - currentStamps}</span> reservas para o próximo corte grátis.</p>
-            }
-          </Card>
+              {/* Descrição dinâmica baseada em everyN */}
+              <p className="text-xs text-gray-500 mb-3">O {everyN}º corte é por conta da casa 🍻</p>
+
+              {/*
+                Grelha com everyN células:
+                  - células 0 … everyN-2 → reservas pagas (stamps normais)
+                  - célula  everyN-1     → a reserva gratuita (presente 🎁)
+              */}
+              <div
+                className="grid gap-2 mb-3 max-w-md mx-auto"
+                style={{ gridTemplateColumns: `repeat(${Math.min(everyN, 5)}, minmax(0, 1fr))` }}
+              >
+                {Array.from({ length: everyN }).map((_, i) => {
+                  const isGiftSlot = i === everyN - 1
+                  const isFilled   = i < currentStamps
+                  const isActive   = isGiftSlot && isNextFree
+                  return (
+                      <div key={i} className={`flex items-center justify-center aspect-square rounded-2xl text-xs font-semibold border ${
+                          isGiftSlot
+                              ? isActive
+                                  ? 'bg-amber-500 text-white border-amber-400 animate-pulse'
+                                  : 'bg-amber-500/10 text-amber-400 border-amber-400/40'
+                              : isFilled
+                                  ? 'bg-primary-500 text-white border-primary-500/80'
+                                  : 'bg-white/5 text-gray-500 border-white/10'
+                      }`}>
+                        {isGiftSlot ? '🎁' : i + 1}
+                      </div>
+                  )
+                })}
+              </div>
+
+              {isNextFree
+                  ? <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">O teu próximo corte será gratuito. Apresenta este ecrã no pagamento para aplicar a oferta.</p>
+                  : <p className="text-xs text-gray-500">Faltam <span className="font-semibold text-gray-700">{faltam}</span> {faltam === 1 ? 'reserva' : 'reservas'} para o próximo corte grátis.</p>
+              }
+            </Card>
+          )}
 
           {/* Foto de perfil */}
           <Card>
@@ -471,7 +500,6 @@ export default function ProfilePage() {
                       </div>
                   ))}
 
-                  {/* Secção de password — só mostra se o utilizador já tem password */}
                   {hasPassword && (
                       <>
                         <hr className="border-gray-100" />
@@ -515,7 +543,6 @@ export default function ProfilePage() {
             </div>
         )}
 
-        {/* Modal definir password pela primeira vez */}
         {setPasswordOpen && (
             <SetPasswordModal
                 onClose={() => setSetPasswordOpen(false)}

@@ -63,10 +63,23 @@ export const WORKING_HOURS = {
  * Espelho de barberShopConfig.loyalty em src/config/theme.ts.
  *
  * enabled  — activar/desactivar em toda a aplicação
- * everyN   — de quantas em quantas reservas concluídas há um corte gratuito
+ * everyN   — de quantas em quantas reservas PAGAS (concluídas e não gratuitas) o cliente
+ *            ganha um corte gratuito.
  *
- * ⚠️  Se alterar everyN, actualizar também os triggers SQL
+ * Semântica exacta:
+ *   - O cliente paga as primeiras (everyN - 1) reservas do ciclo.
+ *   - A everyN-ésima é gratuita (reservas_gratuitas_disponiveis += 1).
+ *   - O ciclo recomeça após descontar a gratuita.
+ *
+ * Exemplo com everyN = 10:
+ *   Reservas pagas:  1, 2, 3, 4, 5, 6, 7, 8, 9  → reserva 10 é GRATUITA
+ *   Reservas pagas: 11,12,...,19                → reserva 20 é GRATUITA
+ *
+ * ⚠️  Se alterar everyN aqui, TAMBÉM é necessário actualizar os triggers SQL
  *     tr_fidelidade_increment e tr_fidelidade_decrement no schema.sql.
+ *     Nos triggers, a condição deve ser:
+ *       (new.reservas_concluidas % everyN) = 0
+ *     onde everyN é o valor aqui definido.
  */
 export const LOYALTY = {
   enabled: true,
@@ -86,3 +99,15 @@ export const EMAIL_SUBJECTS = {
   reservation:   `Reserva confirmada – ${SHOP.name}`,
   cancellation:  `Reserva cancelada – ${SHOP.name}`,
 }
+
+/**
+ * Derivados do sistema de fidelização usados no backend.
+ *
+ * stampsNeeded: número de reservas pagas (concluídas normais) antes de ganhar a gratuita.
+ *   = everyN - 1
+ *   Ex: everyN=10 → stampsNeeded=9 (paga 9, a 10ª é gratuita)
+ *
+ * Usar este valor nos endpoints que verificam se o cliente tem direito a gratuita
+ * e na UI de checkout (client_free_reservations > 0).
+ */
+export const LOYALTY_STAMPS_NEEDED = LOYALTY.everyN - 1
