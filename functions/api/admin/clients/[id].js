@@ -1,4 +1,5 @@
 import { authenticateAdmin } from '../../../utils/auth.js'
+import { isAdmin } from '../../../utils/authz.js'
 import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from '../../../utils/response.js'
 import { sanitize } from '../../../utils/validators.js'
 
@@ -8,6 +9,12 @@ export async function onRequest(context) {
 
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
+
+  // Barbeiros não têm acesso a dados individuais de clientes
+  if (!isAdmin(auth)) {
+    console.warn('admin/clients/[id]: acesso negado', { role: auth.user?.role })
+    return unauthorized('Sem permissões para aceder a clientes')
+  }
 
   const id = parseInt(params.id)
   if (!Number.isFinite(id) || id < 1) return badRequest('ID inválido')
