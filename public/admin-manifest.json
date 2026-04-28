@@ -1,4 +1,5 @@
 {
+  "_note": "Gerado por vite-plugin-pwa-assets.ts a partir de src/config/theme.ts. NÃO editar manualmente.",
   "name": "Brooklyn Admin",
   "short_name": "Admin",
   "description": "Painel de administração — Brooklyn Barbearia",
@@ -10,27 +11,12 @@
   "theme_color": "#16a34a",
   "lang": "pt",
   "icons": [
-    {
-      "src": "/media/images/logos/logo-192px.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/media/images/logos/logo-512px.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "/media/images/logos/logo-192px.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/media/images/logos/logo-512px.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "screenshots": [],
   "categories": ["lifestyle", "health"],
   "shortcuts": [
-    {
-      "name": "Dashboard",
-      "short_name": "Dashboard",
-      "url": "/admin",
-      "icons": [{ "src": "/media/images/logos/logo-192px.png", "sizes": "192x192", "type": "image/png" }]
-    }
+    { "name": "Dashboard", "short_name": "Dashboard", "url": "/admin", "icons": [{ "src": "/media/images/logos/logo-192px.png", "sizes": "192x192", "type": "image/png" }] }
   ]
 }
