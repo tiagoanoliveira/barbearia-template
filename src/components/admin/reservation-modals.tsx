@@ -527,7 +527,7 @@ export function CheckoutModal({
             }`}
             placeholder={
               meioPagamento === 'outro'
-                ? 'Ex.: Transferência MB Way pessoal, vale, etc.'
+                ? 'Ex.: Transferência MB Way pessoal, Prestação Serviço, etc.'
                 : 'Notas opcionais sobre o pagamento'
             }
             value={comentario}
