@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS reservas (
   -- ID do email de lembrete agendado na Resend (para poder cancelar / reagendar)
   resend_lembrete_id     TEXT,
 
-  -- ── Pagamento ──────────────────────────────────────────────────────────────
+  -- ── Pagamento ───────────────────────────────────────────────────────────────────────
   -- Meio de pagamento do serviço (null = ainda não pago / não registado)
   meio_pagamento         TEXT    DEFAULT NULL,
   -- Valor efectivamente pago em cêntimos (INTEGER evita erros de vírgula flutuante)
@@ -207,7 +207,28 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_data_range ON daily_stats(data, barbe
 -- TRIGGERS
 -- ================================================
 
--- ── reservas_concluidas ──────────────────────────────────────────────────────
+-- ────────────────────────────────────────────────────────────────────────────
+-- SISTEMA DE FIDELIZAÇÃO
+--
+-- Parâmetro central: LOYALTY_EVERY_N (equivale a barberShopConfig.loyalty.everyN
+-- em src/config/theme.ts e LOYALTY.everyN em functions/utils/site-config.js).
+--
+-- Semântica:
+--   O cliente paga as primeiras (LOYALTY_EVERY_N - 1) reservas do ciclo.
+--   A LOYALTY_EVERY_N-ésima reserva concluída é GRATUITA.
+--
+-- Exemplo com LOYALTY_EVERY_N = 10:
+--   reservas_concluidas 1–9  → reserva normal
+--   reservas_concluidas = 10 → reservas_gratuitas_disponiveis += 1
+--   reservas_concluidas 11–19 → reserva normal
+--   reservas_concluidas = 20 → reservas_gratuitas_disponiveis += 1  ...
+--
+-- ⚠️  SE ALTERAR LOYALTY_EVERY_N: substituir o valor 10 abaixo em
+--     tr_fidelidade_increment e tr_fidelidade_decrement.
+--     O resto do código (frontend + site-config.js) usa o valor do config.
+-- ────────────────────────────────────────────────────────────────────────────
+
+-- ── reservas_concluidas ─────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_increment
 AFTER UPDATE ON reservas FOR EACH ROW
 WHEN NEW.status = 'concluida' AND OLD.status != 'concluida'
@@ -229,15 +250,16 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- ── reservas_gratuitas_disponiveis ──────────────────────────────────────────
--- Quando reservas_concluidas sobe: adiciona as novas gratuitas ganhas
--- por progressão (ex: passou de 9 para 10 → ganha 1 gratuita).
+-- ── reservas_gratuitas_disponiveis ───────────────────────────────────────
 --
--- Quando reservas_concluidas desce: remove apenas as gratuitas que
--- foram ganhas por progressão nesse intervalo revertido.
--- NÃO há limite superior — o admin pode oferecer gratuitas extra
--- editando o campo directamente, e essas não são tocadas por este trigger.
--- O único limite é MAX(0, ...) para nunca ficar negativo.
+-- ⚠️  LOYALTY_EVERY_N = 10 (alterar aqui se mudar o config)
+--
+-- Incremento: quando reservas_concluidas sobe e atinge um múltiplo de
+-- LOYALTY_EVERY_N, adiciona as gratuitas ganhas nesse salto.
+-- Decremento: quando reservas_concluidas desce, remove as gratuitas
+-- correspondentes aos múltiplos perdidos (mínimo 0).
+-- NÃO toca em gratuitas adicionadas manualmente pelo admin acima
+-- dos múltiplos (só garante MAX(0, ...)).
 
 CREATE TRIGGER IF NOT EXISTS tr_fidelidade_increment
 AFTER UPDATE ON clientes FOR EACH ROW
@@ -278,7 +300,7 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- ── next / last appointment ───────────────────────────────────────────────────
+-- ── next / last appointment ──────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_reserva_insert_next_appointment
 AFTER INSERT ON reservas FOR EACH ROW
 WHEN NEW.status = 'confirmada' AND datetime(NEW.data_hora) > datetime('now')
@@ -325,7 +347,7 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- ── daily_stats ───────────────────────────────────────────────────────────────
+-- ── daily_stats ─────────────────────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_daily_stats_insert
 AFTER INSERT ON reservas FOR EACH ROW
 BEGIN

@@ -18,6 +18,10 @@ import { barberShopConfig } from '@/config/theme'
 
 const LOYALTY = barberShopConfig.loyalty
 
+// Número de reservas PAGAS antes de ganhar a gratuita.
+// Ex: everyN=10 → stampsNeeded=9 → após 9 pagas, a 10ª é gratuita.
+const STAMPS_NEEDED = LOYALTY.everyN - 1
+
 type ClientModalData = {
   id: number
   name: string
@@ -197,13 +201,12 @@ export function ClientDetailModal({
   const handleSave = async () => {
     setSaving(true); setSaveError(null)
     try {
-      // nif: string vazia → enviar '' para o backend apagar; número → converter
       const nifPayload = form.nif.trim() === '' ? '' : form.nif
       const res = await clientsApi.update(clientId, {
         name:  form.name,
         email: form.email,
         phone: form.phone,
-        nif:   nifPayload as unknown as number,  // backend aceita string vazia para apagar
+        nif:   nifPayload as unknown as number,
         notes: form.notes,
         reservas_concluidas: form.reservas_concluidas,
         reservas_gratuitas_disponiveis: form.reservas_gratuitas_disponiveis,
@@ -240,10 +243,14 @@ export function ClientDetailModal({
 
   const closeResModal = () => setResModal(null)
 
-  const concluded     = clientData?.reservas_concluidas ?? 0
-  const freeAvailable = clientData?.reservas_gratuitas_disponiveis ?? 0
+  const concluded       = clientData?.reservas_concluidas ?? 0
+  const freeAvailable   = clientData?.reservas_gratuitas_disponiveis ?? 0
   const progressInCycle = concluded % LOYALTY.everyN
-  const toNextFree = LOYALTY.everyN - progressInCycle
+  // Quantas reservas faltam para a próxima gratuita:
+  //   - Se progressInCycle === STAMPS_NEEDED, a próxima JA É gratuita (faltam 0 normais)
+  //   - Caso contrário, faltam STAMPS_NEEDED - progressInCycle
+  const isNextFree  = progressInCycle === STAMPS_NEEDED
+  const faltamNoCiclo = isNextFree ? 0 : STAMPS_NEEDED - progressInCycle
 
   if (!clientData) {
     return (
@@ -290,21 +297,18 @@ export function ClientDetailModal({
       >
         {editMode ? (
           <div className="space-y-3 text-sm">
-            {/* Nome */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Nome <span className="text-red-400">*</span></label>
               <input type="text" value={form.name}
                 onChange={e => { setForm(f => ({...f, name: e.target.value})); setSaveError(null) }}
                 className="input text-sm w-full" />
             </div>
-            {/* Email */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Email</label>
               <input type="email" value={form.email}
                 onChange={e => { setForm(f => ({...f, email: e.target.value})); setSaveError(null) }}
                 className="input text-sm w-full" />
             </div>
-            {/* Telefone + NIF (2 colunas) */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Telefone</label>
@@ -319,7 +323,6 @@ export function ClientDetailModal({
                   className="input text-sm w-full" placeholder="Ex: 123456789" />
               </div>
             </div>
-            {/* Reservas concluídas + Reservas gratuitas (2 colunas) */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Reservas concluídas</label>
@@ -334,7 +337,6 @@ export function ClientDetailModal({
                   className="input text-sm w-full" />
               </div>
             </div>
-            {/* Notas */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">Notas internas</label>
               <textarea rows={3} value={form.notes}
@@ -345,7 +347,6 @@ export function ClientDetailModal({
           </div>
         ) : (
           <div className="space-y-4 text-sm">
-            {/* Cabeçalho com avatar */}
             <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
               <ClientAvatar client={clientData} size={16} />
               <div>
@@ -357,7 +358,6 @@ export function ClientDetailModal({
               </div>
             </div>
 
-            {/* Tabs */}
             <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
               <button onClick={() => setActiveTab('info')}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
@@ -378,7 +378,6 @@ export function ClientDetailModal({
               </button>
             </div>
 
-            {/* Tab: Informações */}
             {activeTab === 'info' && (
               <>
                 <section>
@@ -405,7 +404,6 @@ export function ClientDetailModal({
                   </div>
                 </section>
 
-                {/* Fidelização — só aparece se o sistema estiver activo */}
                 {LOYALTY.enabled && (
                   <section>
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fidelização</p>
@@ -419,10 +417,21 @@ export function ClientDetailModal({
                       )}
                     </div>
                     <FidelityStamps count={concluded} everyN={LOYALTY.everyN} />
+                    {/*
+                      Lógica do texto:
+                        - isNextFree (progressInCycle === STAMPS_NEEDED):
+                          a próxima reserva JÁ é gratuita
+                        - progressInCycle === 0 && concluded === 0:
+                          ainda não tem nenhuma visita
+                        - caso geral: faltam X visitas
+                    */}
                     <p className="text-xs text-gray-400 mt-1">
-                      {toNextFree === LOYALTY.everyN
-                        ? `A contar para o próximo corte grátis (${LOYALTY.everyN} visitas)`
-                        : `${toNextFree} visita${toNextFree !== 1 ? 's' : ''} para o próximo corte grátis`}
+                      {isNextFree
+                        ? <span className="text-emerald-600 font-semibold">✨ A próxima visita é gratuita!</span>
+                        : faltamNoCiclo === STAMPS_NEEDED
+                          ? `A contar para o próximo corte grátis (${STAMPS_NEEDED} visita${STAMPS_NEEDED !== 1 ? 's' : ''} necessárias)`
+                          : `${faltamNoCiclo} visita${faltamNoCiclo !== 1 ? 's' : ''} para o próximo corte grátis`
+                      }
                     </p>
                   </section>
                 )}
@@ -455,7 +464,6 @@ export function ClientDetailModal({
               </>
             )}
 
-            {/* Tab: Reservas */}
             {activeTab === 'reservations' && (
               <div className="space-y-4">
                 {allReservations.length === 0 ? (
@@ -496,7 +504,6 @@ export function ClientDetailModal({
         )}
       </Modal>
 
-      {/* Modais de reserva aninhados */}
       {resModal?.type === 'detail' && (
         <ReservationDetailModal
           reservation={resModal.r}
