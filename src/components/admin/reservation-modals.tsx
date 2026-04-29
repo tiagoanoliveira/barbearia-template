@@ -359,13 +359,28 @@ export function CheckoutModal({
 }) {
   const qc = useQueryClient()
 
-  // Detecta se já havia oferta guardada (modo edição)
+  const precoServico = reservation.service_price ?? 0
+  const freeReservations = reservation.client_free_reservations ?? 0
+
+  // Estado inicial: se já havia oferta guardada, activa o toggle
   const hadOferta = !!reservation.oferta_tipo
 
+  const [temOferta, setTemOferta]     = useState(hadOferta)
+  const [ofertaTipo, setOfertaTipo]   = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
+
+  // valor_pago: se havia oferta, reconstituí a partir de service_price - oferta_valor
+  const initialValorPago = (() => {
+    if (hadOferta && reservation.oferta_valor != null) {
+      return Math.max(0, precoServico - reservation.oferta_valor / 100)
+    }
+    return reservation.valor_pago ?? precoServico
+  })()
+
   const [meioPagamento, setMeioPagamento] = useState<MeioPagamento | null>(
-    hadOferta ? null : (reservation.meio_pagamento ?? 'multibanco')
+    // Se oferta total (valorPago == 0) não precisamos de meio
+    hadOferta && initialValorPago === 0 ? null : (reservation.meio_pagamento ?? 'multibanco')
   )
-  const [valorPago, setValorPago]         = useState<number>(reservation.valor_pago ?? reservation.service_price ?? 0)
+  const [valorPago, setValorPago]         = useState<number>(initialValorPago)
   const [temGorjeta, setTemGorjeta]       = useState(!!reservation.gorjeta && reservation.gorjeta > 0)
   const [gorjeta, setGorjeta]             = useState<number>(reservation.gorjeta ?? 0)
   const [meioGorjeta, setMeioGorjeta]     = useState<MeioPagamento>(reservation.meio_gorjeta ?? 'dinheiro')
@@ -373,27 +388,37 @@ export function CheckoutModal({
   const [error, setError]                 = useState<string | null>(null)
   const [saving, setSaving]               = useState(false)
 
-  // Campos de oferta
-  const [temOferta, setTemOferta]         = useState(hadOferta)
-  const [ofertaTipo, setOfertaTipo]       = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
-  // oferta_valor em cêntimos na BD, mas exibido em euros no UI
-  const [ofertaValor, setOfertaValor]     = useState<number>(
-    reservation.oferta_valor != null ? reservation.oferta_valor / 100 : 0
-  )
+  // oferta_valor é SEMPRE calculado: service_price - valor_pago (em cêntimos)
+  const ofertaValorCentimos = temOferta ? Math.round(Math.max(0, precoServico - valorPago) * 100) : null
 
-  const freeReservations = reservation.client_free_reservations ?? 0
+  // Quando se activa a oferta: zera o valorPago e limpa o meio de pagamento
+  const handleToggleOferta = (checked: boolean) => {
+    setTemOferta(checked)
+    if (checked) {
+      setValorPago(0)
+      setMeioPagamento(null)
+    } else {
+      // Ao desactivar: restaura preço cheio e meio padrão
+      setValorPago(precoServico)
+      setMeioPagamento('multibanco')
+    }
+  }
 
-  // Quando se activa oferta fidelidade automática (botão legado)
+  // Atalho para oferta de fidelidade (clientes com reservas gratuitas)
   const handleDescontarGratuita = () => {
     setTemOferta(true)
     setOfertaTipo('fidelidade')
-    setOfertaValor(reservation.service_price ?? 0)
-    // Mantém o meio de pagamento para eventual pagamento parcial
+    setValorPago(0)
+    setMeioPagamento(null)
   }
+
+  const isOfertaTotal = temOferta && valorPago === 0
 
   const validate = (): string | null => {
     if (!temOferta && meioPagamento === null)
       return 'Selecciona um meio de pagamento.'
+    if (!isOfertaTotal && meioPagamento === null)
+      return 'Selecciona um meio de pagamento para o valor em dívida.'
     if (meioPagamento === 'outro' && !comentario.trim())
       return 'Por favor, descreve o método de pagamento usado em "Observações de Pagamento".'
     if (temGorjeta && meioGorjeta === 'outro' && !comentario.trim())
@@ -409,22 +434,14 @@ export function CheckoutModal({
     setSaving(true)
     try {
       const paymentPayload: Record<string, unknown> = {
+        meio_pagamento:       isOfertaTotal ? null : meioPagamento,
+        valor_pago:           isOfertaTotal ? 0 : valorPago,
         gorjeta:              temGorjeta ? gorjeta : undefined,
         meio_gorjeta:         temGorjeta ? meioGorjeta : undefined,
         comentario_pagamento: comentario.trim() || undefined,
-        // Oferta: envia sempre (null limpa campo se oferta foi removida)
-        oferta_valor: temOferta ? Math.round(ofertaValor * 100) : null,
+        // oferta_valor calculado automaticamente; null limpa se oferta removida
+        oferta_valor: ofertaValorCentimos,
         oferta_tipo:  temOferta ? ofertaTipo : null,
-      }
-
-      // Meio e valor pagos — só presentes se houver meio seleccionado
-      if (!temOferta || meioPagamento !== null) {
-        paymentPayload.meio_pagamento = meioPagamento
-        paymentPayload.valor_pago     = valorPago
-      } else {
-        // Oferta total sem meio de pagamento adicional
-        paymentPayload.meio_pagamento = null
-        paymentPayload.valor_pago     = 0
       }
 
       if (pendingEditForm) {
@@ -451,11 +468,6 @@ export function CheckoutModal({
     finally { setSaving(false) }
   }
 
-  // Valor total do serviço para referência
-  const precoServico = reservation.service_price ?? 0
-  const valorOfertaEuros = temOferta ? ofertaValor : 0
-  const valorRestante = Math.max(0, precoServico - valorOfertaEuros)
-
   return (
     <Modal
       open
@@ -470,137 +482,105 @@ export function CheckoutModal({
         </>
       }>
       <div className="space-y-4 text-sm">
+
+        {/* Cabeçalho: cliente + serviço + preço */}
         <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
           {reservation.client_name} · {reservation.service_name}
           {precoServico > 0 && <span className="ml-2 font-semibold text-gray-700">{precoServico.toFixed(2)} €</span>}
         </div>
 
+        {/* Banner reservas gratuitas */}
         {freeReservations > 0 && !editMode && (
           <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800">
             <span className="text-base">🎁</span>
             <span>
               Este cliente tem <strong>{freeReservations}</strong> reserva{freeReservations > 1 ? 's' : ''} gratuita{freeReservations > 1 ? 's' : ''} por descontar.
             </span>
+            <button
+              type="button"
+              onClick={handleDescontarGratuita}
+              className="ml-auto shrink-0 px-2 py-1 rounded bg-emerald-600 text-white text-[10px] font-medium hover:bg-emerald-700 transition-colors">
+              Descontar
+            </button>
           </div>
         )}
 
-        {/* ── Secção Oferta ── */}
-        <div className="border border-emerald-200 rounded-lg p-3 space-y-3">
+        {/* ── Toggle Oferta ── */}
+        <div className={`rounded-lg border p-3 space-y-3 transition-colors ${temOferta ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200'}`}>
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={temOferta}
-              onChange={e => {
-                setTemOferta(e.target.checked)
-                if (!e.target.checked) {
-                  // Ao remover oferta, restaura meio de pagamento
-                  if (meioPagamento === null) setMeioPagamento('multibanco')
-                }
-              }}
+              onChange={e => handleToggleOferta(e.target.checked)}
               className="rounded"
             />
-            <span className="font-medium text-emerald-800">🏷️ Incluir oferta / desconto</span>
+            <span className={`font-medium ${temOferta ? 'text-emerald-800' : 'text-gray-700'}`}>
+              🏷️ Aplicar oferta / desconto
+            </span>
           </label>
 
           {temOferta && (
-            <div className="space-y-3 pl-1">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Tipo de oferta</label>
-                  <select
-                    className="input text-sm w-full bg-white"
-                    value={ofertaTipo}
-                    onChange={e => setOfertaTipo(e.target.value)}
-                  >
-                    {OFERTA_TIPO_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Valor da oferta (€)</label>
-                  <input
-                    type="number" min={0} step={0.5}
-                    className="input text-sm w-full"
-                    value={ofertaValor}
-                    onChange={e => setOfertaValor(Number(e.target.value))}
-                  />
-                </div>
-              </div>
-              {valorRestante > 0 && (
-                <p className="text-[10px] text-amber-700 bg-amber-50 rounded px-2 py-1">
-                  ⚠️ Falta pagar <strong>{valorRestante.toFixed(2)} €</strong> — selecciona o meio de pagamento abaixo.
-                </p>
-              )}
-              {valorRestante <= 0 && ofertaValor > 0 && (
-                <p className="text-[10px] text-emerald-700 bg-emerald-50 rounded px-2 py-1">
-                  ✓ Serviço totalmente coberto pela oferta.
-                </p>
-              )}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Tipo de oferta</label>
+              <select
+                className="input text-sm w-full bg-white"
+                value={ofertaTipo}
+                onChange={e => setOfertaTipo(e.target.value)}
+              >
+                {OFERTA_TIPO_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </div>
           )}
-
-          {freeReservations > 0 && !editMode && (
-            <button
-              type="button"
-              onClick={handleDescontarGratuita}
-              className={`w-full py-2 rounded-lg border text-xs font-medium transition-colors ${
-                temOferta && ofertaTipo === 'fidelidade'
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-white text-emerald-700 border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50'
-              }`}>
-              🎁 Descontar reserva gratuita (fidelidade)
-            </button>
-          )}
         </div>
 
-        {/* ── Meio de Pagamento ── */}
+        {/* ── Valor Pago ── */}
         <div>
-          <label className="block text-xs text-gray-500 mb-2">
-            Meio de pagamento
-            {temOferta && valorRestante <= 0 && <span className="ml-1 text-emerald-600">(opcional — oferta total)</span>}
+          <label className="block text-xs text-gray-500 mb-1">
+            Valor cobrado ao cliente (€)
+            {temOferta && <span className="ml-1 text-emerald-600">— oferta = {precoServico.toFixed(2)} − valor cobrado</span>}
           </label>
-          <div className="flex flex-wrap gap-2">
-            {MEIO_OPTIONS.map(op => (
-              <button key={op.value} type="button" onClick={() => setMeioPagamento(op.value)}
-                className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                  meioPagamento === op.value
-                    ? 'bg-brand-600 text-white border-brand-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
-                }`}>
-                {op.label}
-              </button>
-            ))}
-            {/* Botão para desseleccionar meio (apenas quando há oferta total) */}
-            {temOferta && valorRestante <= 0 && (
-              <button type="button" onClick={() => setMeioPagamento(null)}
-                className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                  meioPagamento === null
-                    ? 'bg-gray-700 text-white border-gray-700'
-                    : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'
-                }`}>
-                ✕ Sem pagamento
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Valor Cobrado ── */}
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Valor cobrado (€)</label>
           <input
-            type="number" min={0} step={0.5}
-            className={`input text-sm w-full ${
-              meioPagamento === null ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
-            }`}
-            value={meioPagamento === null ? 0 : valorPago}
-            disabled={meioPagamento === null}
-            onChange={e => setValorPago(Number(e.target.value))}
+            type="number" min={0} max={precoServico} step={0.5}
+            className="input text-sm w-full"
+            value={valorPago}
+            onChange={e => {
+              const v = Math.max(0, Number(e.target.value))
+              setValorPago(v)
+              // Se passou a cobrar alguma coisa e não há meio, selecciona multibanco
+              if (v > 0 && meioPagamento === null) setMeioPagamento('multibanco')
+              // Se zerou, limpa o meio
+              if (v === 0) setMeioPagamento(null)
+            }}
           />
-          {meioPagamento === null && (
-            <p className="text-[10px] text-emerald-600 mt-1">✓ Serviço totalmente coberto pela oferta — sem cobrança adicional.</p>
+          {temOferta && (
+            <p className="text-[10px] mt-1 text-emerald-700">
+              {isOfertaTotal
+                ? '✓ Serviço totalmente coberto pela oferta — sem cobrança ao cliente.'
+                : `⚠️ Oferta de ${(precoServico - valorPago).toFixed(2)} € · cliente paga ${valorPago.toFixed(2)} €`}
+            </p>
           )}
         </div>
+
+        {/* ── Meio de Pagamento (só visível se houver valor a cobrar) ── */}
+        {!isOfertaTotal && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-2">Meio de pagamento</label>
+            <div className="flex flex-wrap gap-2">
+              {MEIO_OPTIONS.map(op => (
+                <button key={op.value} type="button" onClick={() => setMeioPagamento(op.value)}
+                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                    meioPagamento === op.value
+                      ? 'bg-brand-600 text-white border-brand-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
+                  }`}>
+                  {op.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Gorjeta ── */}
         <label className="flex items-center gap-2 cursor-pointer select-none">
