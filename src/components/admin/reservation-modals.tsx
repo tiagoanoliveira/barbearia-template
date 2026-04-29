@@ -355,9 +355,7 @@ export function CheckoutModal({
   })()
 
   const [temOferta, setTemOferta]   = useState(hadOferta)
-  const [ofertaTipo, setOfertaTipo] = useState<string>(
-    reservation.oferta_tipo ?? (freeReservations > 0 ? 'fidelidade' : 'cortesia')
-  )
+  const [ofertaTipo, setOfertaTipo] = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
 
   // meio: null = "Sem pagamento" (oferta total), string = meio escolhido pelo barbeiro
   const [meioPagamento, setMeioPagamento] = useState<MeioPagamento | null>(
