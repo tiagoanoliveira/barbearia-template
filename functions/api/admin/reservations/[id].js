@@ -9,7 +9,7 @@ import {
 } from '../../../utils/reservationEmails.js'
 
 const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou']
-// 'oferta' foi removido de VALID_MEIOS — ofertas passam agora por oferta_tipo + oferta_valor
+// null = sem pagamento (oferta total); string = meio escolhido pelo barbeiro
 const VALID_MEIOS    = ['multibanco', 'dinheiro', 'outro']
 
 export async function onRequest(context) {
@@ -70,7 +70,7 @@ export async function onRequest(context) {
         gorjeta,
         meio_gorjeta,
         comentario_pagamento,
-        // Novos campos de oferta
+        // Campos de oferta
         oferta_valor,
         oferta_tipo,
       } = body
@@ -89,9 +89,20 @@ export async function onRequest(context) {
         if (!Number.isInteger(v) || v < 0) return badRequest('oferta_valor deve ser um inteiro não-negativo (cêntimos)')
       }
 
+      // Validar meio_pagamento:
+      //   null  → oferta total (sem cobranças) — válido
+      //   string → deve estar em VALID_MEIOS
+      if (meio_pagamento !== undefined && meio_pagamento !== null) {
+        if (!VALID_MEIOS.includes(meio_pagamento)) return badRequest('Meio de pagamento inválido')
+      }
+
+      // Validar meio_gorjeta (nunca pode ser null)
+      if (meio_gorjeta !== undefined) {
+        if (!VALID_MEIOS.includes(meio_gorjeta)) return badRequest('Meio de gorjeta inválido')
+      }
+
       // Validar comentário obrigatório quando o método é 'outro'
       const effectiveComentario = comentario_pagamento ?? reservation.comentario_pagamento ?? ''
-
       if (meio_pagamento === 'outro' && !effectiveComentario.trim()) {
         return badRequest('O campo "Observações de Pagamento" é obrigatório quando o método é "Outro".')
       }
@@ -115,10 +126,10 @@ export async function onRequest(context) {
         vals.push(Number(service_duration))
       }
 
+      // meio_pagamento: null (oferta total) ou string válida
       if (meio_pagamento !== undefined) {
-        if (!VALID_MEIOS.includes(meio_pagamento)) return badRequest('Meio de pagamento inválido')
         updates.push('meio_pagamento = ?')
-        vals.push(meio_pagamento)
+        vals.push(meio_pagamento) // null é guardado como NULL na BD
       }
       if (valor_pago !== undefined && Number.isFinite(Number(valor_pago))) {
         updates.push('valor_pago = ?')
@@ -129,7 +140,6 @@ export async function onRequest(context) {
         vals.push(Number(gorjeta))
       }
       if (meio_gorjeta !== undefined) {
-        if (!VALID_MEIOS.includes(meio_gorjeta)) return badRequest('Meio de gorjeta inválido')
         updates.push('meio_gorjeta = ?')
         vals.push(meio_gorjeta)
       }
