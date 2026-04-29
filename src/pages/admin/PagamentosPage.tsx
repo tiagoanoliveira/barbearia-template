@@ -11,11 +11,49 @@ import type { Reservation } from '@/types'
 const MEIO_LABEL: Record<string, string> = {
   multibanco: '💳 Multibanco',
   dinheiro:   '💵 Dinheiro',
-  outro:      'Outro',
+  outro:      '❓ Outro',
 }
 
 function fmt(val: number | null | undefined) {
   return val != null ? `${Number(val).toFixed(2)} €` : '—'
+}
+
+/**
+ * Calcula o valor total efectivo da transacção:
+ * valor_pago (cobrado ao cliente) + oferta_valor (desconto/oferta aplicada)
+ * = preço total do serviço prestado
+ */
+function calcValorTotal(r: any): number {
+  const pago   = Number(r.valor_pago   ?? 0)
+  const oferta = Number(r.oferta_valor ?? 0)
+  return pago + oferta
+}
+
+/**
+ * Devolve a string de método(s) de pagamento para a coluna PAGAMENTO.
+ * Exemplos:
+ *   - Oferta total sem pagamento   → "🏷️ Oferta (cortesia)"
+ *   - Oferta + Multibanco          → "🏷️ Oferta, 💳 Multibanco"
+ *   - Só Multibanco                → "💳 Multibanco"
+ */
+function formatMeioPagamento(r: any): string {
+  const parts: string[] = []
+
+  if (r.oferta_tipo) {
+    const tipoLabel: Record<string, string> = {
+      fidelidade: 'fidelidade',
+      desconto:   'desconto',
+      cortesia:   'cortesia',
+      outro:      'outro',
+    }
+    parts.push(`🏷️ Oferta (${tipoLabel[r.oferta_tipo] ?? r.oferta_tipo})`)
+  }
+
+  if (r.meio_pagamento) {
+    parts.push(MEIO_LABEL[r.meio_pagamento] ?? r.meio_pagamento)
+  }
+
+  return parts.length > 0 ? parts.join(', ') : '—'
 }
 
 export default function PagamentosPage() {
@@ -26,7 +64,6 @@ export default function PagamentosPage() {
   const [dateFrom, setDateFrom] = useState(firstDay)
   const [dateTo,   setDateTo]   = useState(today)
 
-  // Estado para abrir CheckoutModal de edição de pagamento de uma transação
   const [editingPayment, setEditingPayment] = useState<Reservation | null>(null)
   const qc = useQueryClient()
 
@@ -95,7 +132,7 @@ export default function PagamentosPage() {
           </div>
         </Card>
 
-        {/* Por barbeiro — com breakdown dinheiro / multibanco */}
+        {/* Por barbeiro */}
         <Card>
           <h3 className="font-semibold text-sm mb-3">Por barbeiro</h3>
           <div className="space-y-3">
@@ -148,35 +185,48 @@ export default function PagamentosPage() {
               {d?.detalhe?.length === 0 && (
                 <tr><td colSpan={8} className="text-center text-gray-400 py-8 text-xs">Sem registos no período selecionado</td></tr>
               )}
-              {d?.detalhe?.map((r: any) => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-xs text-gray-500">{format(parseISO(r.data_hora), "d MMM yyyy HH:mm", { locale: pt })}</td>
-                  <td className="px-4 py-3">{r.cliente_nome}</td>
-                  <td className="px-4 py-3">{r.barbeiro_nome}</td>
-                  <td className="px-4 py-3">{r.servico_nome}</td>
-                  <td className="px-4 py-3 font-medium">{fmt(r.valor_pago)}</td>
-                  <td className="px-4 py-3">{MEIO_LABEL[r.meio_pagamento] ?? r.meio_pagamento}</td>
-                  <td className="px-4 py-3">{r.gorjeta ? `${fmt(r.gorjeta)} (${MEIO_LABEL[r.meio_gorjeta] ?? r.meio_gorjeta})` : '—'}</td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => setEditingPayment({
-                        id: r.id,
-                        client_name: r.cliente_nome,
-                        service_name: r.servico_nome,
-                        service_price: r.valor_pago,
-                        meio_pagamento: r.meio_pagamento,
-                        valor_pago: r.valor_pago,
-                        gorjeta: r.gorjeta,
-                        meio_gorjeta: r.meio_gorjeta,
-                        comentario_pagamento: r.comentario_pagamento,
-                      } as Reservation)}
-                      className="text-xs px-2 py-1 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 font-medium whitespace-nowrap"
-                    >
-                      💳 Editar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {d?.detalhe?.map((r: any) => {
+                const valorTotal = calcValorTotal(r)
+                return (
+                  <tr key={r.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-xs text-gray-500">{format(parseISO(r.data_hora), "d MMM yyyy HH:mm", { locale: pt })}</td>
+                    <td className="px-4 py-3">{r.cliente_nome}</td>
+                    <td className="px-4 py-3">{r.barbeiro_nome}</td>
+                    <td className="px-4 py-3">{r.servico_nome}</td>
+                    {/* VALOR: valor_pago + oferta_valor = preço total do serviço */}
+                    <td className="px-4 py-3 font-medium">{fmt(valorTotal)}</td>
+                    {/* PAGAMENTO: inclui oferta se aplicável */}
+                    <td className="px-4 py-3 text-xs">{formatMeioPagamento(r)}</td>
+                    <td className="px-4 py-3 text-xs">{r.gorjeta ? `${fmt(r.gorjeta)} (${MEIO_LABEL[r.meio_gorjeta] ?? r.meio_gorjeta})` : '—'}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setEditingPayment({
+                          // ── identificação ───────────────────────────────────
+                          id:                       r.id,
+                          client_name:              r.cliente_nome,
+                          service_name:             r.servico_nome,
+                          // service_price = preço total do serviço (base para os cálculos do modal)
+                          service_price:            valorTotal,
+                          // ── pagamento guardado ───────────────────────────────
+                          meio_pagamento:           r.meio_pagamento,
+                          valor_pago:               r.valor_pago,
+                          gorjeta:                  r.gorjeta,
+                          meio_gorjeta:             r.meio_gorjeta,
+                          comentario_pagamento:     r.comentario_pagamento,
+                          // ── oferta guardada ─────────────────────────────────
+                          oferta_tipo:              r.oferta_tipo   ?? null,
+                          oferta_valor:             r.oferta_valor  ?? null,
+                          // client_free_reservations: 0 em edição (não aplicamos fidelidade outra vez)
+                          client_free_reservations: 0,
+                        } as Reservation)}
+                        className="text-xs px-2 py-1 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 font-medium whitespace-nowrap"
+                      >
+                        💳 Editar
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
