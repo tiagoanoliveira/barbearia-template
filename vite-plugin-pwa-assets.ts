@@ -3,7 +3,8 @@
  *
  * Lê src/config/theme.ts em Node (build time / dev server) e:
  *  - Injeta env vars VITE_SHOP_* para substituir placeholders no index.html
- *  - Gera public/sw.js, public/manifest.json, public/admin-manifest.json
+ *  - Gera src/sw.js, src/manifest.json, src/admin-manifest.json
+ *    (src/ é o directório servido — não public/)
  *
  * NUNCA hardcode dados da barbearia aqui — tudo vem do theme.ts.
  */
@@ -36,7 +37,7 @@ export function readThemeValues(root: string): ThemeValues {
   const themeColor = colorMatch?.[1] ?? '#16a34a'
 
   const name      = field('name')
-  // short_name = última palavra do nome (ex: "Brooklyn Barbearia" → "Brooklyn")
+  // short_name = primeira palavra do nome (ex: "Brooklyn Barbearia" → "Brooklyn")
   const shortName = name.split(/\s+/).filter(Boolean)[0] ?? name
 
   return {
@@ -173,10 +174,11 @@ export default function pwaAssetsPlugin(): Plugin {
 
   function write(root: string) {
     const t      = readThemeValues(root)
-    const pubDir = path.join(root, 'public')
-    fs.writeFileSync(path.join(pubDir, 'sw.js'),               buildSW(t))
-    fs.writeFileSync(path.join(pubDir, 'manifest.json'),       buildManifest(t, false))
-    fs.writeFileSync(path.join(pubDir, 'admin-manifest.json'), buildManifest(t, true))
+    // Os ficheiros vão para src/ — é o directório servido (não public/)
+    const srcDir = path.join(root, 'src')
+    fs.writeFileSync(path.join(srcDir, 'sw.js'),               buildSW(t))
+    fs.writeFileSync(path.join(srcDir, 'manifest.json'),       buildManifest(t, false))
+    fs.writeFileSync(path.join(srcDir, 'admin-manifest.json'), buildManifest(t, true))
     console.log(`[pwa-assets] "${t.name}" | theme_color ${t.themeColor} | cache "${t.cacheName}-*"`)
     return t
   }
@@ -206,7 +208,7 @@ export default function pwaAssetsPlugin(): Plugin {
       } catch { return {} }
     },
 
-    // Build: gera os ficheiros antes do Vite copiar public/ para dist/
+    // Build: gera os ficheiros antes do Vite copiar src/ para dist/
     buildStart() {
       write(rootDir)
     },
