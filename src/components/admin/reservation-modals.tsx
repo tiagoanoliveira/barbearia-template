@@ -340,23 +340,30 @@ export function CheckoutModal({
   pendingEditForm?: Partial<Reservation & { sendEmail: boolean }>
 }) {
   const qc = useQueryClient()
-  const precoServico = reservation.service_price ?? 0
+  const precoServico   = reservation.service_price ?? 0
   const freeReservations = reservation.client_free_reservations ?? 0
-  const hadOferta = !!reservation.oferta_tipo
+  const hadOferta      = !!reservation.oferta_tipo
 
-  // Valor pago anteriormente (reconstitui em modo edição)
+  // ── Reconstrução do estado inicial em modo edição ──────────────────────────
+  // oferta_valor está guardado em euros na BD. Em modo edição reconstituímos
+  // valor_pago como: preço serviço − oferta_valor (ambos em euros).
+  // Se não havia oferta, usamos diretamente o valor_pago guardado.
   const initialValorPago = (() => {
     if (hadOferta && reservation.oferta_valor != null)
-      return Math.max(0, precoServico - reservation.oferta_valor / 100)
+      return Math.max(0, precoServico - reservation.oferta_valor)
     return reservation.valor_pago ?? precoServico
   })()
 
   const [temOferta, setTemOferta]   = useState(hadOferta)
-  const [ofertaTipo, setOfertaTipo] = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
+  const [ofertaTipo, setOfertaTipo] = useState<string>(
+    reservation.oferta_tipo ?? (freeReservations > 0 ? 'fidelidade' : 'cortesia')
+  )
 
   // meio: null = "Sem pagamento" (oferta total), string = meio escolhido pelo barbeiro
   const [meioPagamento, setMeioPagamento] = useState<MeioPagamento | null>(
-    hadOferta && initialValorPago === 0 ? null : (reservation.meio_pagamento ?? 'multibanco')
+    hadOferta && initialValorPago === 0
+      ? null
+      : (reservation.meio_pagamento ?? 'multibanco')
   )
   // valor_pago: null significa que o barbeiro ainda não preencheu (campo vazio)
   const [valorPago, setValorPago] = useState<number | null>(
@@ -371,9 +378,11 @@ export function CheckoutModal({
   const [saving, setSaving]           = useState(false)
 
   // Quando se activa a oferta: meio -> null, valor -> null (campo vazio)
+  // ofertaTipo default: fidelidade se o cliente tiver reservas gratuitas, cortesia caso contrário
   const handleToggleOferta = (checked: boolean) => {
     setTemOferta(checked)
     if (checked) {
+      setOfertaTipo(freeReservations > 0 ? 'fidelidade' : 'cortesia')
       setMeioPagamento(null)
       setValorPago(null)
     } else {
@@ -396,11 +405,11 @@ export function CheckoutModal({
     setValorPago(null)
   }
 
-  // oferta_valor calculado: service_price - valor_pago (em cêntimos)
-  // Se meio=null (sem pagamento), oferta cobre tudo
+  // oferta_valor em euros: diferença entre preço serviço e o que o cliente pagou
+  // Se meio=null (sem pagamento), a oferta cobre o valor total
   const valorPagoEfectivo = meioPagamento === null ? 0 : (valorPago ?? 0)
-  const ofertaValorCentimos = temOferta
-    ? Math.round(Math.max(0, precoServico - valorPagoEfectivo) * 100)
+  const ofertaValorEuros = temOferta
+    ? Math.round(Math.max(0, precoServico - valorPagoEfectivo) * 100) / 100
     : null
 
   const isOfertaTotal = temOferta && meioPagamento === null
@@ -430,7 +439,7 @@ export function CheckoutModal({
         gorjeta:              temGorjeta ? gorjeta : undefined,
         meio_gorjeta:         temGorjeta ? meioGorjeta : undefined,
         comentario_pagamento: comentario.trim() || undefined,
-        oferta_valor:         ofertaValorCentimos,
+        oferta_valor:         ofertaValorEuros,
         oferta_tipo:          temOferta ? ofertaTipo : null,
       }
       if (pendingEditForm) {
