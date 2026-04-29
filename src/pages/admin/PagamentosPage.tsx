@@ -14,6 +14,13 @@ const MEIO_LABEL: Record<string, string> = {
   outro:      '❓ Outro',
 }
 
+const OFERTA_TIPO_LABEL: Record<string, string> = {
+  fidelidade: 'Fidelidade',
+  desconto:   'Desconto',
+  cortesia:   'Cortesia',
+  outro:      'Outro',
+}
+
 function fmt(val: number | null | undefined) {
   return val != null ? `${Number(val).toFixed(2)} €` : '—'
 }
@@ -30,27 +37,27 @@ function calcValorTotal(r: any): number {
 }
 
 /**
- * Devolve a string de método(s) de pagamento para a coluna PAGAMENTO.
+ * Devolve a string de método(s) de pagamento para a coluna PAGAMENTO,
+ * incluindo o valor de cada parte.
+ *
  * Exemplos:
- *   - Oferta total sem pagamento   → "🏷️ Oferta (cortesia)"
- *   - Oferta + Multibanco          → "🏷️ Oferta, 💳 Multibanco"
- *   - Só Multibanco                → "💳 Multibanco"
+ *   Oferta total          → "🏷️ Oferta Cortesia (10.00€)"
+ *   Oferta + Multibanco   → "🏷️ Oferta Fidelidade (5.00€), 💳 Multibanco (5.00€)"
+ *   Só Multibanco         → "💳 Multibanco (10.00€)"
  */
 function formatMeioPagamento(r: any): string {
   const parts: string[] = []
 
   if (r.oferta_tipo) {
-    const tipoLabel: Record<string, string> = {
-      fidelidade: 'fidelidade',
-      desconto:   'desconto',
-      cortesia:   'cortesia',
-      outro:      'outro',
-    }
-    parts.push(`🏷️ Oferta (${tipoLabel[r.oferta_tipo] ?? r.oferta_tipo})`)
+    const tipoLabel = OFERTA_TIPO_LABEL[r.oferta_tipo] ?? r.oferta_tipo
+    const ofertaValor = Number(r.oferta_valor ?? 0)
+    parts.push(`🏷️ Oferta ${tipoLabel} (${ofertaValor.toFixed(2)}€)`)
   }
 
   if (r.meio_pagamento) {
-    parts.push(MEIO_LABEL[r.meio_pagamento] ?? r.meio_pagamento)
+    const meioLabel = MEIO_LABEL[r.meio_pagamento] ?? r.meio_pagamento
+    const valorPago = Number(r.valor_pago ?? 0)
+    parts.push(`${meioLabel} (${valorPago.toFixed(2)}€)`)
   }
 
   return parts.length > 0 ? parts.join(', ') : '—'
@@ -193,30 +200,23 @@ export default function PagamentosPage() {
                     <td className="px-4 py-3">{r.cliente_nome}</td>
                     <td className="px-4 py-3">{r.barbeiro_nome}</td>
                     <td className="px-4 py-3">{r.servico_nome}</td>
-                    {/* VALOR: valor_pago + oferta_valor = preço total do serviço */}
                     <td className="px-4 py-3 font-medium">{fmt(valorTotal)}</td>
-                    {/* PAGAMENTO: inclui oferta se aplicável */}
                     <td className="px-4 py-3 text-xs">{formatMeioPagamento(r)}</td>
                     <td className="px-4 py-3 text-xs">{r.gorjeta ? `${fmt(r.gorjeta)} (${MEIO_LABEL[r.meio_gorjeta] ?? r.meio_gorjeta})` : '—'}</td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => setEditingPayment({
-                          // ── identificação ───────────────────────────────────
                           id:                       r.id,
                           client_name:              r.cliente_nome,
                           service_name:             r.servico_nome,
-                          // service_price = preço total do serviço (base para os cálculos do modal)
                           service_price:            valorTotal,
-                          // ── pagamento guardado ───────────────────────────────
                           meio_pagamento:           r.meio_pagamento,
                           valor_pago:               r.valor_pago,
                           gorjeta:                  r.gorjeta,
                           meio_gorjeta:             r.meio_gorjeta,
                           comentario_pagamento:     r.comentario_pagamento,
-                          // ── oferta guardada ─────────────────────────────────
                           oferta_tipo:              r.oferta_tipo   ?? null,
                           oferta_valor:             r.oferta_valor  ?? null,
-                          // client_free_reservations: 0 em edição (não aplicamos fidelidade outra vez)
                           client_free_reservations: 0,
                         } as Reservation)}
                         className="text-xs px-2 py-1 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 font-medium whitespace-nowrap"
