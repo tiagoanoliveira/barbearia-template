@@ -23,7 +23,6 @@ export const STATUS_COLORS: Record<string, string> = {
   confirmada: '#3b82f6', concluida: '#10b981', cancelada: '#ef4444', faltou: '#6b7280',
 }
 
-// Cancelada não aparece aqui: cancelar deve sempre passar pelo ReservationStatusModal
 export const EDIT_STATUSES: ReservationStatus[] = ['confirmada', 'concluida', 'faltou']
 
 const MEIO_OPTIONS: { value: MeioPagamento; label: string }[] = [
@@ -32,7 +31,6 @@ const MEIO_OPTIONS: { value: MeioPagamento; label: string }[] = [
   { value: 'outro',      label: '❓ Outro'       },
 ]
 
-// Tipos de oferta disponíveis
 const OFERTA_TIPO_OPTIONS = [
   { value: 'fidelidade', label: '🎁 Reserva gratuita (fidelidade)' },
   { value: 'desconto',   label: '🏷️ Desconto' },
@@ -86,8 +84,8 @@ export function ReservationDetailModal({
             {STATUS_LABEL[r.status] ?? r.status}
           </span>
         } />
-        {hasMeaningfulReservationComment(r.comentario) && <NoteBox label="Notas do cliente" text={r.comentario ?? ''}   bg="gray" />}
-        {r.nota_privada && <NoteBox label="Nota privada"     text={r.nota_privada} bg="amber" />}
+        {hasMeaningfulReservationComment(r.comentario) && <NoteBox label="Notas do cliente" text={r.comentario ?? ''} bg="gray" />}
+        {r.nota_privada && <NoteBox label="Nota privada" text={r.nota_privada} bg="amber" />}
         <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2">
           {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
             <button onClick={onCheckout}
@@ -182,8 +180,7 @@ export function ReservationEditModal({
             {!isCancelled && onCancelRequest && (
               <button
                 className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 font-medium hover:bg-red-100 transition-colors"
-                onClick={onCancelRequest}
-              >
+                onClick={onCancelRequest}>
                 Cancelar reserva
               </button>
             )}
@@ -197,21 +194,16 @@ export function ReservationEditModal({
         </div>
       }>
       <div className="space-y-3 text-sm">
-        {/* Cliente (read-only) */}
         <div className="bg-gray-50 rounded-lg px-3 py-2">
           <p className="text-xs text-gray-400 mb-0.5">Cliente</p>
           <p className="font-medium">{reservation.client_name}</p>
         </div>
-
-        {/* Estado + Barbeiro */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Estado</label>
-            <select
-              className="input text-sm w-full bg-white text-gray-900"
+            <select className="input text-sm w-full bg-white text-gray-900"
               value={form.status ?? reservation.status}
-              onChange={e => handleStatusChange(e.target.value)}
-            >
+              onChange={e => handleStatusChange(e.target.value)}>
               {EDIT_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               {isCancelled && <option value="cancelada" disabled>{STATUS_LABEL['cancelada']}</option>}
             </select>
@@ -224,7 +216,6 @@ export function ReservationEditModal({
             </select>
           </div>
         </div>
-
         {form.status === 'concluida' && reservation.status !== 'concluida' && (
           <p className="text-[10px] text-amber-600">⚠️ Ao guardar será pedido o preenchimento do pagamento.</p>
         )}
@@ -233,8 +224,6 @@ export function ReservationEditModal({
             Para cancelar usa o botão <span className="text-red-500">Cancelar reserva</span>.
           </p>
         )}
-
-        {/* Serviço + Duração */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Serviço</label>
@@ -250,30 +239,23 @@ export function ReservationEditModal({
               onChange={e => upd('service_duration', Number(e.target.value))} />
           </div>
         </div>
-
-        {/* Data e hora */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Data e hora</label>
           <input type="datetime-local" className="input text-sm w-full"
             value={(form.data_hora ?? '').substring(0,16)} min={nowLocal}
             onChange={e => upd('data_hora', e.target.value+':00')} />
         </div>
-
-        {/* Nota do cliente (read-only se existir) */}
         {hasMeaningfulReservationComment(reservation.comentario) && (
           <div>
             <p className="text-xs text-gray-500 mb-1">Nota do cliente</p>
             <p className="text-xs bg-gray-50 rounded-lg px-3 py-2 text-gray-700">{reservation.comentario}</p>
           </div>
         )}
-
-        {/* Nota privada */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Nota privada</label>
           <textarea rows={2} className="input text-sm w-full resize-none"
             value={form.nota_privada ?? ''} onChange={e => upd('nota_privada', e.target.value)} />
         </div>
-
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input type="checkbox" checked={!!form.sendEmail} onChange={e => upd('sendEmail', e.target.checked)} />
           <span>Reenviar email de confirmação ao cliente</span>
@@ -358,71 +340,80 @@ export function CheckoutModal({
   pendingEditForm?: Partial<Reservation & { sendEmail: boolean }>
 }) {
   const qc = useQueryClient()
-
   const precoServico = reservation.service_price ?? 0
   const freeReservations = reservation.client_free_reservations ?? 0
-
-  // Estado inicial: se já havia oferta guardada, activa o toggle
   const hadOferta = !!reservation.oferta_tipo
 
-  const [temOferta, setTemOferta]     = useState(hadOferta)
-  const [ofertaTipo, setOfertaTipo]   = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
-
-  // valor_pago: se havia oferta, reconstituí a partir de service_price - oferta_valor
+  // Valor pago anteriormente (reconstitui em modo edição)
   const initialValorPago = (() => {
-    if (hadOferta && reservation.oferta_valor != null) {
+    if (hadOferta && reservation.oferta_valor != null)
       return Math.max(0, precoServico - reservation.oferta_valor / 100)
-    }
     return reservation.valor_pago ?? precoServico
   })()
 
+  const [temOferta, setTemOferta]   = useState(hadOferta)
+  const [ofertaTipo, setOfertaTipo] = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
+
+  // meio: null = "Sem pagamento" (oferta total), string = meio escolhido pelo barbeiro
   const [meioPagamento, setMeioPagamento] = useState<MeioPagamento | null>(
-    // Se oferta total (valorPago == 0) não precisamos de meio
     hadOferta && initialValorPago === 0 ? null : (reservation.meio_pagamento ?? 'multibanco')
   )
-  const [valorPago, setValorPago]         = useState<number>(initialValorPago)
-  const [temGorjeta, setTemGorjeta]       = useState(!!reservation.gorjeta && reservation.gorjeta > 0)
-  const [gorjeta, setGorjeta]             = useState<number>(reservation.gorjeta ?? 0)
-  const [meioGorjeta, setMeioGorjeta]     = useState<MeioPagamento>(reservation.meio_gorjeta ?? 'dinheiro')
-  const [comentario, setComentario]       = useState<string>(reservation.comentario_pagamento ?? '')
-  const [error, setError]                 = useState<string | null>(null)
-  const [saving, setSaving]               = useState(false)
+  // valor_pago: null significa que o barbeiro ainda não preencheu (campo vazio)
+  const [valorPago, setValorPago] = useState<number | null>(
+    hadOferta && initialValorPago === 0 ? null : initialValorPago
+  )
 
-  // oferta_valor é SEMPRE calculado: service_price - valor_pago (em cêntimos)
-  const ofertaValorCentimos = temOferta ? Math.round(Math.max(0, precoServico - valorPago) * 100) : null
+  const [temGorjeta, setTemGorjeta]   = useState(!!reservation.gorjeta && reservation.gorjeta > 0)
+  const [gorjeta, setGorjeta]         = useState<number>(reservation.gorjeta ?? 0)
+  const [meioGorjeta, setMeioGorjeta] = useState<MeioPagamento>(reservation.meio_gorjeta ?? 'dinheiro')
+  const [comentario, setComentario]   = useState<string>(reservation.comentario_pagamento ?? '')
+  const [error, setError]             = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
 
-  // Quando se activa a oferta: zera o valorPago e limpa o meio de pagamento
+  // Quando se activa a oferta: meio -> null, valor -> null (campo vazio)
   const handleToggleOferta = (checked: boolean) => {
     setTemOferta(checked)
     if (checked) {
-      setValorPago(0)
       setMeioPagamento(null)
+      setValorPago(null)
     } else {
-      // Ao desactivar: restaura preço cheio e meio padrão
-      setValorPago(precoServico)
       setMeioPagamento('multibanco')
+      setValorPago(precoServico)
     }
   }
 
-  // Atalho para oferta de fidelidade (clientes com reservas gratuitas)
+  // Quando o barbeiro escolhe um meio com oferta activa: limpa o valor para ele preencher
+  const handleMeioChange = (meio: MeioPagamento) => {
+    setMeioPagamento(meio)
+    if (temOferta) setValorPago(null) // campo fica vazio para o barbeiro inserir
+  }
+
+  // Atalho fidelidade
   const handleDescontarGratuita = () => {
     setTemOferta(true)
     setOfertaTipo('fidelidade')
-    setValorPago(0)
     setMeioPagamento(null)
+    setValorPago(null)
   }
 
-  const isOfertaTotal = temOferta && valorPago === 0
+  // oferta_valor calculado: service_price - valor_pago (em cêntimos)
+  // Se meio=null (sem pagamento), oferta cobre tudo
+  const valorPagoEfectivo = meioPagamento === null ? 0 : (valorPago ?? 0)
+  const ofertaValorCentimos = temOferta
+    ? Math.round(Math.max(0, precoServico - valorPagoEfectivo) * 100)
+    : null
+
+  const isOfertaTotal = temOferta && meioPagamento === null
 
   const validate = (): string | null => {
     if (!temOferta && meioPagamento === null)
       return 'Selecciona um meio de pagamento.'
-    if (!isOfertaTotal && meioPagamento === null)
-      return 'Selecciona um meio de pagamento para o valor em dívida.'
+    if (!isOfertaTotal && meioPagamento !== null && (valorPago === null || valorPago < 0))
+      return 'Introduz o valor cobrado ao cliente.'
     if (meioPagamento === 'outro' && !comentario.trim())
-      return 'Por favor, descreve o método de pagamento usado em "Observações de Pagamento".'
+      return 'Por favor, descreve o método de pagamento em "Observações".'
     if (temGorjeta && meioGorjeta === 'outro' && !comentario.trim())
-      return 'Por favor, descreve o método de gorjeta usado em "Observações de Pagamento".'
+      return 'Por favor, descreve o método de gorjeta em "Observações".'
     if (temOferta && !ofertaTipo.trim())
       return 'Indica o tipo de oferta.'
     return null
@@ -435,15 +426,13 @@ export function CheckoutModal({
     try {
       const paymentPayload: Record<string, unknown> = {
         meio_pagamento:       isOfertaTotal ? null : meioPagamento,
-        valor_pago:           isOfertaTotal ? 0 : valorPago,
+        valor_pago:           valorPagoEfectivo,
         gorjeta:              temGorjeta ? gorjeta : undefined,
         meio_gorjeta:         temGorjeta ? meioGorjeta : undefined,
         comentario_pagamento: comentario.trim() || undefined,
-        // oferta_valor calculado automaticamente; null limpa se oferta removida
-        oferta_valor: ofertaValorCentimos,
-        oferta_tipo:  temOferta ? ofertaTipo : null,
+        oferta_valor:         ofertaValorCentimos,
+        oferta_tipo:          temOferta ? ofertaTipo : null,
       }
-
       if (pendingEditForm) {
         await reservationsApi.update(reservation.id, {
           barber_id:        pendingEditForm.barber_id,
@@ -461,7 +450,6 @@ export function CheckoutModal({
           ...paymentPayload,
         })
       }
-
       qc.invalidateQueries({ queryKey: [invalidateKey] })
       onClose()
     } catch {}
@@ -483,18 +471,20 @@ export function CheckoutModal({
       }>
       <div className="space-y-4 text-sm">
 
-        {/* Cabeçalho: cliente + serviço + preço */}
+        {/* Cabeçalho */}
         <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
           {reservation.client_name} · {reservation.service_name}
-          {precoServico > 0 && <span className="ml-2 font-semibold text-gray-700">{precoServico.toFixed(2)} €</span>}
+          {precoServico > 0 && (
+            <span className="ml-2 font-semibold text-gray-700">{precoServico.toFixed(2)} €</span>
+          )}
         </div>
 
-        {/* Banner reservas gratuitas */}
+        {/* Banner fidelidade */}
         {freeReservations > 0 && !editMode && (
           <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800">
-            <span className="text-base">🎁</span>
+            <span>🎁</span>
             <span>
-              Este cliente tem <strong>{freeReservations}</strong> reserva{freeReservations > 1 ? 's' : ''} gratuita{freeReservations > 1 ? 's' : ''} por descontar.
+              Este cliente tem <strong>{freeReservations}</strong> reserva{freeReservations > 1 ? 's' : ''} gratuita{freeReservations > 1 ? 's' : ''} por usar.
             </span>
             <button
               type="button"
@@ -505,8 +495,10 @@ export function CheckoutModal({
           </div>
         )}
 
-        {/* ── Toggle Oferta ── */}
-        <div className={`rounded-lg border p-3 space-y-3 transition-colors ${temOferta ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200'}`}>
+        {/* Toggle oferta */}
+        <div className={`rounded-lg border p-3 space-y-3 transition-colors ${
+          temOferta ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200'
+        }`}>
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -535,54 +527,65 @@ export function CheckoutModal({
           )}
         </div>
 
-        {/* ── Valor Pago ── */}
+        {/* Meio de pagamento */}
         <div>
-          <label className="block text-xs text-gray-500 mb-1">
-            Valor cobrado ao cliente (€)
-            {temOferta && <span className="ml-1 text-emerald-600">— oferta = {precoServico.toFixed(2)} − valor cobrado</span>}
+          <label className="block text-xs text-gray-500 mb-2">
+            {isOfertaTotal ? 'Meio de pagamento — sem cobrança ao cliente' : 'Meio de pagamento'}
           </label>
-          <input
-            type="number" min={0} max={precoServico} step={0.5}
-            className="input text-sm w-full"
-            value={valorPago}
-            onChange={e => {
-              const v = Math.max(0, Number(e.target.value))
-              setValorPago(v)
-              // Se passou a cobrar alguma coisa e não há meio, selecciona multibanco
-              if (v > 0 && meioPagamento === null) setMeioPagamento('multibanco')
-              // Se zerou, limpa o meio
-              if (v === 0) setMeioPagamento(null)
-            }}
-          />
-          {temOferta && (
-            <p className="text-[10px] mt-1 text-emerald-700">
-              {isOfertaTotal
-                ? '✓ Serviço totalmente coberto pela oferta — sem cobrança ao cliente.'
-                : `⚠️ Oferta de ${(precoServico - valorPago).toFixed(2)} € · cliente paga ${valorPago.toFixed(2)} €`}
-            </p>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {/* Botão "Sem pagamento" só aparece quando há oferta */}
+            {temOferta && (
+              <button
+                type="button"
+                onClick={() => { setMeioPagamento(null); setValorPago(null) }}
+                className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  meioPagamento === null
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-emerald-400'
+                }`}>
+                ✕ Sem pagamento
+              </button>
+            )}
+            {MEIO_OPTIONS.map(op => (
+              <button
+                key={op.value}
+                type="button"
+                onClick={() => handleMeioChange(op.value)}
+                className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  meioPagamento === op.value
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
+                }`}>
+                {op.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* ── Meio de Pagamento (só visível se houver valor a cobrar) ── */}
-        {!isOfertaTotal && (
+        {/* Valor cobrado — só visível quando há meio de pagamento seleccionado */}
+        {meioPagamento !== null && (
           <div>
-            <label className="block text-xs text-gray-500 mb-2">Meio de pagamento</label>
-            <div className="flex flex-wrap gap-2">
-              {MEIO_OPTIONS.map(op => (
-                <button key={op.value} type="button" onClick={() => setMeioPagamento(op.value)}
-                  className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                    meioPagamento === op.value
-                      ? 'bg-brand-600 text-white border-brand-600'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-brand-400'
-                  }`}>
-                  {op.label}
-                </button>
-              ))}
-            </div>
+            <label className="block text-xs text-gray-500 mb-1">Valor cobrado ao cliente (€)</label>
+            <input
+              type="number" min={0} max={precoServico} step={0.5}
+              className="input text-sm w-full"
+              value={valorPago ?? ''}
+              placeholder="0.00"
+              onChange={e => {
+                const v = e.target.value === '' ? null : Math.max(0, Number(e.target.value))
+                setValorPago(v)
+                setError(null)
+              }}
+            />
+            {temOferta && valorPago !== null && valorPago >= 0 && (
+              <p className="text-[10px] text-emerald-700 mt-1">
+                Oferta de {(precoServico - Math.min(valorPago, precoServico)).toFixed(2)} € · cliente paga {Math.min(valorPago, precoServico).toFixed(2)} €
+              </p>
+            )}
           </div>
         )}
 
-        {/* ── Gorjeta ── */}
+        {/* Gorjeta */}
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" checked={temGorjeta} onChange={e => setTemGorjeta(e.target.checked)} className="rounded" />
           <span className="font-medium">🎁 Gorjeta?</span>
@@ -606,7 +609,7 @@ export function CheckoutModal({
           </div>
         )}
 
-        {/* ── Observações ── */}
+        {/* Observações */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">
             Observações de pagamento
@@ -618,8 +621,7 @@ export function CheckoutModal({
             rows={2}
             className={`input text-sm w-full resize-none ${
               error && (meioPagamento === 'outro' || (temGorjeta && meioGorjeta === 'outro')) && !comentario.trim()
-                ? 'border-red-400'
-                : ''
+                ? 'border-red-400' : ''
             }`}
             placeholder={
               meioPagamento === 'outro'
