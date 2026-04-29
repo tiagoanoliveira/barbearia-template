@@ -9,7 +9,8 @@ import {
 } from '../../../utils/reservationEmails.js'
 
 const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou']
-const VALID_MEIOS    = ['multibanco', 'dinheiro', 'outro', 'oferta']
+// 'oferta' foi removido de VALID_MEIOS — ofertas passam agora por oferta_tipo + oferta_valor
+const VALID_MEIOS    = ['multibanco', 'dinheiro', 'outro']
 
 export async function onRequest(context) {
   const { request, env, params } = context
@@ -27,6 +28,7 @@ export async function onRequest(context) {
             r.cliente_id, r.barbeiro_id, r.servico_id,
             r.meio_pagamento, r.valor_pago, r.gorjeta, r.meio_gorjeta,
             r.comentario_pagamento,
+            r.oferta_valor, r.oferta_tipo,
             v.cliente_nome, v.cliente_email,
             (SELECT foto_perfil FROM clientes c WHERE c.id = r.cliente_id) AS client_photo_url,
             v.barbeiro_nome,
@@ -68,6 +70,9 @@ export async function onRequest(context) {
         gorjeta,
         meio_gorjeta,
         comentario_pagamento,
+        // Novos campos de oferta
+        oferta_valor,
+        oferta_tipo,
       } = body
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
@@ -78,9 +83,13 @@ export async function onRequest(context) {
         if (!isValidDate(d) || !isValidTime(h?.slice(0, 5))) return badRequest('Data/hora inválida')
       }
 
+      // Validar oferta_valor: deve ser inteiro não-negativo se fornecido
+      if (oferta_valor !== undefined && oferta_valor !== null) {
+        const v = Number(oferta_valor)
+        if (!Number.isInteger(v) || v < 0) return badRequest('oferta_valor deve ser um inteiro não-negativo (cêntimos)')
+      }
+
       // Validar comentário obrigatório quando o método é 'outro'
-      const effectiveMeio = meio_pagamento ?? reservation.meio_pagamento
-      const effectiveMeioGorjeta = meio_gorjeta ?? reservation.meio_gorjeta
       const effectiveComentario = comentario_pagamento ?? reservation.comentario_pagamento ?? ''
 
       if (meio_pagamento === 'outro' && !effectiveComentario.trim()) {
@@ -111,11 +120,7 @@ export async function onRequest(context) {
         updates.push('meio_pagamento = ?')
         vals.push(meio_pagamento)
       }
-      // Quando é oferta, forçar valor_pago = 0 independentemente do que vier no body
-      if (meio_pagamento === 'oferta') {
-        updates.push('valor_pago = ?')
-        vals.push(0)
-      } else if (valor_pago !== undefined && Number.isFinite(Number(valor_pago))) {
+      if (valor_pago !== undefined && Number.isFinite(Number(valor_pago))) {
         updates.push('valor_pago = ?')
         vals.push(Number(valor_pago))
       }
@@ -131,6 +136,16 @@ export async function onRequest(context) {
       if (comentario_pagamento !== undefined) {
         updates.push('comentario_pagamento = ?')
         vals.push(sanitize(comentario_pagamento, 1000))
+      }
+
+      // Campos de oferta
+      if (oferta_valor !== undefined) {
+        updates.push('oferta_valor = ?')
+        vals.push(oferta_valor === null ? null : Number(oferta_valor))
+      }
+      if (oferta_tipo !== undefined) {
+        updates.push('oferta_tipo = ?')
+        vals.push(oferta_tipo === null ? null : String(oferta_tipo).trim())
       }
 
       if (!updates.length) return badRequest('Nada para actualizar')

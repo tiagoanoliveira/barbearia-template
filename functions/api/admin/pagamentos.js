@@ -22,18 +22,21 @@ export async function onRequest(context) {
   const from = dateFrom ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   const to   = dateTo   ?? now.toISOString().slice(0, 10)
 
+  // valor_faturado = o que o cliente pagou + o valor da oferta (= preço real do serviço)
+  // total_recebido = dinheiro efectivamente entrado no caixa
+  // total_ofertas  = montante abonado pela barbearia
   try {
     const { results: porMeio } = await env.DB.prepare(`
       SELECT
-        meio_pagamento,
-        COUNT(*)        AS total_reservas,
-        SUM(valor_pago) AS total_valor,
-        SUM(gorjeta)    AS total_gorjetas
+        COALESCE(meio_pagamento, 'oferta') AS meio_pagamento,
+        COUNT(*)                           AS total_reservas,
+        SUM(COALESCE(valor_pago, 0) + COALESCE(oferta_valor, 0)) AS total_valor,
+        SUM(gorjeta)                       AS total_gorjetas
       FROM reservas
       WHERE status = 'concluida'
-        AND meio_pagamento IS NOT NULL
+        AND (meio_pagamento IS NOT NULL OR oferta_valor IS NOT NULL)
         AND date(data_hora) BETWEEN ? AND ?
-      GROUP BY meio_pagamento
+      GROUP BY COALESCE(meio_pagamento, 'oferta')
     `).bind(from, to).all()
 
     const { results: porBarbeiro } = await env.DB.prepare(`
@@ -41,14 +44,16 @@ export async function onRequest(context) {
         b.nome                                              AS barbeiro_nome,
         b.color                                             AS barbeiro_color,
         COUNT(r.id)                                         AS total_reservas,
-        SUM(r.valor_pago)                                   AS total_valor,
+        SUM(COALESCE(r.valor_pago, 0) + COALESCE(r.oferta_valor, 0)) AS total_valor,
+        SUM(COALESCE(r.valor_pago, 0))                      AS total_recebido,
+        SUM(COALESCE(r.oferta_valor, 0))                    AS total_ofertas,
         SUM(r.gorjeta)                                      AS total_gorjetas,
         SUM(CASE WHEN r.meio_pagamento = 'dinheiro'    THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_dinheiro,
         SUM(CASE WHEN r.meio_pagamento = 'multibanco'  THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_multibanco
       FROM reservas r
       JOIN barbeiros b ON r.barbeiro_id = b.id
       WHERE r.status = 'concluida'
-        AND r.meio_pagamento IS NOT NULL
+        AND (r.meio_pagamento IS NOT NULL OR r.oferta_valor IS NOT NULL)
         AND date(r.data_hora) BETWEEN ? AND ?
       GROUP BY r.barbeiro_id
       ORDER BY total_valor DESC
@@ -58,12 +63,12 @@ export async function onRequest(context) {
       SELECT
         s.nome            AS servico_nome,
         COUNT(r.id)       AS total_reservas,
-        SUM(r.valor_pago) AS total_valor,
-        AVG(r.valor_pago) AS media_valor
+        SUM(COALESCE(r.valor_pago, 0) + COALESCE(r.oferta_valor, 0)) AS total_valor,
+        AVG(COALESCE(r.valor_pago, 0) + COALESCE(r.oferta_valor, 0)) AS media_valor
       FROM reservas r
       JOIN servicos s ON r.servico_id = s.id
       WHERE r.status = 'concluida'
-        AND r.meio_pagamento IS NOT NULL
+        AND (r.meio_pagamento IS NOT NULL OR r.oferta_valor IS NOT NULL)
         AND date(r.data_hora) BETWEEN ? AND ?
       GROUP BY r.servico_id
       ORDER BY total_valor DESC
@@ -71,13 +76,15 @@ export async function onRequest(context) {
 
     const totais = await env.DB.prepare(`
       SELECT
-        COUNT(*)        AS total_reservas,
-        SUM(valor_pago) AS total_faturado,
-        SUM(gorjeta)    AS total_gorjetas,
-        AVG(valor_pago) AS media_por_reserva
+        COUNT(*)                                                         AS total_reservas,
+        SUM(COALESCE(valor_pago, 0) + COALESCE(oferta_valor, 0))        AS total_faturado,
+        SUM(COALESCE(valor_pago, 0))                                     AS total_recebido,
+        SUM(COALESCE(oferta_valor, 0))                                   AS total_ofertas,
+        SUM(gorjeta)                                                     AS total_gorjetas,
+        AVG(COALESCE(valor_pago, 0) + COALESCE(oferta_valor, 0))        AS media_por_reserva
       FROM reservas
       WHERE status = 'concluida'
-        AND meio_pagamento IS NOT NULL
+        AND (meio_pagamento IS NOT NULL OR oferta_valor IS NOT NULL)
         AND date(data_hora) BETWEEN ? AND ?
     `).bind(from, to).first()
 
@@ -85,10 +92,13 @@ export async function onRequest(context) {
       SELECT
         r.id,
         r.data_hora,
-        c.nome                   AS cliente_nome,
-        b.nome                   AS barbeiro_nome,
-        s.nome                   AS servico_nome,
+        c.nome                                                          AS cliente_nome,
+        b.nome                                                          AS barbeiro_nome,
+        s.nome                                                          AS servico_nome,
         r.valor_pago,
+        r.oferta_valor,
+        r.oferta_tipo,
+        COALESCE(r.valor_pago, 0) + COALESCE(r.oferta_valor, 0)        AS valor_faturado,
         r.meio_pagamento,
         r.gorjeta,
         r.meio_gorjeta,
@@ -98,7 +108,7 @@ export async function onRequest(context) {
       JOIN barbeiros b ON r.barbeiro_id = b.id
       JOIN servicos  s ON r.servico_id  = s.id
       WHERE r.status = 'concluida'
-        AND r.meio_pagamento IS NOT NULL
+        AND (r.meio_pagamento IS NOT NULL OR r.oferta_valor IS NOT NULL)
         AND date(r.data_hora) BETWEEN ? AND ?
       ORDER BY r.data_hora DESC
     `).bind(from, to).all()
