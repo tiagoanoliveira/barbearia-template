@@ -38,7 +38,7 @@ export interface Client {
 
 // ─── Reserva ─────────────────────────────────────────────────────────────────
 export type ReservationStatus = 'confirmada' | 'concluida' | 'cancelada' | 'faltou'
-export type MeioPagamento = 'multibanco' | 'dinheiro' | 'outro' | 'oferta'
+export type MeioPagamento = 'multibanco' | 'dinheiro' | 'outro'
 
 export interface Reservation {
   id: number
@@ -68,6 +68,9 @@ export interface Reservation {
   gorjeta?: number
   meio_gorjeta?: MeioPagamento
   comentario_pagamento?: string
+  /** Campos de oferta (desconto/gratuidade gerido pela barbearia) */
+  oferta_valor?: number
+  oferta_tipo?: string
 }
 
 // ─── Indisponibilidade ───────────────────────────────────────────────────────

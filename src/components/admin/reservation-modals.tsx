@@ -32,6 +32,14 @@ const MEIO_OPTIONS: { value: MeioPagamento; label: string }[] = [
   { value: 'outro',      label: '❓ Outro'       },
 ]
 
+// Tipos de oferta disponíveis
+const OFERTA_TIPO_OPTIONS = [
+  { value: 'fidelidade', label: '🎁 Reserva gratuita (fidelidade)' },
+  { value: 'desconto',   label: '🏷️ Desconto' },
+  { value: 'cortesia',   label: '🤝 Cortesia' },
+  { value: 'outro',      label: '❓ Outro' },
+]
+
 // ─── ReservationDetailModal ──────────────────────────────────────────────────────
 export function ReservationDetailModal({
   reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout, onEditPayment,
@@ -351,30 +359,47 @@ export function CheckoutModal({
 }) {
   const qc = useQueryClient()
 
-  const [meioPagamento, setMeioPagamento] = useState<MeioPagamento>(
-    reservation.meio_pagamento ?? 'multibanco'
+  // Detecta se já havia oferta guardada (modo edição)
+  const hadOferta = !!reservation.oferta_tipo
+
+  const [meioPagamento, setMeioPagamento] = useState<MeioPagamento | null>(
+    hadOferta ? null : (reservation.meio_pagamento ?? 'multibanco')
   )
-  const [valorPago, setValorPago]     = useState<number>(reservation.valor_pago ?? reservation.service_price ?? 0)
-  const [temGorjeta, setTemGorjeta]   = useState(!!reservation.gorjeta && reservation.gorjeta > 0)
-  const [gorjeta, setGorjeta]         = useState<number>(reservation.gorjeta ?? 0)
-  const [meioGorjeta, setMeioGorjeta] = useState<MeioPagamento>(reservation.meio_gorjeta ?? 'dinheiro')
-  const [comentario, setComentario]   = useState<string>(reservation.comentario_pagamento ?? '')
-  const [error, setError]             = useState<string | null>(null)
-  const [saving, setSaving]           = useState(false)
+  const [valorPago, setValorPago]         = useState<number>(reservation.valor_pago ?? reservation.service_price ?? 0)
+  const [temGorjeta, setTemGorjeta]       = useState(!!reservation.gorjeta && reservation.gorjeta > 0)
+  const [gorjeta, setGorjeta]             = useState<number>(reservation.gorjeta ?? 0)
+  const [meioGorjeta, setMeioGorjeta]     = useState<MeioPagamento>(reservation.meio_gorjeta ?? 'dinheiro')
+  const [comentario, setComentario]       = useState<string>(reservation.comentario_pagamento ?? '')
+  const [error, setError]                 = useState<string | null>(null)
+  const [saving, setSaving]               = useState(false)
+
+  // Campos de oferta
+  const [temOferta, setTemOferta]         = useState(hadOferta)
+  const [ofertaTipo, setOfertaTipo]       = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
+  // oferta_valor em cêntimos na BD, mas exibido em euros no UI
+  const [ofertaValor, setOfertaValor]     = useState<number>(
+    reservation.oferta_valor != null ? reservation.oferta_valor / 100 : 0
+  )
 
   const freeReservations = reservation.client_free_reservations ?? 0
-  const isOferta = meioPagamento === 'oferta'
 
+  // Quando se activa oferta fidelidade automática (botão legado)
   const handleDescontarGratuita = () => {
-    setMeioPagamento('oferta')
-    setValorPago(0)
+    setTemOferta(true)
+    setOfertaTipo('fidelidade')
+    setOfertaValor(reservation.service_price ?? 0)
+    // Mantém o meio de pagamento para eventual pagamento parcial
   }
 
   const validate = (): string | null => {
+    if (!temOferta && meioPagamento === null)
+      return 'Selecciona um meio de pagamento.'
     if (meioPagamento === 'outro' && !comentario.trim())
       return 'Por favor, descreve o método de pagamento usado em "Observações de Pagamento".'
     if (temGorjeta && meioGorjeta === 'outro' && !comentario.trim())
       return 'Por favor, descreve o método de gorjeta usado em "Observações de Pagamento".'
+    if (temOferta && !ofertaTipo.trim())
+      return 'Indica o tipo de oferta.'
     return null
   }
 
@@ -383,12 +408,23 @@ export function CheckoutModal({
     if (err) { setError(err); return }
     setSaving(true)
     try {
-      const paymentPayload = {
-        meio_pagamento: meioPagamento,
-        valor_pago: isOferta ? 0 : valorPago,
-        gorjeta: temGorjeta ? gorjeta : undefined,
-        meio_gorjeta: temGorjeta ? meioGorjeta : undefined,
+      const paymentPayload: Record<string, unknown> = {
+        gorjeta:              temGorjeta ? gorjeta : undefined,
+        meio_gorjeta:         temGorjeta ? meioGorjeta : undefined,
         comentario_pagamento: comentario.trim() || undefined,
+        // Oferta: envia sempre (null limpa campo se oferta foi removida)
+        oferta_valor: temOferta ? Math.round(ofertaValor * 100) : null,
+        oferta_tipo:  temOferta ? ofertaTipo : null,
+      }
+
+      // Meio e valor pagos — só presentes se houver meio seleccionado
+      if (!temOferta || meioPagamento !== null) {
+        paymentPayload.meio_pagamento = meioPagamento
+        paymentPayload.valor_pago     = valorPago
+      } else {
+        // Oferta total sem meio de pagamento adicional
+        paymentPayload.meio_pagamento = null
+        paymentPayload.valor_pago     = 0
       }
 
       if (pendingEditForm) {
@@ -415,6 +451,11 @@ export function CheckoutModal({
     finally { setSaving(false) }
   }
 
+  // Valor total do serviço para referência
+  const precoServico = reservation.service_price ?? 0
+  const valorOfertaEuros = temOferta ? ofertaValor : 0
+  const valorRestante = Math.max(0, precoServico - valorOfertaEuros)
+
   return (
     <Modal
       open
@@ -431,6 +472,7 @@ export function CheckoutModal({
       <div className="space-y-4 text-sm">
         <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
           {reservation.client_name} · {reservation.service_name}
+          {precoServico > 0 && <span className="ml-2 font-semibold text-gray-700">{precoServico.toFixed(2)} €</span>}
         </div>
 
         {freeReservations > 0 && !editMode && (
@@ -442,14 +484,85 @@ export function CheckoutModal({
           </div>
         )}
 
+        {/* ── Secção Oferta ── */}
+        <div className="border border-emerald-200 rounded-lg p-3 space-y-3">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={temOferta}
+              onChange={e => {
+                setTemOferta(e.target.checked)
+                if (!e.target.checked) {
+                  // Ao remover oferta, restaura meio de pagamento
+                  if (meioPagamento === null) setMeioPagamento('multibanco')
+                }
+              }}
+              className="rounded"
+            />
+            <span className="font-medium text-emerald-800">🏷️ Incluir oferta / desconto</span>
+          </label>
+
+          {temOferta && (
+            <div className="space-y-3 pl-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Tipo de oferta</label>
+                  <select
+                    className="input text-sm w-full bg-white"
+                    value={ofertaTipo}
+                    onChange={e => setOfertaTipo(e.target.value)}
+                  >
+                    {OFERTA_TIPO_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Valor da oferta (€)</label>
+                  <input
+                    type="number" min={0} step={0.5}
+                    className="input text-sm w-full"
+                    value={ofertaValor}
+                    onChange={e => setOfertaValor(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              {valorRestante > 0 && (
+                <p className="text-[10px] text-amber-700 bg-amber-50 rounded px-2 py-1">
+                  ⚠️ Falta pagar <strong>{valorRestante.toFixed(2)} €</strong> — selecciona o meio de pagamento abaixo.
+                </p>
+              )}
+              {valorRestante <= 0 && ofertaValor > 0 && (
+                <p className="text-[10px] text-emerald-700 bg-emerald-50 rounded px-2 py-1">
+                  ✓ Serviço totalmente coberto pela oferta.
+                </p>
+              )}
+            </div>
+          )}
+
+          {freeReservations > 0 && !editMode && (
+            <button
+              type="button"
+              onClick={handleDescontarGratuita}
+              className={`w-full py-2 rounded-lg border text-xs font-medium transition-colors ${
+                temOferta && ofertaTipo === 'fidelidade'
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-white text-emerald-700 border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50'
+              }`}>
+              🎁 Descontar reserva gratuita (fidelidade)
+            </button>
+          )}
+        </div>
+
+        {/* ── Meio de Pagamento ── */}
         <div>
-          <label className="block text-xs text-gray-500 mb-2">Meio de pagamento</label>
+          <label className="block text-xs text-gray-500 mb-2">
+            Meio de pagamento
+            {temOferta && valorRestante <= 0 && <span className="ml-1 text-emerald-600">(opcional — oferta total)</span>}
+          </label>
           <div className="flex flex-wrap gap-2">
             {MEIO_OPTIONS.map(op => (
-              <button key={op.value} type="button" onClick={() => {
-                setMeioPagamento(op.value)
-                if (op.value !== 'oferta') setValorPago(reservation.service_price ?? 0)
-              }}
+              <button key={op.value} type="button" onClick={() => setMeioPagamento(op.value)}
                 className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
                   meioPagamento === op.value
                     ? 'bg-brand-600 text-white border-brand-600'
@@ -458,35 +571,38 @@ export function CheckoutModal({
                 {op.label}
               </button>
             ))}
+            {/* Botão para desseleccionar meio (apenas quando há oferta total) */}
+            {temOferta && valorRestante <= 0 && (
+              <button type="button" onClick={() => setMeioPagamento(null)}
+                className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  meioPagamento === null
+                    ? 'bg-gray-700 text-white border-gray-700'
+                    : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'
+                }`}>
+                ✕ Sem pagamento
+              </button>
+            )}
           </div>
-          {freeReservations > 0 && !editMode && (
-            <button
-              type="button"
-              onClick={handleDescontarGratuita}
-              className={`mt-2 w-full py-2 rounded-lg border text-xs font-medium transition-colors ${
-                isOferta
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-white text-emerald-700 border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50'
-              }`}>
-              🎁 Descontar reserva gratuita
-            </button>
-          )}
         </div>
 
+        {/* ── Valor Cobrado ── */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Valor cobrado (€)</label>
           <input
             type="number" min={0} step={0.5}
-            className={`input text-sm w-full ${isOferta ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
-            value={isOferta ? 0 : valorPago}
-            disabled={isOferta}
+            className={`input text-sm w-full ${
+              meioPagamento === null ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+            }`}
+            value={meioPagamento === null ? 0 : valorPago}
+            disabled={meioPagamento === null}
             onChange={e => setValorPago(Number(e.target.value))}
           />
-          {isOferta && (
-            <p className="text-[10px] text-emerald-600 mt-1">✓ Reserva gratuita — valor definido a 0 €.</p>
+          {meioPagamento === null && (
+            <p className="text-[10px] text-emerald-600 mt-1">✓ Serviço totalmente coberto pela oferta — sem cobrança adicional.</p>
           )}
         </div>
 
+        {/* ── Gorjeta ── */}
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" checked={temGorjeta} onChange={e => setTemGorjeta(e.target.checked)} className="rounded" />
           <span className="font-medium">🎁 Gorjeta?</span>
@@ -510,6 +626,7 @@ export function CheckoutModal({
           </div>
         )}
 
+        {/* ── Observações ── */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">
             Observações de pagamento
