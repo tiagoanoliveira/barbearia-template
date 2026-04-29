@@ -345,9 +345,6 @@ export function CheckoutModal({
   const hadOferta      = !!reservation.oferta_tipo
 
   // ── Reconstrução do estado inicial em modo edição ──────────────────────────
-  // oferta_valor está guardado em euros na BD. Em modo edição reconstituímos
-  // valor_pago como: preço serviço − oferta_valor (ambos em euros).
-  // Se não havia oferta, usamos diretamente o valor_pago guardado.
   const initialValorPago = (() => {
     if (hadOferta && reservation.oferta_valor != null)
       return Math.max(0, precoServico - reservation.oferta_valor)
@@ -355,15 +352,14 @@ export function CheckoutModal({
   })()
 
   const [temOferta, setTemOferta]   = useState(hadOferta)
+  // ofertaTipo: sempre 'fidelidade' por defeito (editMode usa o valor guardado na BD)
   const [ofertaTipo, setOfertaTipo] = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
 
-  // meio: null = "Sem pagamento" (oferta total), string = meio escolhido pelo barbeiro
   const [meioPagamento, setMeioPagamento] = useState<MeioPagamento | null>(
     hadOferta && initialValorPago === 0
       ? null
       : (reservation.meio_pagamento ?? 'multibanco')
   )
-  // valor_pago: null significa que o barbeiro ainda não preencheu (campo vazio)
   const [valorPago, setValorPago] = useState<number | null>(
     hadOferta && initialValorPago === 0 ? null : initialValorPago
   )
@@ -375,12 +371,12 @@ export function CheckoutModal({
   const [error, setError]             = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
 
-  // Quando se activa a oferta: meio -> null, valor -> null (campo vazio)
-  // ofertaTipo default: fidelidade se o cliente tiver reservas gratuitas, cortesia caso contrário
+  // Quando se activa/desactiva a oferta
+  // Ao activar: ofertaTipo fica sempre 'fidelidade' por defeito
   const handleToggleOferta = (checked: boolean) => {
     setTemOferta(checked)
     if (checked) {
-      setOfertaTipo(freeReservations > 0 ? 'fidelidade' : 'cortesia')
+      setOfertaTipo('fidelidade')
       setMeioPagamento(null)
       setValorPago(null)
     } else {
@@ -389,13 +385,11 @@ export function CheckoutModal({
     }
   }
 
-  // Quando o barbeiro escolhe um meio com oferta activa: limpa o valor para ele preencher
   const handleMeioChange = (meio: MeioPagamento) => {
     setMeioPagamento(meio)
-    if (temOferta) setValorPago(null) // campo fica vazio para o barbeiro inserir
+    if (temOferta) setValorPago(null)
   }
 
-  // Atalho fidelidade
   const handleDescontarGratuita = () => {
     setTemOferta(true)
     setOfertaTipo('fidelidade')
@@ -403,8 +397,6 @@ export function CheckoutModal({
     setValorPago(null)
   }
 
-  // oferta_valor em euros: diferença entre preço serviço e o que o cliente pagou
-  // Se meio=null (sem pagamento), a oferta cobre o valor total
   const valorPagoEfectivo = meioPagamento === null ? 0 : (valorPago ?? 0)
   const ofertaValorEuros = temOferta
     ? Math.round(Math.max(0, precoServico - valorPagoEfectivo) * 100) / 100
@@ -540,7 +532,6 @@ export function CheckoutModal({
             {isOfertaTotal ? 'Meio de pagamento — sem cobrança ao cliente' : 'Meio de pagamento'}
           </label>
           <div className="flex flex-wrap gap-2">
-            {/* Botão "Sem pagamento" só aparece quando há oferta */}
             {temOferta && (
               <button
                 type="button"
@@ -569,7 +560,7 @@ export function CheckoutModal({
           </div>
         </div>
 
-        {/* Valor cobrado — só visível quando há meio de pagamento seleccionado */}
+        {/* Valor cobrado */}
         {meioPagamento !== null && (
           <div>
             <label className="block text-xs text-gray-500 mb-1">Valor cobrado ao cliente (€)</label>
