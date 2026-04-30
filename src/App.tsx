@@ -16,6 +16,7 @@ import UnavailablePage from '@/pages/admin/UnavailablePage'
 import ConfiguracaoPage from '@/pages/admin/ConfiguracaoPage'
 import PagamentosPage from '@/pages/admin/PagamentosPage'
 import LoginPage from '@/pages/admin/LoginPage'
+import AdminResetPasswordPage from '@/pages/admin/AdminResetPasswordPage'
 
 // Public pages
 import HomePage from '@/pages/public/HomePage'
@@ -67,7 +68,8 @@ export default function App() {
         </Route>
 
         {/* Admin auth */}
-        <Route path={ROUTES.ADMIN_LOGIN} element={<LoginPage />} />
+        <Route path={ROUTES.ADMIN_LOGIN}           element={<LoginPage />} />
+        <Route path={ROUTES.ADMIN_RESET_PASSWORD}  element={<AdminResetPasswordPage />} />
 
         {/* Admin (layout com sidebar) */}
         <Route path="/admin" element={<AdminLayout />}>
