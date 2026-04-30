@@ -72,14 +72,6 @@ export default function AdminResetPasswordPage() {
           <p className="text-gray-500 text-sm mt-1">Definir nova password</p>
         </div>
 
-        {/* Aviso temporário */}
-        <div className="flex items-start gap-2.5 bg-amber-950/60 border border-amber-700/50 rounded-xl px-4 py-3 mb-5">
-          <AlertCircle size={16} className="text-amber-400 mt-0.5 shrink-0" />
-          <p className="text-xs text-amber-300 leading-relaxed">
-            Página temporária para correcção de passwords. Não partilhes este link.
-          </p>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
 
           {/* Username */}
