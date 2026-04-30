@@ -451,15 +451,11 @@ export default function CalendarPage() {
           </div>
         </Card>
       ) : (
-        {/* isolation:isolate cria um contexto de empilhamento fechado:
-            os z-indexes internos (reservas z-20, cabeçalho z-30) não
-            "escapam" para fora e não sobrepõem painéis externos */}
         <Card padding="none" style={{ isolation: 'isolate' }}>
           <div className="overflow-x-auto">
             <div ref={gridRef} className="grid select-none"
               style={{ gridTemplateColumns: `3rem repeat(${barbers.length}, minmax(140px, 1fr))`, minWidth: 3*16 + barbers.length*140 }}>
 
-              {/* z-30 > z-20 (reservas) → cabeçalho fica sempre por cima ao fazer scroll */}
               <div className="sticky top-0 z-30 bg-white border-b border-gray-100 h-10" />
               {barbers.map(b => (
                 <div key={b.id} className="sticky top-0 z-30 h-10 flex items-center justify-center border-b border-l"
