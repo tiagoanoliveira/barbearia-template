@@ -69,7 +69,7 @@ function timeToSlot(iso: string, startH: number) {
 }
 function slotToLabel(slot: number, startH: number) {
   const t = startH * 60 + slot * SLOT_DURATION
-  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '00')}`
 }
 function slotToISO(dateStr: string, slot: number, startH: number) {
   const t = startH * 60 + slot * SLOT_DURATION
@@ -451,14 +451,18 @@ export default function CalendarPage() {
           </div>
         </Card>
       ) : (
-        <Card padding="none">
+        {/* isolation:isolate cria um contexto de empilhamento fechado:
+            os z-indexes internos (reservas z-20, cabeçalho z-30) não
+            "escapam" para fora e não sobrepõem painéis externos */}
+        <Card padding="none" style={{ isolation: 'isolate' }}>
           <div className="overflow-x-auto">
             <div ref={gridRef} className="grid select-none"
               style={{ gridTemplateColumns: `3rem repeat(${barbers.length}, minmax(140px, 1fr))`, minWidth: 3*16 + barbers.length*140 }}>
 
-              <div className="sticky top-0 z-10 bg-white border-b border-gray-100 h-10" />
+              {/* z-30 > z-20 (reservas) → cabeçalho fica sempre por cima ao fazer scroll */}
+              <div className="sticky top-0 z-30 bg-white border-b border-gray-100 h-10" />
               {barbers.map(b => (
-                <div key={b.id} className="sticky top-0 z-10 h-10 flex items-center justify-center border-b border-l"
+                <div key={b.id} className="sticky top-0 z-30 h-10 flex items-center justify-center border-b border-l"
                   style={{ background: b.color ?? '#d4a017', borderColor: hexToRgba(b.color ?? '#d4a017', 0.4) }}>
                   <span className="text-sm font-bold text-white drop-shadow-sm">{b.name}</span>
                 </div>
