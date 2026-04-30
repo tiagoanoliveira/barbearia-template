@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
@@ -36,7 +36,6 @@ const ANY_BARBER_ID = 'any'
 const INITIAL: BookingState = {
   service: null, barber: null, anyBarber: false, date: '', time: '', notes: '',
 }
-const STEP_LABELS = ['Serviço', 'Barbeiro', 'Data & Hora', 'Confirmar']
 const DRAFT_KEY = 'booking_draft_v1'
 
 function getSafeStorage(): Storage | null {
@@ -54,10 +53,6 @@ function serviceAvailableOnDay(serviceId: number, dow: number): boolean {
   return r ? r.allowedDays.includes(dow) : true
 }
 
-/**
- * Mapeia o índice getDay() (0=Dom … 6=Sáb) para a chave do workingHours.
- * Retorna true se o dia estiver marcado como closed no config.
- */
 const DOW_TO_WH_KEY: (keyof typeof barberShopConfig.workingHours)[] = [
   'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
 ]
@@ -96,6 +91,43 @@ export default function BookingPage() {
   const services = servicesRes?.data ?? []
   const barbers  = barbersRes?.data  ?? []
 
+  // Quando há exactamente 1 barbeiro activo, saltamos o passo de selecção
+  const singleBarber: Barber | null = barbers.length === 1 ? barbers[0]! : null
+
+  // Auto-seleccionar o único barbeiro assim que os dados chegarem
+  useEffect(() => {
+    if (!singleBarber) return
+    setBooking(b => {
+      if (!b.anyBarber && b.barber?.id === singleBarber.id) return b
+      return { ...b, barber: singleBarber, anyBarber: false }
+    })
+  }, [singleBarber])
+
+  // Navegação ciente do salto de passo
+  const goNext = useCallback(() => {
+    const next: Step = step === 1 && singleBarber ? 3 : (step + 1) as Step
+    goToStep(next)
+  }, [step, singleBarber])
+
+  const goPrev = useCallback(() => {
+    const prev: Step = step === 3 && singleBarber ? 1 : (step - 1) as Step
+    goToStep(prev)
+  }, [step, singleBarber])
+
+  // Itens visíveis no step indicator
+  const visibleSteps: { n: Step; label: string }[] = singleBarber
+    ? [
+        { n: 1, label: 'Serviço' },
+        { n: 3, label: 'Data & Hora' },
+        { n: 4, label: 'Confirmar' },
+      ]
+    : [
+        { n: 1, label: 'Serviço' },
+        { n: 2, label: 'Barbeiro' },
+        { n: 3, label: 'Data & Hora' },
+        { n: 4, label: 'Confirmar' },
+      ]
+
   useEffect(() => {
     if (!services.length || !barbers.length) return
     if (!storage) return
@@ -109,14 +141,16 @@ export default function BookingPage() {
       const barber = draft.barberId ? barbers.find(b => b.id === draft.barberId) ?? null : null
       setBooking({
         service,
-        barber: draft.anyBarber ? null : barber,
-        anyBarber: !!draft.anyBarber,
+        barber:    draft.anyBarber ? null : (barbers.length === 1 ? barbers[0]! : barber),
+        anyBarber: barbers.length === 1 ? false : !!draft.anyBarber,
         date:  draft.date  || '',
         time:  draft.time  || '',
         notes: draft.notes || '',
       })
+      // Se o rascunho guardou o passo 2 mas agora só há 1 barbeiro, avança para o 3
       const s = draft.step ?? 1
-      if (s >= 1 && s <= 4) setStep(s as Step)
+      const resolved: Step = barbers.length === 1 && s === 2 ? 3 : s as Step
+      if (resolved >= 1 && resolved <= 4) setStep(resolved)
     } catch (e) {
       console.warn('BookingPage: erro ao ler rascunho da reserva', e)
     }
@@ -216,7 +250,8 @@ export default function BookingPage() {
 
   const handleSelectService = (s: Service) => {
     setBooking(b => ({ ...b, service: s, date: '', time: '' }))
-    setTimeout(() => goToStep(2), 200)
+    // Com barbeiro único, saltar directamente para o passo 3
+    setTimeout(() => goToStep(singleBarber ? 3 : 2), 200)
   }
 
   const handleSelectBarber = (barber: Barber | null, anyBarber: boolean) => {
@@ -243,8 +278,7 @@ export default function BookingPage() {
       <div className="w-full max-w-xl">
         {/* Step indicator */}
         <div className="flex items-center justify-between mb-8">
-          {STEP_LABELS.map((label, i) => {
-            const n = (i + 1) as Step
+          {visibleSteps.map(({ n, label }, i) => {
             const active    = step === n
             const completed = step > n
             const clickable = n < step
@@ -257,11 +291,11 @@ export default function BookingPage() {
                       : active  ? 'bg-white text-gray-900 cursor-default'
                       : 'bg-white/10 text-gray-400 cursor-not-allowed'
                   }`}>
-                  {completed ? <Check size={14} /> : n}
+                  {completed ? <Check size={14} /> : i + 1}
                 </button>
                 <span className={`text-sm hidden sm:block ${ active ? 'text-white font-semibold' : completed ? 'text-gray-400 cursor-pointer' : 'text-gray-500' }`}
                   onClick={() => clickable && handleStepClick(n)}>{label}</span>
-                {i < 3 && <div className="h-px flex-1 bg-white/10 min-w-[20px]" />}
+                {i < visibleSteps.length - 1 && <div className="h-px flex-1 bg-white/10 min-w-[20px]" />}
               </div>
             )
           })}
@@ -326,7 +360,7 @@ export default function BookingPage() {
                 </div>
               )}
 
-              {/* PASSO 2 */}
+              {/* PASSO 2 — só aparece quando há múltiplos barbeiros */}
               {step === 2 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button onClick={() => handleSelectBarber(null, true)}
@@ -437,7 +471,7 @@ export default function BookingPage() {
                 <div className="space-y-4">
                   {[
                     { icon: Scissors, label: 'Serviço',  value: `${booking.service?.name} — ${booking.service?.price}€` },
-                    { icon: User,     label: 'Barbeiro', value: barberDisplayName },
+                    ...(!singleBarber ? [{ icon: User, label: 'Barbeiro', value: barberDisplayName }] : []),
                     { icon: Calendar, label: 'Data',     value: booking.date ? format(parseISO(booking.date), "EEEE, d 'de' MMMM yyyy", { locale: pt }) : '' },
                     { icon: Clock,    label: 'Hora',     value: booking.time },
                   ].map(({ icon: Icon, label, value }) => (
@@ -475,14 +509,14 @@ export default function BookingPage() {
 
               {/* Navegação */}
               <div className="flex items-center justify-between mt-8">
-                <button onClick={() => goToStep((step - 1) as Step)}
+                <button onClick={goPrev}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     step === 1 ? 'invisible' : 'bg-white/5 text-gray-300 hover:bg-white/10'
                   }`}>
                   <ArrowLeft size={16} /> Voltar
                 </button>
                 {step < 4 ? (
-                  <button onClick={() => goToStep((step + 1) as Step)} disabled={!canNext}
+                  <button onClick={goNext} disabled={!canNext}
                     className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 text-white rounded-xl text-sm font-semibold hover:bg-primary-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                     Continuar <ArrowRight size={16} />
                   </button>

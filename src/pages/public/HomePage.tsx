@@ -107,11 +107,14 @@ export default function HomePage() {
   const { about }    = barberShopConfig
   const hourGroups   = groupWorkingHours()
 
-  // Linha de horário compacta para a secção Sobre (ex: "Seg–Sex 10:00–20:00 | Sáb 09:00–18:00")
+  // Linha de horário compacta para a secção Sobre
   const hoursInline = hourGroups
     .filter(g => !g.closed)
     .map(g => `${g.label} ${g.hours}`)
     .join(' | ')
+
+  // A secção de equipa só é mostrada quando há mais do que 1 barbeiro activo
+  const showTeamSection = barbers.length > 1
 
   return (
     <div>
@@ -181,7 +184,6 @@ export default function HomePage() {
               </div>
             </div>
             <div className="relative flex justify-center">
-              {/* Altura e largura máximas da foto do about */}
               <div className="overflow-hidden rounded-3xl shadow-xl" style={{ maxWidth: 350, maxHeight: 350 }}>
                 <img src={aboutImage.src} alt={aboutImage.alt} className="w-full h-full object-cover" />
               </div>
@@ -208,29 +210,31 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── EQUIPA ─────────────────────────────────────────── */}
-      <section id="equipa" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-black text-primary-700">A equipa</h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-            {barbers.map(b => (
-              <div key={b.id} className="text-center">
-                <div className="w-24 h-24 mx-auto mb-3 rounded-full overflow-hidden border-2 border-white shadow"
-                     style={{ background: `${b.color ?? '#d4a017'}22` }}>
-                  {b.photo_url
-                    ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-3xl font-black"
-                           style={{ color: b.color ?? '#d4a017' }}>{b.name[0]}</div>
-                  }
+      {/* ── EQUIPA — só visível com mais de 1 barbeiro ─────────────── */}
+      {showTeamSection && (
+        <section id="equipa" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-black text-primary-700">A equipa</h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+              {barbers.map(b => (
+                <div key={b.id} className="text-center">
+                  <div className="w-24 h-24 mx-auto mb-3 rounded-full overflow-hidden border-2 border-white shadow"
+                       style={{ background: `${b.color ?? '#d4a017'}22` }}>
+                    {b.photo_url
+                      ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-3xl font-black"
+                             style={{ color: b.color ?? '#d4a017' }}>{b.name[0]}</div>
+                    }
+                  </div>
+                  <h3 className="text-gray-900 font-bold text-base">{b.name}</h3>
                 </div>
-                <h3 className="text-gray-900 font-bold text-base">{b.name}</h3>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ── GALERIA ────────────────────────────────────── */}
       <section id="galeria" className={`py-12 ${barberShopConfig.theme.sectionLight}`}>
