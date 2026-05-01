@@ -107,15 +107,82 @@ function detailRow(icon, label, value) {
 <div class="dc"><strong>${label}</strong>${value}</div></div>`
 }
 
+// ─── Bloco VTIMEZONE para Europe/Lisbon (inclui regras DST WEST/WET) ──────────────────
+const VTIMEZONE_LISBON = [
+  'BEGIN:VTIMEZONE',
+  'TZID:Europe/Lisbon',
+  'BEGIN:STANDARD',
+  'DTSTART:19701025T020000',
+  'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10',
+  'TZOFFSETFROM:+0100',
+  'TZOFFSETTO:+0000',
+  'TZNAME:WET',
+  'END:STANDARD',
+  'BEGIN:DAYLIGHT',
+  'DTSTART:19700329T010000',
+  'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3',
+  'TZOFFSETFROM:+0000',
+  'TZOFFSETTO:+0100',
+  'TZNAME:WEST',
+  'END:DAYLIGHT',
+  'END:VTIMEZONE',
+].join('\r\n')
+
+/**
+ * Formata dataHora ("YYYY-MM-DDTHH:MM:SS", hora local Lisboa sem TZ)
+ * para o formato ICS local: YYYYMMDDTHHMMSS (sem Z).
+ * Usado com TZID=Europe/Lisbon para que os clientes de calendário
+ * interpretem a hora correctamente, incluindo hora de verão (WEST = UTC+1).
+ *
+ * IMPORTANTE: NÃO usar o sufixo Z nem getUTCHours() — a string dataHora
+ * já está em hora de Lisboa, por isso parseamos os componentes directamente.
+ */
+function icsParams(dataHora, duracao) {
+  const pad = n => String(n).padStart(2, '0')
+
+  // Parsear os componentes directamente da string (sem conversão de fuso)
+  const [datePart, timePart] = dataHora.split('T')
+  const [year, month, day]  = datePart.split('-').map(Number)
+  const [hour, minute]      = timePart.split(':').map(Number)
+
+  const fmtLocal = (y, mo, d, h, mi) =>
+    `${y}${pad(mo)}${pad(d)}T${pad(h)}${pad(mi)}00`
+
+  const dtStart = fmtLocal(year, month, day, hour, minute)
+
+  // Calcular a hora de fim adicionando a duração em minutos
+  const totalMinutes = hour * 60 + minute + (duracao || 60)
+  const endHour   = Math.floor(totalMinutes / 60) % 24
+  const endMinute = totalMinutes % 60
+  // Lidar com reservas que passam da meia-noite (adiciona 1 dia)
+  const dayOverflow = Math.floor((hour * 60 + minute + (duracao || 60)) / (24 * 60))
+  let endDay   = day   + dayOverflow
+  let endMonth = month
+  let endYear  = year
+  if (dayOverflow > 0) {
+    // Recalcular data de fim usando Date UTC (só para aritmética de calendário)
+    const endDate = new Date(Date.UTC(year, month - 1, day + dayOverflow))
+    endYear  = endDate.getUTCFullYear()
+    endMonth = endDate.getUTCMonth() + 1
+    endDay   = endDate.getUTCDate()
+  }
+
+  const dtEnd = fmtLocal(endYear, endMonth, endDay, endHour, endMinute)
+
+  return { dtStart, dtEnd }
+}
+
 function icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName) {
   return [
     'BEGIN:VCALENDAR', 'VERSION:2.0',
     `PRODID:-//${SHOP.name}//Reservas//PT`,
     'CALSCALE:GREGORIAN', 'METHOD:REQUEST',
+    VTIMEZONE_LISBON,
     'BEGIN:VEVENT',
     `UID:reserva-${reservaId}@${new URL(SHOP.baseUrl).hostname}`,
     `DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z`,
-    `DTSTART:${dtStart}`, `DTEND:${dtEnd}`,
+    `DTSTART;TZID=Europe/Lisbon:${dtStart}`,
+    `DTEND;TZID=Europe/Lisbon:${dtEnd}`,
     `SUMMARY:Reserva - ${serviceName} com ${barberName}`,
     `DESCRIPTION:Confirmacao de reserva na ${SHOP.name}`,
     `LOCATION:${SHOP.name} \u2013 ${SHOP.address}`,
@@ -131,10 +198,12 @@ function icsCancelled(reservaId, clientEmail, dtStart, dtEnd, serviceName, barbe
     'BEGIN:VCALENDAR', 'VERSION:2.0',
     `PRODID:-//${SHOP.name}//Reservas//PT`,
     'CALSCALE:GREGORIAN', 'METHOD:CANCEL',
+    VTIMEZONE_LISBON,
     'BEGIN:VEVENT',
     `UID:reserva-${reservaId}@${new URL(SHOP.baseUrl).hostname}`,
     `DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').split('.')[0]}Z`,
-    `DTSTART:${dtStart}`, `DTEND:${dtEnd}`,
+    `DTSTART;TZID=Europe/Lisbon:${dtStart}`,
+    `DTEND;TZID=Europe/Lisbon:${dtEnd}`,
     `SUMMARY:CANCELADA - ${serviceName} com ${barberName}`,
     `DESCRIPTION:Esta reserva foi cancelada pela ${SHOP.name}`,
     `LOCATION:${SHOP.name} \u2013 ${SHOP.address}`,
@@ -143,13 +212,6 @@ function icsCancelled(reservaId, clientEmail, dtStart, dtEnd, serviceName, barbe
     'STATUS:CANCELLED', 'SEQUENCE:1',
     'END:VEVENT', 'END:VCALENDAR',
   ].join('\r\n')
-}
-
-function icsParams(dataHora, duracao) {
-  const dt  = new Date(dataHora)
-  const pad = n => String(n).padStart(2, '0')
-  const fmt = d => `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00Z`
-  return { dtStart: fmt(dt), dtEnd: fmt(new Date(dt.getTime() + (duracao || 60) * 60000)) }
 }
 
 // ─── Envio central ─────────────────────────────────────────────────────────────────────
