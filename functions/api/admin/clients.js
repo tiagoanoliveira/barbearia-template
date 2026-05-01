@@ -84,7 +84,7 @@ export async function onRequest(context) {
 
       const result = await env.DB.prepare(
         `INSERT INTO clientes (nome, email, telefone, password_hash, email_verificado, criado_em, atualizado_em)
-         VALUES (?, ?, ?, '', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+         VALUES (?, ?, ?, 'cliente_nunca_iniciou_sessão', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       ).bind(name, email, phone).run()
 
       const createdClient = await env.DB.prepare(
