@@ -1,5 +1,5 @@
 import { authenticateAdmin } from '../../utils/auth.js'
-import { isAdmin } from '../../utils/authz.js'
+import { isAdmin, isBarber } from '../../utils/authz.js'
 import { ok, created, unauthorized, badRequest, serverError, corsOptions } from '../../utils/response.js'
 import { sanitize } from '../../utils/validators.js'
 
@@ -10,10 +10,16 @@ export async function onRequest(context) {
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
 
-  // Barbeiros não têm acesso a dados de clientes
-  if (!isAdmin(auth)) {
+  // Barbeiros só podem fazer GET (pesquisar clientes para agendar reservas)
+  // Operações de escrita (POST) são exclusivas de admin/superAdmin
+  const barberReadOnly = isBarber(auth) && request.method !== 'GET'
+  if (!isAdmin(auth) && !isBarber(auth)) {
     console.warn('admin/clients: acesso negado', { role: auth.user?.role })
     return unauthorized('Sem permissões para aceder a clientes')
+  }
+  if (barberReadOnly) {
+    console.warn('admin/clients: barbeiro tentou escrita', { role: auth.user?.role })
+    return unauthorized('Barbeiros só podem consultar clientes')
   }
 
   if (request.method === 'GET') {
