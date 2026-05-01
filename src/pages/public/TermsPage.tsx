@@ -23,7 +23,7 @@ export default function TermsPage() {
             <Section title="2. Registo e Conta de Utilizador">
                 <p>O acesso a determinadas funcionalidades requer criação de conta, efetuada através do serviço de autenticação <strong>Google OAuth</strong>. Ao criar conta, o utilizador compromete-se a:</p>
                 <ul>
-                    <li>Ter idade igual ou superior a <strong>16 anos</strong> ou dispor de autorização parental verificável (art.º 8.º do RGPD e art.º 16.º da Lei n.º 58/2019);</li>
+                    <li>Ter idade igual ou superior a <strong>13 anos</strong> ou dispor de autorização parental verificável (art.º 8.º do RGPD e art.º 16.º da Lei n.º 58/2019);</li>
                     <li>Fornecer informações verdadeiras, completas e atualizadas;</li>
                     <li>Manter a confidencialidade das suas credenciais;</li>
                     <li>Notificar imediatamente o Prestador em caso de utilização não autorizada da conta.</li>
