@@ -42,7 +42,7 @@ export const barberShopConfig = {
   ralPhone:      '+351 225 508 349',
   ralEmail:      'cicap@cicap.pt',
   ralWebsite:    'https://www.centrodearbitragemdoporto.pt',
-  privacyEmail:  'privacidade@brooklynbarbearia.pt',
+  privacyEmail:  'geral@brooklynbarbearia.pt',
   lastUpdated:   '24 de abril de 2026',
 
   logoUrl:    logoSrc,
