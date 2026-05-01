@@ -64,7 +64,7 @@ export default function App() {
           <Route path="/condicoes-reserva"  element={<BookingConditionsPage />} />
           <Route path="/suporte"            element={<SupportPage />} />
           <Route path="/aviso-legal"        element={<LegalNoticePage />} />
-          <Route path="/ral-e-reclamacoes"  element={<RalPage />} />
+          <Route path="/ral"  element={<RalPage />} />
         </Route>
 
         {/* Admin auth */}
