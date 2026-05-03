@@ -3,8 +3,8 @@
  *
  * Lê src/config/theme.ts em Node (build time / dev server) e:
  *  - Injeta env vars VITE_SHOP_* para substituir placeholders no index.html
- *  - Gera src/sw.js, src/manifest.json, src/admin-manifest.json
- *    (src/ é o directório servido — não public/)
+ *  - Gera public/sw.js, public/manifest.json, public/admin-manifest.json
+ *    (public/ é copiado tal-e-qual para dist/ pelo Vite — URLs estáticas garantidas)
  *
  * NUNCA hardcode dados da barbearia aqui — tudo vem do theme.ts.
  */
@@ -13,7 +13,6 @@ import fs   from 'node:fs'
 import path from 'node:path'
 
 // ─── Lê os valores relevantes do theme.ts via regex simples ──────────────────
-// (O plugin corre em Node antes do Vite processar o TS, por isso usamos fs.)
 export interface ThemeValues {
   name:        string
   shortName:   string
@@ -25,19 +24,15 @@ export interface ThemeValues {
 export function readThemeValues(root: string): ThemeValues {
   const src = fs.readFileSync(path.join(root, 'src/config/theme.ts'), 'utf-8')
 
-  // Extrai campos simples: field: 'value'
   const field = (key: string) => {
     const m = src.match(new RegExp(`\\b${key}:\\s*'([^']+)'`))
     return m?.[1] ?? ''
   }
 
-  // primary[500] está dentro do bloco themeConfig.primary — apanha o primeiro
-  // '500': '#xxxxxx' que aparecer no ficheiro
   const colorMatch = src.match(/'500':\s*'(#[0-9a-fA-F]{6})'/)
   const themeColor = colorMatch?.[1] ?? '#16a34a'
 
   const name      = field('name')
-  // short_name = primeira palavra do nome (ex: "Brooklyn Barbearia" → "Brooklyn")
   const shortName = name.split(/\s+/).filter(Boolean)[0] ?? name
 
   return {
@@ -51,32 +46,48 @@ export function readThemeValues(root: string): ThemeValues {
 
 // ─── Conteúdo gerado ─────────────────────────────────────────────────────────
 
+// Os ícones ficam em public/icons/ → servidos como /icons/logo-*.png
+// (URLs estáticas, sem hash, garantidas pelo Cloudflare Pages / Vite)
+const ICON_192 = '/icons/logo-192.png'
+const ICON_512 = '/icons/logo-512.png'
+
 function buildManifest(t: ThemeValues, isAdmin: boolean): string {
   const obj = {
     name:             isAdmin ? `${t.name} Admin` : t.name,
     short_name:       isAdmin ? 'Admin' : t.shortName,
     description:      isAdmin ? `Painel de administração — ${t.name}` : t.description,
-    start_url:        isAdmin ? '/admin' : '/',
-    scope:            isAdmin ? '/admin' : '/',
+    start_url:        isAdmin ? '/admin/' : '/',
+    scope:            isAdmin ? '/admin/' : '/',
     display:          'standalone',
     orientation:      'portrait-primary',
     background_color: '#0a0a0a',
     theme_color:      t.themeColor,
     lang:             'pt',
     icons: [
-      { src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: '/media/images/logos/logo-512px.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      // "any" — ícone normal (com fundo transparente)
+      { src: ICON_192, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: ICON_512, sizes: '512x512', type: 'image/png', purpose: 'any' },
+      // "maskable" — ícone com safe-zone para Android adaptive icons
+      // O Chrome exige pelo menos um ícone maskable ≥ 192 px para mostrar
+      // "Instalar app" em vez de "Criar atalho"
+      { src: ICON_512, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
     screenshots: [],
     categories:  ['lifestyle', 'health'],
     shortcuts: isAdmin
-      ? [{ name: 'Dashboard', short_name: 'Dashboard', url: '/admin',
-           icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }] }]
+      ? [{
+          name: 'Dashboard', short_name: 'Dashboard', url: '/admin/',
+          icons: [{ src: ICON_192, sizes: '192x192', type: 'image/png' }],
+        }]
       : [
-          { name: 'Reservar',      short_name: 'Reservar', url: '/reservar',
-            icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }] },
-          { name: 'O meu perfil', short_name: 'Perfil',   url: '/perfil',
-            icons: [{ src: '/media/images/logos/logo-192px.png', sizes: '192x192', type: 'image/png' }] },
+          {
+            name: 'Reservar', short_name: 'Reservar', url: '/reservar',
+            icons: [{ src: ICON_192, sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'O meu perfil', short_name: 'Perfil', url: '/perfil',
+            icons: [{ src: ICON_192, sizes: '192x192', type: 'image/png' }],
+          },
         ],
   }
   return JSON.stringify(obj, null, 2) + '\n'
@@ -173,12 +184,14 @@ export default function pwaAssetsPlugin(): Plugin {
   let rootDir = process.cwd()
 
   function write(root: string) {
-    const t      = readThemeValues(root)
-    // Os ficheiros vão para src/ — é o directório servido (não public/)
-    const srcDir = path.join(root, 'src')
-    fs.writeFileSync(path.join(srcDir, 'sw.js'),               buildSW(t))
-    fs.writeFileSync(path.join(srcDir, 'manifest.json'),       buildManifest(t, false))
-    fs.writeFileSync(path.join(srcDir, 'admin-manifest.json'), buildManifest(t, true))
+    const t         = readThemeValues(root)
+    // Os ficheiros vão para public/ — o Vite copia-os tal-e-qual para dist/
+    // garantindo URLs estáticas sem hash (ex: /sw.js, /manifest.json)
+    const publicDir = path.join(root, 'public')
+    fs.mkdirSync(publicDir, { recursive: true })
+    fs.writeFileSync(path.join(publicDir, 'sw.js'),               buildSW(t))
+    fs.writeFileSync(path.join(publicDir, 'manifest.json'),       buildManifest(t, false))
+    fs.writeFileSync(path.join(publicDir, 'admin-manifest.json'), buildManifest(t, true))
     console.log(`[pwa-assets] "${t.name}" | theme_color ${t.themeColor} | cache "${t.cacheName}-*"`)
     return t
   }
@@ -191,9 +204,7 @@ export default function pwaAssetsPlugin(): Plugin {
       rootDir = config.root
     },
 
-    // Injeta env vars para substituição no index.html (transformIndexHtml)
-    config(_, env) {
-      // Em modo serve o root ainda não está resolvido — usamos cwd
+    config() {
       const root = rootDir || process.cwd()
       try {
         const t = readThemeValues(root)
@@ -208,12 +219,13 @@ export default function pwaAssetsPlugin(): Plugin {
       } catch { return {} }
     },
 
-    // Build: gera os ficheiros antes do Vite copiar src/ para dist/
     buildStart() {
       write(rootDir)
     },
 
-    // Dev server: serve os 3 ficheiros dinamicamente (reflecte mudanças no theme.ts sem reiniciar)
+    // Dev server: serve os 3 ficheiros dinamicamente a partir de public/
+    // (o Vite já os serviria de public/, mas este handler garante freshness
+    //  quando theme.ts muda sem reiniciar o servidor)
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
         const url = req.url?.split('?')[0]
@@ -242,7 +254,6 @@ export default function pwaAssetsPlugin(): Plugin {
       })
     },
 
-    // index.html: substitui os placeholders %VITE_SHOP_*%
     transformIndexHtml(html) {
       const t = readThemeValues(rootDir)
       return html
