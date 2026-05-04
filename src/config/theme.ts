@@ -26,7 +26,7 @@ export const barberShopConfig = {
   phone:       '+351 224 938 542',
   email:       'geral@brooklynbarbearia.pt',
   address:     'Rua do Campo Alegre, 450, Porto',
-  instagram:   'https://instagram.com/brooklynbarbearia',
+  instagram:   'https://instagram.com/brooklynbarbeariapt',
   supportIframeSrc: 'https://tiagoanoliveira.pt/support/988b8a8a745c445fbaff596ad5be54dd',
 
   // ─ Cloudflare Turnstile ─────────────────────────────────────────────────
