@@ -157,9 +157,9 @@ function makeContext(
 }
 
 // Fixtures
-const FUTURE_DATE = '2099-06-02'   // segunda-feira
+const FUTURE_DATE = '2040-01-02'   // segunda-feira
 const FUTURE_TIME = '10:00'
-const SUNDAY_DATE = '2099-06-01'   // domingo → getOpenClose(0) = null
+const SUNDAY_DATE = '2040-01-01'   // domingo → getOpenClose(0) = null
 const CLIENT_AUTH = { success: true, clientId: 1, role: 'client', payload: { id: 1 } }
 const AUTH_FAIL   = { success: false }
 
@@ -561,7 +561,7 @@ describe('GET /api/slots-any-barber', () => {
     expect((await handleSlotsAny(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
-  it('dia fechado (domingo 2099-06-01) → 200 array vazio', async () => {
+  it('dia fechado (domingo 2040-01-01) → 200 array vazio', async () => {
     // getOpenClose(0) = null pelo mock global → retorna ok([])
     const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${SUNDAY_DATE}&service_id=1`)
     const res = await handleSlotsAny(makeContext(req, makeEnv()))
