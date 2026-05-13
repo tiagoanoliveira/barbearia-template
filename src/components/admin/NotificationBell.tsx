@@ -248,12 +248,12 @@ export default function NotificationBell() {
           {toasts.map(t => (
               <div
                   key={t.id}
-                  className="pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl bg-white shadow-2xl border border-gray-200 w-80 max-w-[90vw]"
+                  className="pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl bg-white shadow-2xl border border-gray-200 w-96 max-w-[90vw]"
                   style={{ animation: 'notifSlideIn 0.25s ease-out' }}
               >
                 <span className="text-xl flex-shrink-0 mt-0.5">{getNotifIcon(t.type)}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-gray-900 leading-snug line-clamp-2">{t.message}</p>
+                  <p className="text-[11px] font-medium text-gray-900 leading-snug line-clamp-2">{t.message}</p>
                   {t.barber_name && <p className="text-[11px] text-gray-400 mt-0.5">{t.barber_name}</p>}
                 </div>
                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-1">
