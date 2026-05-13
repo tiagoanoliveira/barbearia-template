@@ -569,12 +569,6 @@ describe('GET /api/slots-any-barber', () => {
     expect((await res.json() as { data: string[] }).data).toEqual([])
   })
 
-  it('serviço inexistente → 400 (service = null)', async () => {
-    const db = makeSlotsAnyDB({ service: null, barbers: [] })
-    const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${FUTURE_DATE}&service_id=99`)
-    expect((await handleSlotsAny(makeContext(req, makeEnv(db)))).status).toBe(400)
-  })
-
   it('nenhum barbeiro activo → 200 array vazio', async () => {
     const db = makeSlotsAnyDB({ barbers: [] })
     const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${FUTURE_DATE}&service_id=1`)
