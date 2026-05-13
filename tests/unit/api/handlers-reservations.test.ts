@@ -1,5 +1,5 @@
 /**
- * Testes dos handlers de reservas.
+ * Testes dos handlers de reservas e slots-any-barber.
  *
  * Cobre:
  *  - Validação de input (service_id, barber_id, data, hora)
@@ -65,49 +65,87 @@ import { onRequest as handleSlotsAny }     from '../../../functions/api/slots-an
 import { authenticateClient }              from '../../../functions/utils/auth.js'
 import { computeSlots, getOpenClose }      from '../../../functions/utils/slots.js'
 
-// ── Helpers (mesmos de security.test.ts) ───────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function makeRequest(
   method: string,
   url: string,
   opts?: { body?: Record<string, unknown> },
 ): Request {
-  const headers = new Headers({ 'Content-Type': 'application/json' })
   return new Request(url, {
     method,
-    headers,
+    headers: new Headers({ 'Content-Type': 'application/json' }),
     body: opts?.body != null ? JSON.stringify(opts.body) : undefined,
   })
 }
 
-function makeBound(first: unknown = null, results: unknown[] = []) {
+/**
+ * Cria um statement mock que expõe:
+ *  - .bind(...) → devolve um bound com .first(), .all(), .run()
+ *  - .first()   → directamente no statement (para queries sem parâmetros)
+ *  - .all()     → directamente no statement (para queries sem parâmetros)
+ *  - .run()     → directamente no statement
+ */
+function makeStmt(
+  firstVal: unknown = null,
+  allResults: unknown[] = [],
+) {
+  const bound = {
+    first: vi.fn().mockResolvedValue(firstVal),
+    all:   vi.fn().mockResolvedValue({ results: allResults }),
+    run:   vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 42 } }),
+  }
   return {
-    first: vi.fn().mockResolvedValue(first),
-    all:   vi.fn().mockResolvedValue({ results }),
+    bind: vi.fn(() => bound),
+    // acesso directo sem .bind() (ex: barbeiros WHERE ativo=1 em slots-any-barber)
+    first: vi.fn().mockResolvedValue(firstVal),
+    all:   vi.fn().mockResolvedValue({ results: allResults }),
     run:   vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 42 } }),
   }
 }
 
-function makeDB(factory?: () => ReturnType<typeof makeBound>) {
-  return {
-    prepare: vi.fn(() => ({
-      bind: vi.fn(() => (factory ? factory() : makeBound())),
-    })),
-  }
+/**
+ * DB simples: todas as queries devolvem o mesmo firstVal / allResults.
+ */
+function makeDB(
+  firstVal: unknown = null,
+  allResults: unknown[] = [],
+) {
+  return { prepare: vi.fn(() => makeStmt(firstVal, allResults)) }
 }
 
-function makeDBRouted(routes: [string, ReturnType<typeof makeBound>][]) {
+/**
+ * DB roteado por substring do SQL.
+ *
+ * routes: array de [substring, { firstVal, allResults }] em ordem de prioridade.
+ *
+ * Para cada .prepare(sql), encontra a primeira entrada cujo substring
+ * está contido no sql e devolve o statement correspondente.
+ * Se não encontrar, devolve um statement neutro.
+ *
+ * NOTA: como .bind() pode ser chamado com argumentos diferentes para a
+ * mesma query (ex: dois barbeiros), o bind devolve sempre o mesmo bound
+ * configurado na rota — suficiente para testar o comportamento do handler.
+ */
+type Route = [string, { firstVal?: unknown; allResults?: unknown[] }]
+
+function makeDBRouted(routes: Route[]) {
   return {
-    prepare: vi.fn((sql: string) => ({
-      bind: vi.fn(() => {
-        const match = routes.find(([sub]) => sql.includes(sub))
-        return match ? match[1] : makeBound()
-      }),
-    })),
+    prepare: vi.fn((sql: string) => {
+      const match = routes.find(([sub]) => sql.includes(sub))
+      const firstVal    = match?.[1].firstVal  ?? null
+      const allResults  = match?.[1].allResults ?? []
+      return makeStmt(firstVal, allResults)
+    }),
   }
 }
 
 function makeEnv(db?: ReturnType<typeof makeDB> | ReturnType<typeof makeDBRouted>) {
-  return { DB: db ?? makeDB(), JWT_SECRET: 'test-secret', JWT_ADMIN_SECRET: 'test-admin-secret' }
+  return {
+    DB:               db ?? makeDB(),
+    JWT_SECRET:       'test-secret',
+    JWT_ADMIN_SECRET: 'test-admin-secret',
+  }
 }
 
 function makeContext(
@@ -119,133 +157,149 @@ function makeContext(
 }
 
 // Fixtures
-const FUTURE_DATE = '2099-06-02'  // segunda-feira
+const FUTURE_DATE = '2099-06-02'   // segunda-feira
 const FUTURE_TIME = '10:00'
+const SUNDAY_DATE = '2099-06-01'   // domingo → getOpenClose(0) = null
 const CLIENT_AUTH = { success: true, clientId: 1, role: 'client', payload: { id: 1 } }
 const AUTH_FAIL   = { success: false }
 
 beforeEach(() => vi.clearAllMocks())
 
-// ══ 1. VALIDAÇÃO DE INPUT ═══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// 1. VALIDAÇÃO DE INPUT
+// ══════════════════════════════════════════════════════════════════════════════
 describe('POST /api/reservations — validação de input', () => {
   it('sem autenticação → 401', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(AUTH_FAIL)
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 1, date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv()))
-    expect(res.status).toBe(401)
+    expect((await handleReservations(makeContext(req, makeEnv()))).status).toBe(401)
   })
 
   it('service_id = 0 → 400', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 0, barber_id: 1, date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv()))
-    expect(res.status).toBe(400)
+    expect((await handleReservations(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
   it('barber_id negativo → 400', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: -5, date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv()))
-    expect(res.status).toBe(400)
+    expect((await handleReservations(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
   it('data inválida → 400', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 1, date: 'nao-data', time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv()))
-    expect(res.status).toBe(400)
+    expect((await handleReservations(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
   it('hora inválida → 400', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 1, date: FUTURE_DATE, time: '25:99' },
     })
-    const res = await handleReservations(makeContext(req, makeEnv()))
-    expect(res.status).toBe(400)
+    expect((await handleReservations(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
   it('data no passado → 400', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 1, date: '2000-01-01', time: '10:00' },
     })
-    const res = await handleReservations(makeContext(req, makeEnv()))
-    expect(res.status).toBe(400)
+    expect((await handleReservations(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
   it('serviço inexistente → 404', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
-    // DB.first() devolve null em todas as queries → servico não encontrado
-    const db = makeDB(() => makeBound(null))
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    // Todas as queries devolvem null / [] → SELECT servico devolve null
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 99, barber_id: 1, date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv(db)))
-    expect(res.status).toBe(404)
+    expect((await handleReservations(makeContext(req, makeEnv(makeDB(null))))).status).toBe(404)
   })
 })
 
-// ══ 2. CONFLITOS DE HORÁRIO ═══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// 2. CONFLITOS DE HORÁRIO
+// ══════════════════════════════════════════════════════════════════════════════
 describe('POST /api/reservations — conflitos de horário', () => {
   it('barbeiro já tem reserva no mesmo slot → 409', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
     const service = { id: 1, nome: 'Corte', duracao: 30 }
+    /**
+     * Handler faz:
+     *   1. SELECT servico           → service
+     *   2. Promise.all([
+     *        SELECT FROM reservas WHERE barbeiro_id  → { id: 77 }  ← conflito
+     *        SELECT FROM reservas WHERE cliente_id   → null
+     *        SELECT FROM barbeiros WHERE id          → barber
+     *      ])
+     *
+     * Todos os .prepare() para queries de reservas barbeiro devolvem { id: 77 }.
+     * O makeDBRouted usa o primeiro match por substring — a ordem das rotas importa.
+     */
     const db = makeDBRouted([
-      // primeiro: servico
-      ['FROM servicos',                                          makeBound(service)],
-      // Promise.all([conflictBarber, conflictClient, barber]):
-      // conflictBarber — query "FROM reservas WHERE barbeiro_id" retorna conflito
-      ['FROM reservas WHERE barbeiro_id',                        makeBound({ id: 77 })],
+      ['FROM servicos',             { firstVal: service }],
+      ['WHERE barbeiro_id',         { firstVal: { id: 77 } }],   // conflito barbeiro
+      ['WHERE cliente_id',          { firstVal: null }],
+      ['FROM barbeiros WHERE id',   { firstVal: { id: 1, nome: 'B' } }],
     ])
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 1, date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv(db)))
-    expect(res.status).toBe(409)
+    expect((await handleReservations(makeContext(req, makeEnv(db)))).status).toBe(409)
   })
 
   it('cliente já tem reserva no mesmo slot → 409', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
     const service = { id: 1, nome: 'Corte', duracao: 30 }
-    const barber  = { id: 1, nome: 'Barbeiro A' }
     const db = makeDBRouted([
-      ['FROM servicos',                makeBound(service)],
-      ['FROM reservas WHERE barbeiro_id', makeBound(null)],        // sem conflito no barbeiro
-      ['FROM reservas WHERE cliente_id',  makeBound({ id: 88 })],  // conflito no cliente
-      ['FROM barbeiros WHERE id',         makeBound(barber)],
+      ['FROM servicos',             { firstVal: service }],
+      ['WHERE barbeiro_id',         { firstVal: null }],           // sem conflito barbeiro
+      ['WHERE cliente_id',          { firstVal: { id: 88 } }],    // conflito cliente
+      ['FROM barbeiros WHERE id',   { firstVal: { id: 1, nome: 'B' } }],
     ])
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 1, date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv(db)))
-    expect(res.status).toBe(409)
+    expect((await handleReservations(makeContext(req, makeEnv(db)))).status).toBe(409)
   })
 })
 
-// ══ 3. CRIAÇÃO COM SUCESSO ═══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// 3. CRIAÇÃO COM SUCESSO — barbeiro específico
+// ══════════════════════════════════════════════════════════════════════════════
 describe('POST /api/reservations — criação com sucesso', () => {
   it('barbeiro específico válido → 201 com id e barber_id', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
     const service = { id: 1, nome: 'Corte', duracao: 30 }
     const barber  = { id: 1, nome: 'Barbeiro A' }
     const client  = { nome: 'Cliente', email: 'c@test.com' }
+    /**
+     * Fluxo do handler (barbeiro específico):
+     *  1. SELECT servico
+     *  2. Promise.all([conflictBarber, conflictClient, barber])
+     *  3. SELECT client
+     *  4. INSERT reservas → last_row_id = 42
+     *  5. INSERT notifications (catch ignorado)
+     */
     const db = makeDBRouted([
-      ['FROM servicos',                   makeBound(service)],
-      ['FROM reservas WHERE barbeiro_id', makeBound(null)],
-      ['FROM reservas WHERE cliente_id',  makeBound(null)],
-      ['FROM barbeiros WHERE id',         makeBound(barber)],
-      ['FROM clientes WHERE id',          makeBound(client)],
+      ['FROM servicos',           { firstVal: service }],
+      ['WHERE barbeiro_id',       { firstVal: null }],
+      ['WHERE cliente_id',        { firstVal: null }],
+      ['FROM barbeiros WHERE id', { firstVal: barber }],
+      ['FROM clientes WHERE id',  { firstVal: client }],
+      // INSERT reservas e notifications ficam no fallback (makeStmt neutro)
     ])
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 1, date: FUTURE_DATE, time: FUTURE_TIME },
     })
     const res = await handleReservations(makeContext(req, makeEnv(db)))
@@ -256,34 +310,57 @@ describe('POST /api/reservations — criação com sucesso', () => {
   })
 })
 
-// ══ 4. MODO ANY BARBER ═══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// 4. MODO ANY BARBER
+// ══════════════════════════════════════════════════════════════════════════════
 describe('POST /api/reservations — modo anyBarber', () => {
-  // Happy-path DB: servico + barbeiros activos + reservas/indisponibilidades
-  // para o pickBarber + sem conflitos + barber/client para o INSERT
-  function makeAnyBarberDB(barberId = 1) {
+  /**
+   * DB para happy-path do modo anyBarber.
+   *
+   * Fluxo do handler:
+   *  1. SELECT servico
+   *  2. pickBarber:
+   *       a. SELECT barbeiros WHERE ativo=1  → .all() (sem bind)
+   *       b. Para cada barbeiro:
+   *            - SELECT v_reservas_duracao   → .bind().all()
+   *            - SELECT horarios_indisponiveis → .bind().all()
+   *       c. SELECT COUNT(*) cnt hoje        → .bind().first()
+   *       d. SELECT COUNT(*) cnt ontem       → .bind().first()  (se empate)
+   *  3. Promise.all([conflictBarber, conflictClient, barber])
+   *  4. SELECT client
+   *  5. INSERT reservas + notifications
+   *
+   * Para as queries .all() sem bind (passo 2a), o makeStmt expõe
+   * .all() directamente no statement além de dentro do .bind().
+   */
+  function makeAnyDB() {
     const service = { id: 1, nome: 'Corte', duracao: 30 }
-    const barber  = { id: barberId, nome: 'Barbeiro A' }
+    const barber  = { id: 1, nome: 'Barbeiro A' }
     const client  = { nome: 'Cliente', email: 'c@test.com' }
     return makeDBRouted([
-      ['FROM servicos',                   makeBound(service)],
-      ['WHERE ativo = 1',                 makeBound(null, [{ id: 1 }, { id: 2 }])],
-      ['v_reservas_duracao',              makeBound(null, [])],
-      ['horarios_indisponiveis',          makeBound(null, [])],
-      ['COUNT(*) as cnt',                 makeBound({ cnt: 0 })],
-      ['FROM barbeiros WHERE id',         makeBound(barber)],
-      ['FROM clientes WHERE id',          makeBound(client)],
-      ['FROM reservas WHERE barbeiro_id', makeBound(null)],
-      ['FROM reservas WHERE cliente_id',  makeBound(null)],
+      ['FROM servicos',            { firstVal: service }],
+      // barbeiros WHERE ativo=1 — acedido via .all() directo
+      ['WHERE ativo = 1',          { allResults: [{ id: 1 }, { id: 2 }] }],
+      // reservas e indisponibilidades de cada barbeiro
+      ['v_reservas_duracao',       { allResults: [] }],
+      ['horarios_indisponiveis',   { allResults: [] }],
+      // COUNT hoje / ontem
+      ['COUNT(*) as cnt',          { firstVal: { cnt: 0 } }],
+      // conflitos e lookup pós-pickBarber
+      ['WHERE barbeiro_id',        { firstVal: null }],
+      ['WHERE cliente_id',         { firstVal: null }],
+      ['FROM barbeiros WHERE id',  { firstVal: barber }],
+      ['FROM clientes WHERE id',   { firstVal: client }],
     ])
   }
 
   it('barber_id="any" com barbeiro disponível → 201 com barber_id atribuído', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
     vi.mocked(computeSlots).mockReturnValue([FUTURE_TIME, '11:00'])
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 'any', date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv(makeAnyBarberDB())))
+    const res = await handleReservations(makeContext(req, makeEnv(makeAnyDB())))
     expect(res.status).toBe(201)
     const body = await res.json() as { data: { barber_id: number } }
     expect(body.data.barber_id).toBeGreaterThan(0)
@@ -292,39 +369,38 @@ describe('POST /api/reservations — modo anyBarber', () => {
   it('barber_id=0 é tratado como anyBarber → não retorna 400', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
     vi.mocked(computeSlots).mockReturnValue([FUTURE_TIME])
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 0, date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv(makeAnyBarberDB())))
+    const res = await handleReservations(makeContext(req, makeEnv(makeAnyDB())))
     expect(res.status).not.toBe(400)
   })
 
   it('sem barber_id é tratado como anyBarber → não retorna 400', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
     vi.mocked(computeSlots).mockReturnValue([FUTURE_TIME])
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv(makeAnyBarberDB())))
+    const res = await handleReservations(makeContext(req, makeEnv(makeAnyDB())))
     expect(res.status).not.toBe(400)
   })
 
-  it('anyBarber sem nenhum slot disponível → 409', async () => {
+  it('anyBarber sem nenhum slot disponível para o horário pedido → 409', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
-    // computeSlots nunca inclui o slot pedido (10:00)
+    // computeSlots nunca inclui 10:00
     vi.mocked(computeSlots).mockReturnValue(['14:00', '15:00'])
     const service = { id: 1, nome: 'Corte', duracao: 30 }
     const db = makeDBRouted([
-      ['FROM servicos',          makeBound(service)],
-      ['WHERE ativo = 1',        makeBound(null, [{ id: 1 }, { id: 2 }])],
-      ['v_reservas_duracao',     makeBound(null, [])],
-      ['horarios_indisponiveis', makeBound(null, [])],
+      ['FROM servicos',          { firstVal: service }],
+      ['WHERE ativo = 1',        { allResults: [{ id: 1 }, { id: 2 }] }],
+      ['v_reservas_duracao',     { allResults: [] }],
+      ['horarios_indisponiveis', { allResults: [] }],
     ])
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 'any', date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv(db)))
-    expect(res.status).toBe(409)
+    expect((await handleReservations(makeContext(req, makeEnv(db)))).status).toBe(409)
   })
 
   it('anyBarber em dia fechado (getOpenClose=null) → 409', async () => {
@@ -332,20 +408,21 @@ describe('POST /api/reservations — modo anyBarber', () => {
     vi.mocked(getOpenClose).mockReturnValueOnce(null)
     const service = { id: 1, nome: 'Corte', duracao: 30 }
     const db = makeDBRouted([
-      ['FROM servicos',   makeBound(service)],
-      ['WHERE ativo = 1', makeBound(null, [{ id: 1 }])],
+      ['FROM servicos',   { firstVal: service }],
+      ['WHERE ativo = 1', { allResults: [{ id: 1 }] }],
     ])
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, barber_id: 'any', date: FUTURE_DATE, time: FUTURE_TIME },
     })
-    const res = await handleReservations(makeContext(req, makeEnv(db)))
-    expect(res.status).toBe(409)
+    expect((await handleReservations(makeContext(req, makeEnv(db)))).status).toBe(409)
   })
 })
 
-// ══ 5. pickBarber — menos reservas no dia ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// 5. pickBarber — menos reservas no dia
+// ══════════════════════════════════════════════════════════════════════════════
 describe('pickBarber — selecção por menos reservas no dia', () => {
-  it('escolhe o barbeiro com menos reservas quando existem dois candidatos', async () => {
+  it('escolhe barbeiro com menos reservas quando dois candidatos estão disponíveis', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)
     vi.mocked(computeSlots).mockReturnValue([FUTURE_TIME])
 
@@ -353,28 +430,76 @@ describe('pickBarber — selecção por menos reservas no dia', () => {
     const barber1 = { id: 1, nome: 'B1' }
     const client  = { nome: 'Cliente', email: 'c@test.com' }
 
-    // Barbeiro 1 → 1 reserva hoje; barbeiro 2 → 3 reservas → deve escolher B1
+    /**
+     * COUNT(*) as cnt: barbeiro 1 → 1 reserva; barbeiro 2 → 3 reservas
+     * O handler chama .bind(barberId, date).first() — o primeiro argumento
+     * de .bind() identifica o barbeiro.
+     */
     const db = {
-      prepare: vi.fn((sql: string) => ({
-        bind: vi.fn((...args: unknown[]) => {
-          if (sql.includes('FROM servicos'))                   return makeBound(service)
-          if (sql.includes('WHERE ativo = 1'))                 return makeBound(null, [{ id: 1 }, { id: 2 }])
-          if (sql.includes('v_reservas_duracao'))              return makeBound(null, [])
-          if (sql.includes('horarios_indisponiveis'))          return makeBound(null, [])
-          if (sql.includes('COUNT(*) as cnt')) {
-            const bid = args[0] as number
-            return makeBound({ cnt: bid === 1 ? 1 : 3 })
-          }
-          if (sql.includes('FROM barbeiros WHERE id'))         return makeBound(barber1)
-          if (sql.includes('FROM clientes WHERE id'))         return makeBound(client)
-          if (sql.includes('FROM reservas WHERE barbeiro_id')) return makeBound(null)
-          if (sql.includes('FROM reservas WHERE cliente_id'))  return makeBound(null)
-          return makeBound()
-        }),
-      })),
+      prepare: vi.fn((sql: string) => {
+        const stmt = makeStmt()
+        if (sql.includes('FROM servicos')) {
+          stmt.bind = vi.fn(() => ({ ...makeStmt(service), first: vi.fn().mockResolvedValue(service) }))
+          return stmt
+        }
+        if (sql.includes('WHERE ativo = 1')) {
+          // .all() directo (sem bind) — para pickBarber
+          stmt.all = vi.fn().mockResolvedValue({ results: [{ id: 1 }, { id: 2 }] })
+          stmt.bind = vi.fn(() => ({
+            first: vi.fn().mockResolvedValue(null),
+            all:   vi.fn().mockResolvedValue({ results: [{ id: 1 }, { id: 2 }] }),
+            run:   vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 42 } }),
+          }))
+          return stmt
+        }
+        if (sql.includes('v_reservas_duracao') || sql.includes('horarios_indisponiveis')) {
+          stmt.bind = vi.fn(() => ({
+            first: vi.fn().mockResolvedValue(null),
+            all:   vi.fn().mockResolvedValue({ results: [] }),
+            run:   vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 42 } }),
+          }))
+          return stmt
+        }
+        if (sql.includes('COUNT(*) as cnt')) {
+          let callIdx = 0
+          stmt.bind = vi.fn((...args: unknown[]) => {
+            const barberId = args[0] as number
+            const cnt = barberId === 1 ? 1 : 3
+            return {
+              first: vi.fn().mockResolvedValue({ cnt }),
+              all:   vi.fn().mockResolvedValue({ results: [] }),
+              run:   vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 42 } }),
+            }
+          })
+          return stmt
+        }
+        if (sql.includes('FROM barbeiros WHERE id')) {
+          stmt.bind = vi.fn(() => ({ ...makeStmt(barber1), first: vi.fn().mockResolvedValue(barber1) }))
+          return stmt
+        }
+        if (sql.includes('FROM clientes WHERE id')) {
+          stmt.bind = vi.fn(() => ({ ...makeStmt(client), first: vi.fn().mockResolvedValue(client) }))
+          return stmt
+        }
+        if (sql.includes('WHERE barbeiro_id') || sql.includes('WHERE cliente_id')) {
+          stmt.bind = vi.fn(() => ({
+            first: vi.fn().mockResolvedValue(null),
+            all:   vi.fn().mockResolvedValue({ results: [] }),
+            run:   vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 42 } }),
+          }))
+          return stmt
+        }
+        // fallback: INSERT reservas, notifications, etc.
+        stmt.bind = vi.fn(() => ({
+          first: vi.fn().mockResolvedValue(null),
+          all:   vi.fn().mockResolvedValue({ results: [] }),
+          run:   vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 42 } }),
+        }))
+        return stmt
+      }),
     }
 
-    const req = makeRequest('POST', 'https://x.com/api/reservations', {
+    const req = makeRequest('POST', 'https://x/api/reservations', {
       body: { service_id: 1, date: FUTURE_DATE, time: FUTURE_TIME },
     })
     const res = await handleReservations(
@@ -382,75 +507,88 @@ describe('pickBarber — selecção por menos reservas no dia', () => {
     )
     expect(res.status).toBe(201)
     const body = await res.json() as { data: { barber_id: number } }
-    expect(body.data.barber_id).toBe(1)
+    expect(body.data.barber_id).toBe(1)  // barbeiro com menos reservas
   })
 })
 
-// ══ 6. GET /api/slots-any-barber ═══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// 6. GET /api/slots-any-barber
+// ══════════════════════════════════════════════════════════════════════════════
 describe('GET /api/slots-any-barber', () => {
+  /**
+   * slots-any-barber.js faz:
+   *  1. Promise.all([
+   *       SELECT FROM servicos          → .bind(serviceId).first()
+   *       SELECT FROM barbeiros WHERE ativo=1 → .all() DIRECTO (sem bind!)
+   *     ])
+   *  2. Para cada barbeiro:
+   *       SELECT v_reservas_duracao     → .bind().all()
+   *       SELECT horarios_indisponiveis → .bind().all()
+   *
+   * O makeStmt expõe .all() tanto no statement como dentro do .bind(),
+   * cobrindo ambos os padrões de acesso.
+   */
+  function makeSlotsAnyDB(opts: {
+    service?: unknown
+    barbers?: unknown[]
+    reservations?: unknown[]
+    unavailabilities?: unknown[]
+  } = {}) {
+    const service       = opts.service       ?? { id: 1, duracao: 30 }
+    const barbers       = opts.barbers       ?? [{ id: 1 }, { id: 2 }]
+    const reservations  = opts.reservations  ?? []
+    const unavails      = opts.unavailabilities ?? []
+    return makeDBRouted([
+      ['FROM servicos',          { firstVal: service }],
+      ['WHERE ativo = 1',        { allResults: barbers }],
+      ['v_reservas_duracao',     { allResults: reservations }],
+      ['horarios_indisponiveis', { allResults: unavails }],
+    ])
+  }
+
   it('data inválida → 400', async () => {
-    const req = makeRequest('GET', 'https://x.com/api/slots-any-barber?date=nao-data&service_id=1')
-    const res = await handleSlotsAny(makeContext(req, makeEnv()))
-    expect(res.status).toBe(400)
+    const req = makeRequest('GET', 'https://x/api/slots-any-barber?date=nao-data&service_id=1')
+    expect((await handleSlotsAny(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
   it('service_id=0 → 400', async () => {
-    const req = makeRequest('GET', `https://x.com/api/slots-any-barber?date=${FUTURE_DATE}&service_id=0`)
-    const res = await handleSlotsAny(makeContext(req, makeEnv()))
-    expect(res.status).toBe(400)
+    const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${FUTURE_DATE}&service_id=0`)
+    expect((await handleSlotsAny(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
   it('service_id negativo → 400', async () => {
-    const req = makeRequest('GET', `https://x.com/api/slots-any-barber?date=${FUTURE_DATE}&service_id=-1`)
-    const res = await handleSlotsAny(makeContext(req, makeEnv()))
-    expect(res.status).toBe(400)
+    const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${FUTURE_DATE}&service_id=-1`)
+    expect((await handleSlotsAny(makeContext(req, makeEnv()))).status).toBe(400)
   })
 
   it('dia fechado (domingo 2099-06-01) → 200 array vazio', async () => {
-    // 2099-06-01 = domingo → getOpenClose(0) = null (mock global)
-    const req = makeRequest('GET', 'https://x.com/api/slots-any-barber?date=2099-06-01&service_id=1')
+    // getOpenClose(0) = null pelo mock global → retorna ok([])
+    const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${SUNDAY_DATE}&service_id=1`)
     const res = await handleSlotsAny(makeContext(req, makeEnv()))
     expect(res.status).toBe(200)
-    const body = await res.json() as { data: string[] }
-    expect(body.data).toEqual([])
+    expect((await res.json() as { data: string[] }).data).toEqual([])
   })
 
-  it('serviço inexistente → 400', async () => {
-    const db = makeDBRouted([
-      ['FROM servicos',   makeBound(null)],  // servico = null
-      ['WHERE ativo = 1', makeBound(null, [])],
-    ])
-    const req = makeRequest('GET', `https://x.com/api/slots-any-barber?date=${FUTURE_DATE}&service_id=99`)
-    const res = await handleSlotsAny(makeContext(req, makeEnv(db)))
-    expect(res.status).toBe(400)
+  it('serviço inexistente → 400 (service = null)', async () => {
+    const db = makeSlotsAnyDB({ service: null, barbers: [] })
+    const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${FUTURE_DATE}&service_id=99`)
+    expect((await handleSlotsAny(makeContext(req, makeEnv(db)))).status).toBe(400)
   })
 
   it('nenhum barbeiro activo → 200 array vazio', async () => {
-    const service = { id: 1, duracao: 30 }
-    const db = makeDBRouted([
-      ['FROM servicos',   makeBound(service)],
-      ['WHERE ativo = 1', makeBound(null, [])],  // sem barbeiros
-    ])
-    const req = makeRequest('GET', `https://x.com/api/slots-any-barber?date=${FUTURE_DATE}&service_id=1`)
+    const db = makeSlotsAnyDB({ barbers: [] })
+    const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${FUTURE_DATE}&service_id=1`)
     const res = await handleSlotsAny(makeContext(req, makeEnv(db)))
     expect(res.status).toBe(200)
-    const body = await res.json() as { data: string[] }
-    expect(body.data).toEqual([])
+    expect((await res.json() as { data: string[] }).data).toEqual([])
   })
 
   it('devolve união dos slots de todos os barbeiros', async () => {
-    const service = { id: 1, duracao: 30 }
-    const db = makeDBRouted([
-      ['FROM servicos',          makeBound(service)],
-      ['WHERE ativo = 1',        makeBound(null, [{ id: 1 }, { id: 2 }])],
-      ['v_reservas_duracao',     makeBound(null, [])],
-      ['horarios_indisponiveis', makeBound(null, [])],
-    ])
-    // Barbeiro 1: ['10:00','11:00'];  barbeiro 2: ['10:00']
+    const db = makeSlotsAnyDB()
     vi.mocked(computeSlots)
-      .mockReturnValueOnce(['10:00', '11:00'])
-      .mockReturnValueOnce(['10:00'])
-    const req = makeRequest('GET', `https://x.com/api/slots-any-barber?date=${FUTURE_DATE}&service_id=1`)
+      .mockReturnValueOnce(['10:00', '11:00'])  // barbeiro 1
+      .mockReturnValueOnce(['10:00'])           // barbeiro 2
+    const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${FUTURE_DATE}&service_id=1`)
     const res = await handleSlotsAny(makeContext(req, makeEnv(db)))
     expect(res.status).toBe(200)
     const body = await res.json() as { data: string[] }
@@ -460,17 +598,11 @@ describe('GET /api/slots-any-barber', () => {
   })
 
   it('slots estão ordenados cronologicamente', async () => {
-    const service = { id: 1, duracao: 30 }
-    const db = makeDBRouted([
-      ['FROM servicos',          makeBound(service)],
-      ['WHERE ativo = 1',        makeBound(null, [{ id: 1 }, { id: 2 }])],
-      ['v_reservas_duracao',     makeBound(null, [])],
-      ['horarios_indisponiveis', makeBound(null, [])],
-    ])
+    const db = makeSlotsAnyDB()
     vi.mocked(computeSlots)
       .mockReturnValueOnce(['14:00', '10:00', '12:00'])
       .mockReturnValueOnce(['11:00', '09:00'])
-    const req = makeRequest('GET', `https://x.com/api/slots-any-barber?date=${FUTURE_DATE}&service_id=1`)
+    const req = makeRequest('GET', `https://x/api/slots-any-barber?date=${FUTURE_DATE}&service_id=1`)
     const res = await handleSlotsAny(makeContext(req, makeEnv(db)))
     expect(res.status).toBe(200)
     const body = await res.json() as { data: string[] }
