@@ -48,8 +48,8 @@ export function readThemeValues(root: string): ThemeValues {
 
 // Os ícones ficam em public/icons/ → servidos como /icons/logo-*.png
 // (URLs estáticas, sem hash, garantidas pelo Cloudflare Pages / Vite)
-const ICON_192 = '/icons/logo-192.png'
-const ICON_512 = '/icons/logo-512.png'
+const ICON_192 = '/media/images/logos/logo-192px.png'
+const ICON_512 = '/media/images/logos/logo-512px.png'
 
 function buildManifest(t: ThemeValues, isAdmin: boolean): string {
   const obj = {
@@ -100,11 +100,11 @@ function buildSW(t: ThemeValues): string {
  * NÃO editar manualmente.
  */
 
-const CACHE_VERSION = 'v1'
-const STATIC_CACHE  = '${t.cacheName}-static-v1'
-const API_CACHE     = '${t.cacheName}-api-v1'
+const CACHE_VERSION = 'v2.1'
+const STATIC_CACHE  = '${t.cacheName}-static-v2.1'
+const API_CACHE     = '${t.cacheName}-api-v2.1'
 
-const PRECACHE_URLS = ['/', '/offline.html']
+const PRECACHE_URLS = ['/']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -138,8 +138,8 @@ self.addEventListener('fetch', (event) => {
     request.destination === 'style'  ||
     request.destination === 'image'  ||
     request.destination === 'font'   ||
-    url.pathname.startsWith('/icons/') ||
-    url.pathname.startsWith('/assets/')
+    url.pathname.startsWith('/logos/') ||
+    url.pathname.startsWith('/media/')
   ) {
     event.respondWith(cacheFirst(request, STATIC_CACHE))
     return
