@@ -31,56 +31,51 @@ function emailCSS() {
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
          line-height:1.6;background:#f8f9fa}
-    .wrap{background:linear-gradient(135deg,#f5f7fa,#e8ecf1);padding:40px 20px;min-height:100vh}
+    .wrap{background:linear-gradient(135deg,#f5f7fa,#e8ecf1);min-height:100vh}
     .container{max-width:600px;margin:0 auto;background:#fff;border-radius:16px;
                overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.1)}
-    .logo-sec{background:#2d4a3e;text-align:center;padding:30px 20px}
+    .logo-sec{background:#2d4a3e;text-align:center;padding:20px}
     .logo{max-width:70px;height:auto}
     .header-green{background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;
-                  padding:40px 30px;text-align:center}
+                  padding:20px;text-align:center}
     .header-red{background:linear-gradient(135deg,#c0392b,#e74c3c);color:#fff;
-                padding:40px 30px;text-align:center}
+                padding:20px;text-align:center}
     .header-gold{background:linear-gradient(135deg,#92400e,#d4a017);color:#fff;
-                 padding:40px 30px;text-align:center}
-    .header-green h1,.header-red h1,.header-gold h1{margin:0;font-size:28px;
+                 padding:20px;text-align:center}
+    .header-green h1,.header-red h1,.header-gold h1{margin:0;font-size:20px;
       font-weight:600;letter-spacing:-.5px}
-    .content{padding:40px 30px}
-    .content p{color:#4a5568;font-size:16px;margin-bottom:20px}
+    .content{padding:20px}
+    .content p{color:#4a5568;font-size:15px;margin-bottom:10px}
     .content strong{color:#2d3748;font-weight:600}
-    .info-box{background:#f7fafc;border-radius:12px;padding:25px;margin:25px 0;
+    .info-box{background:#f7fafc;border-radius:12px;padding:15px;margin:10px 0;
               border:1px solid #e2e8f0}
-    .info-box h3{color:#2d3748;font-size:18px;margin-bottom:20px;font-weight:600}
+    .info-box h3{color:#2d3748;font-size:15px;margin-bottom:10px;font-weight:600}
     .border-green{border-left:4px solid #22c55e}
     .border-red{border-left:4px solid #e74c3c}
     .border-amber{border-left:4px solid #f59e0b;background:#fffbf5}
-    .detail-row{display:flex;align-items:flex-start;margin-bottom:15px;
-                padding:12px;background:#fff;border-radius:8px}
+    .detail-row{display:flex;align-items:center;margin-bottom:10px;
+                padding:10px;background:#fff;border-radius:8px}
     .detail-row:last-child{margin-bottom:0}
-    .di{font-size:20px;margin-right:12px;min-width:24px}
-    .dc{flex:1}
-    .dc strong{display:block;color:#2d3748;margin-bottom:2px;font-size:14px}
+    .di{font-size:20px;margin-right:10px;min-width:24px}
+    .dc{font-size:14px}
+    .dc strong{color:#2d3748;margin-bottom:2px}
     .reason-text{color:#78350f;font-style:italic;margin:0;padding:10px 15px;
                  background:#fef3c7;border-radius:8px}
-    .cta-sec{text-align:center;margin:35px 0;padding:30px;
+    .cta-sec{text-align:center;margin:10px 0;padding:15px;
              background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:12px}
-    .cta-text{color:#166534;font-size:16px;margin-bottom:20px}
+    .cta-text{color:#166534;font-size:15px;margin-bottom:20px}
     .btn{display:inline-block;background:linear-gradient(135deg,#2d4a3e,#3d5a4e);
-         color:#fff!important;text-decoration:none;padding:14px 32px;
-         border-radius:8px;font-weight:600;font-size:16px;
+         color:#fff!important;text-decoration:none;padding:10px 15px;
+         border-radius:8px;font-weight:600;font-size:15px;
          box-shadow:0 4px 12px rgba(45,74,62,.3)}
-    .contact-sec{margin-top:30px;text-align:center}
+    .contact-sec{margin-top:15px;text-align:center}
     .contact-link{display:inline-flex;align-items:center;color:#2d4a3e;
-                  text-decoration:none;font-weight:600;font-size:18px;
-                  padding:12px 24px;background:#f0fdf4;border-radius:8px}
+                  text-decoration:none;font-weight:600;font-size:15px;
+                  padding:10px 15px;background:#f0fdf4;border-radius:8px}
     .warn{background:#fff3cd;border-left:4px solid #ffc107;padding:12px;margin:20px 0}
-    .footer{background:#1a202c;color:#a0aec0;text-align:center;padding:30px 20px}
+    .footer{background:#1a202c;color:#a0aec0;text-align:center;padding:20px}
     .footer p{margin:8px 0;font-size:14px}
     .footer a{color:#d4af7a;text-decoration:none}
-    @media(max-width:600px){
-      .content{padding:30px 20px}
-      .info-box{padding:20px 15px}
-      .detail-row{flex-direction:column}
-    }
   `
 }
 
@@ -97,14 +92,14 @@ function shell(headerClass, headerTitle, body) {
   <div class="footer">
     <p style="font-size:12px;color:#718096">Este é um email automático, por favor não responda.</p>
     <p>&copy; ${new Date().getFullYear()} ${SHOP.name} &ndash; Todos os direitos reservados.
-       Feito com &#129820; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
+       Feito com &#129293; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
   </div>
 </div></div></body></html>`
 }
 
 function detailRow(icon, label, value) {
   return `<div class="detail-row"><span class="di">${icon}</span>
-<div class="dc"><strong>${label}</strong>${value}</div></div>`
+<div class="dc"><strong>${label}</strong> ${value}</div></div>`
 }
 
 // ─── Bloco VTIMEZONE para Europe/Lisbon (inclui regras DST WEST/WET) ──────────────────
@@ -281,8 +276,8 @@ export function buildReservationConfirmationEmail({ reservaId, clientName, clien
 
   const notasHtml = comentario ? detailRow('&#128172;', 'Notas:', `<br>${comentario}`) : ''
 
-  const html = shell('header-green', 'Reserva Confirmada! &#9989;', `
-    <p>Olá <strong>${clientName}</strong>,</p>
+  const html = shell('header-green', 'Reserva Confirmada!', `
+    <p>Olá ${clientName},</p>
     <p>A sua reserva foi confirmada com sucesso. Aqui estão os detalhes:</p>
     <div class="info-box border-green">
       <h3>Detalhes da Reserva</h3>
