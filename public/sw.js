@@ -4,7 +4,7 @@
  * NÃO editar manualmente.
  */
 
-const CACHE_VERSION = 'v1'
+const CACHE_VERSION = 'v2'
 const STATIC_CACHE  = 'barbearia-static-v1'
 const API_CACHE     = 'barbearia-api-v1'
 
