@@ -12,6 +12,18 @@ export interface ReservationsFilter {
   search?: string
 }
 
+export interface CreateReservationPayload extends Partial<Reservation> {
+  /** Novo email a persistir no cliente antes de criar a reserva (fluxo placeholder). */
+  update_email?: string
+  /** Forçar envio (true) ou supressão (false) de email — sobrepõe o valor do form. */
+  send_email?: boolean
+}
+
+/** Resposta intermédia: backend pediu confirmação do email antes de criar a reserva. */
+export interface RequiresEmailUpdateResponse {
+  requiresEmailUpdate: true
+}
+
 export const reservationsApi = {
   list: (filters: ReservationsFilter = {}) => {
     const params = new URLSearchParams()
@@ -29,8 +41,18 @@ export const reservationsApi = {
   get: (id: number) =>
     adminApi.get<Reservation>(`/api/admin/reservations/${id}`),
 
-  create: (data: Partial<Reservation>) =>
-    adminApi.post<Reservation>('/api/admin/reservations', data),
+  /**
+   * Cria uma nova reserva.
+   *
+   * Quando o cliente tem email placeholder e send_email=true, o backend devolve
+   * { requiresEmailUpdate: true } (HTTP 200) em vez de criar a reserva.
+   * Nesse caso o frontend deve mostrar o modal e reenviar com update_email ou send_email=false.
+   *
+   * Para forçar a criação sem emails, passe send_email: false.
+   * Para atualizar o email do cliente e criar com emails, passe update_email: 'novo@email.com'.
+   */
+  create: (data: CreateReservationPayload) =>
+    adminApi.post<Reservation | RequiresEmailUpdateResponse>('/api/admin/reservations', data),
 
   // PATCH /api/admin/reservations/:id — body { status, notes, private_note }
   update: (id: number, data: Partial<Reservation>) =>
