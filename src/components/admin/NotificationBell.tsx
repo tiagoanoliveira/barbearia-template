@@ -295,7 +295,7 @@ export default function NotificationBell() {
             <>
               <div className="fixed inset-0 z-[8000]" onClick={() => setOpen(false)} />
               <div
-                  className="fixed w-80 bg-white border border-gray-200 rounded-xl shadow-xl text-xs overflow-hidden"
+                  className="fixed w-96 max-w-[90vw] bg-white border border-gray-200 rounded-xl shadow-xl text-xs overflow-hidden"
                   style={{ top: '56px', right: '16px', zIndex: 8500 }}
               >
                 <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
