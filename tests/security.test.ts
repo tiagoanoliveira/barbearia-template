@@ -9,6 +9,13 @@
  *  - Mass assignment (role / reservas_concluidas / reservas_gratuitas_disponiveis in PUT /api/me must be ignored)
  *  - SQL injection (all inputs use parameterised bind — confirmed by inspecting DB calls)
  *  - Login security (Turnstile verification enforced)
+ *
+ * Política de acesso a clientes por role:
+ *  - admin / superAdmin : GET (lista + pesquisa), GET/:id, POST, PATCH/:id, DELETE/:id
+ *  - barbeiro           : GET (lista + pesquisa) ✓  — necessário para pesquisar/criar clientes em reservas
+ *                         GET/:id               ✗  — 401 (dados completos do cliente só para admin)
+ *                         POST / PATCH / DELETE  ✗  — 401
+ *  - não autenticado    : todos os métodos      ✗  — 401
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -212,8 +219,36 @@ describe('Privilege escalation — unauthenticated access to admin endpoints', (
 // 3. BARBEIRO IDOR — barbeiro accessing data that belongs to another barber
 //    (relies on the fixes applied to admin/clients/[id].js and
 //     admin/reservations/[id].js)
+//
+// Política de acesso a clientes:
+//   GET /api/admin/clients (lista)  → barbeiros PODEM (200) — necessário para pesquisar
+//                                     clientes ao criar/gerir reservas
+//   GET /api/admin/clients/:id      → barbeiros NÃO PODEM (401) — dados completos só para admin
+//   POST /api/admin/clients         → barbeiros NÃO PODEM (401) — escrita exclusiva de admin
+//   PATCH / DELETE                  → barbeiros NÃO PODEM (401)
 // ═══════════════════════════════════════════════════════════════════════════════
 describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
+  // ── Clientes: lista (GET) — barbeiros têm acesso de leitura ─────────────────
+  it('GET /api/admin/clients → 200 for barbeiro role (leitura permitida para pesquisar clientes em reservas)', async () => {
+    vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
+    // DB devolve lista vazia (sem dados reais necessários para este teste)
+    const db = makeDB(() => makeBound({ count: 0 }, []))
+    const req = makeRequest('GET', 'https://example.com/api/admin/clients')
+    const res = await handleAdminClients(makeContext(req, makeEnv(db)))
+    expect(res.status).toBe(200)
+  })
+
+  // ── Clientes: escrita (POST) — barbeiros não podem criar clientes directamente ─
+  it('POST /api/admin/clients → 401 for barbeiro role (escrita bloqueada)', async () => {
+    vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
+    const req = makeRequest('POST', 'https://example.com/api/admin/clients', {
+      body: { name: 'Novo Cliente', phone: '912345678' },
+    })
+    const res = await handleAdminClients(makeContext(req, makeEnv()))
+    expect(res.status).toBe(401)
+  })
+
+  // ── Clientes: detalhe (GET /:id) — barbeiros não podem ver dados completos ───
   it('GET /api/admin/clients/:id → 401 for barbeiro role', async () => {
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
     const req = makeRequest('GET', 'https://example.com/api/admin/clients/1')
@@ -237,6 +272,7 @@ describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
     expect(res.status).toBe(401)
   })
 
+  // ── Reservas: IDOR entre barbeiros ──────────────────────────────────────────
   it('GET /api/admin/reservations/:id → 401 when reservation belongs to another barber', async () => {
     // Barber auth has barbeiro_id = 5; reservation belongs to barber 99
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
@@ -319,13 +355,6 @@ describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
     const req = makeRequest('GET', 'https://example.com/api/admin/reservations/2')
     const res = await handleAdminReservationsById(makeContext(req, makeEnv(db), { id: '2' }))
     expect(res.status).toBe(200)
-  })
-
-  it('GET /api/admin/clients → 401 for barbeiro role (list endpoint)', async () => {
-    vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
-    const req = makeRequest('GET', 'https://example.com/api/admin/clients')
-    const res = await handleAdminClients(makeContext(req, makeEnv()))
-    expect(res.status).toBe(401)
   })
 })
 
