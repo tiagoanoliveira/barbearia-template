@@ -26,8 +26,8 @@ describe('HomePage', () => {
     vi.mocked(api.get).mockResolvedValue({ success: true, data: [] })
 
     renderWithProviders(<HomePage />)
-
     expect(screen.getByRole('heading', { name: /serviços/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /a equipa/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /galeria/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /contacto/i })).toBeInTheDocument()
   })
 })

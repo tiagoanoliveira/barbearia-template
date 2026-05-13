@@ -1,0 +1,63 @@
+{
+  "name": "Brooklyn Barbearia",
+  "short_name": "Brooklyn",
+  "description": "Barbearia premium no coração da cidade. Cortes clássicos e modernos.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0a",
+  "theme_color": "#16a34a",
+  "lang": "pt",
+  "icons": [
+    {
+      "src": "/icons/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": [
+    "lifestyle",
+    "health"
+  ],
+  "shortcuts": [
+    {
+      "name": "Reservar",
+      "short_name": "Reservar",
+      "url": "/reservar",
+      "icons": [
+        {
+          "src": "/icons/logo-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "O meu perfil",
+      "short_name": "Perfil",
+      "url": "/perfil",
+      "icons": [
+        {
+          "src": "/icons/logo-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}
