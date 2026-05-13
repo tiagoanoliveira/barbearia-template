@@ -1,14 +1,14 @@
 /**
- * Service Worker — Brooklyn Barbearia PWA
+ * Service Worker — Barbearia PWA
  * Gerado automaticamente por vite-plugin-pwa-assets.ts a partir de src/config/theme.ts.
  * NÃO editar manualmente.
  */
 
 const CACHE_VERSION = 'v1'
-const STATIC_CACHE  = 'brooklyn-barbearia-static-v1'
-const API_CACHE     = 'brooklyn-barbearia-api-v1'
+const STATIC_CACHE  = 'barbearia-static-v1'
+const API_CACHE     = 'barbearia-api-v1'
 
-const PRECACHE_URLS = ['/', '/offline.html']
+const PRECACHE_URLS = ['/', '/index.html', '/manifest.json', '/media/images/logos/logo-512px.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -42,8 +42,7 @@ self.addEventListener('fetch', (event) => {
     request.destination === 'style'  ||
     request.destination === 'image'  ||
     request.destination === 'font'   ||
-    url.pathname.startsWith('/icons/') ||
-    url.pathname.startsWith('/assets/')
+    url.pathname.startsWith('/media/')
   ) {
     event.respondWith(cacheFirst(request, STATIC_CACHE))
     return
