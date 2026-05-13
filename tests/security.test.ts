@@ -13,7 +13,7 @@
  * Política de acesso a clientes por role:
  *  - admin / superAdmin : GET (lista + pesquisa), GET/:id, POST, PATCH/:id, DELETE/:id
  *  - barbeiro           : GET (lista + pesquisa) ✓ — necessário para pesquisar clientes em reservas
- *                         POST                   ✓ — necessário para criar clientes ao criar reservas
+ *                         POST                   ✓ — necessário para criar um novo cliente ao criar uma reserva
  *                         GET/:id                ✗ — 401 (dados completos do cliente só para admin)
  *                         PATCH / DELETE         ✗ — 401
  *  - não autenticado    : todos os métodos      ✗ — 401
@@ -96,7 +96,26 @@ function makeDB(factory?: () => ReturnType<typeof makeBound>) {
   }
 }
 
-function makeEnv(db?: ReturnType<typeof makeDB>) {
+/**
+ * Creates a DB mock where each `prepare(sql)` call is routed to different
+ * bound statement mocks based on the SQL string. Useful when a single handler
+ * issues multiple DB calls with different shapes.
+ *
+ * `routes` is an array of [substring, bound] pairs checked in order.
+ * Falls back to a generic `makeBound()` when no substring matches.
+ */
+function makeDBRouted(routes: [string, ReturnType<typeof makeBound>][]) {
+  return {
+    prepare: vi.fn((sql: string) => ({
+      bind: vi.fn(() => {
+        const match = routes.find(([sub]) => sql.includes(sub))
+        return match ? match[1] : makeBound()
+      }),
+    })),
+  }
+}
+
+function makeEnv(db?: ReturnType<typeof makeDB> | ReturnType<typeof makeDBRouted>) {
   return {
     DB:               db ?? makeDB(),
     JWT_SECRET:       'test-secret',
@@ -222,16 +241,14 @@ describe('Privilege escalation — unauthenticated access to admin endpoints', (
 //     admin/reservations/[id].js)
 //
 // Política de acesso a clientes:
-//   GET /api/admin/clients (lista)  → barbeiros PODEM (200) — necessário para pesquisar
-//                                     clientes ao criar/gerir reservas
-//   POST /api/admin/clients         → barbeiros PODEM (201) — necessário para criar um
-//                                     novo cliente ao criar uma reserva
-//   GET /api/admin/clients/:id      → barbeiros NÃO PODEM (401) — dados completos só para admin
+//   GET /api/admin/clients (lista)  → barbeiros PODEM (200)
+//   POST /api/admin/clients         → barbeiros PODEM (201) — criar cliente ao criar reserva
+//   GET /api/admin/clients/:id      → barbeiros NÃO PODEM (401)
 //   PATCH / DELETE                  → barbeiros NÃO PODEM (401)
 // ════════════════════════════════════════════════════════════════════════════
 describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
-  // ── Clientes: lista (GET) — barbeiros têm acesso de leitura ────────────
-  it('GET /api/admin/clients → 200 for barbeiro role (leitura permitida para pesquisar clientes em reservas)', async () => {
+  // ── Clientes: lista (GET) ────────────────────────────────────────────────
+  it('GET /api/admin/clients → 200 for barbeiro role (pesquisa de clientes em reservas)', async () => {
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
     const db = makeDB(() => makeBound({ count: 0 }, []))
     const req = makeRequest('GET', 'https://example.com/api/admin/clients')
@@ -239,28 +256,35 @@ describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
     expect(res.status).toBe(200)
   })
 
-  // ── Clientes: criar (POST) — barbeiros podem criar novos clientes ───────
-  it('POST /api/admin/clients → 201 for barbeiro role (necessário para criar clientes ao criar reservas)', async () => {
+  // ── Clientes: criar (POST) ───────────────────────────────────────────────
+  it('POST /api/admin/clients → 201 for barbeiro role (criar cliente ao criar reserva)', async () => {
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
-    // DB: verificar duplicado → null (cliente não existe), INSERT → last_row_id: 99
-    let callCount = 0
-    const db = makeDB(() => {
-      callCount++
-      // Primeira chamada: verificar se já existe cliente com o mesmo telefone/email → null
-      if (callCount === 1) return makeBound(null)
-      // Segunda chamada: INSERT → devolve o novo id
-      return { ...makeBound(null), run: vi.fn().mockResolvedValue({ meta: { changes: 1, last_row_id: 99 } }) }
-    })
+
+    // O handler POST faz duas queries:
+    //   1. INSERT INTO clientes → run() com last_row_id
+    //   2. SELECT ... FROM clientes WHERE c.id = ? → first() com o cliente criado
+    const newClient = {
+      id: 99, name: 'Novo Cliente', email: '912345678@withoutcontact.pt',
+      phone: '912345678', nif: null, photo_url: null,
+      reservas_concluidas: 0, next_appointment_date: null,
+      last_appointment_date: null, notes: null, created_at: '2030-01-01',
+    }
+
+    const db = makeDBRouted([
+      // Segunda query — SELECT para obter o cliente reciém-criado
+      ['FROM clientes', makeBound(newClient)],
+      // Primeira query — INSERT (cai no fallback makeBound() que tem run() com last_row_id: 1)
+    ])
+    // O INSERT não contém 'FROM clientes', por isso usa o fallback com run().meta.last_row_id = 1
+
     const req = makeRequest('POST', 'https://example.com/api/admin/clients', {
       body: { name: 'Novo Cliente', phone: '912345678' },
     })
     const res = await handleAdminClients(makeContext(req, makeEnv(db)))
-    // 201 Created ou 200 — confirmar que NÃO é 401
-    expect(res.status).not.toBe(401)
-    expect([200, 201]).toContain(res.status)
+    expect(res.status).toBe(201)
   })
 
-  // ── Clientes: detalhe (GET /:id) — barbeiros não podem ver dados completos
+  // ── Clientes: detalhe (GET /:id) ──────────────────────────────────────────
   it('GET /api/admin/clients/:id → 401 for barbeiro role', async () => {
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
     const req = makeRequest('GET', 'https://example.com/api/admin/clients/1')
@@ -284,16 +308,13 @@ describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
     expect(res.status).toBe(401)
   })
 
-  // ── Reservas: IDOR entre barbeiros ────────────────────────────────────
+  // ── Reservas: IDOR entre barbeiros ─────────────────────────────────────
   it('GET /api/admin/reservations/:id → 401 when reservation belongs to another barber', async () => {
-    // Barber auth has barbeiro_id = 5; reservation belongs to barber 99
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
-
-    // DB returns a reservation owned by a DIFFERENT barber (id 99)
     const reserva = {
       id: 1, status: 'confirmada', data_hora: '2030-01-01T10:00:00',
       comentario: null, nota_privada: null, resend_lembrete_id: null,
-      cliente_id: 10, barbeiro_id: 99, servico_id: 1,   // ← barber 99, not 5
+      cliente_id: 10, barbeiro_id: 99, servico_id: 1,
       meio_pagamento: null, valor_pago: null, gorjeta: null,
       meio_gorjeta: null, comentario_pagamento: null,
       cliente_nome: 'Cliente X', cliente_email: 'x@example.com',
@@ -309,7 +330,6 @@ describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
 
   it('PATCH /api/admin/reservations/:id → 401 when reservation belongs to another barber', async () => {
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
-
     const reserva = {
       id: 1, status: 'confirmada', data_hora: '2030-01-01T10:00:00',
       comentario: null, nota_privada: null, resend_lembrete_id: null,
@@ -331,7 +351,6 @@ describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
 
   it('DELETE /api/admin/reservations/:id → 401 when reservation belongs to another barber', async () => {
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)
-
     const reserva = {
       id: 1, status: 'confirmada', data_hora: '2030-01-01T10:00:00',
       comentario: null, nota_privada: null, resend_lembrete_id: null,
@@ -351,11 +370,10 @@ describe('Barbeiro IDOR — barbeiro cannot access forbidden records', () => {
 
   it('GET /api/admin/reservations/:id → 200 when reservation belongs to the authenticated barber', async () => {
     vi.mocked(authenticateAdmin).mockResolvedValue(BARBER_AUTH)  // barbeiro_id = 5
-
     const reserva = {
       id: 2, status: 'confirmada', data_hora: '2030-01-01T10:00:00',
       comentario: null, nota_privada: null, resend_lembrete_id: null,
-      cliente_id: 10, barbeiro_id: 5, servico_id: 1,             // ← barber 5 ✓
+      cliente_id: 10, barbeiro_id: 5, servico_id: 1,
       meio_pagamento: null, valor_pago: null, gorjeta: null,
       meio_gorjeta: null, comentario_pagamento: null,
       cliente_nome: 'Cliente Y', cliente_email: 'y@example.com',
@@ -377,7 +395,6 @@ describe('Body injection — cliente_id in POST /api/reservations body is ignore
   it('uses auth.clientId from JWT, not the injected cliente_id from body', async () => {
     vi.mocked(authenticateClient).mockResolvedValue(CLIENT_AUTH)  // clientId = 1
 
-    // Build a DB that returns all the data the handler needs to reach the INSERT
     const service = { id: 1, nome: 'Corte', duracao: 30 }
     const barber  = { id: 1, nome: 'Barbeiro A' }
     const client  = { nome: 'Cliente Test', email: 'c@test.com' }
@@ -403,13 +420,12 @@ describe('Body injection — cliente_id in POST /api/reservations body is ignore
         barber_id:   1,
         date:        '2030-06-01',
         time:        '10:00',
-        cliente_id:  999,   // ← injected, should be ignored
+        cliente_id:  999,
       },
     })
 
     await handleReservations(makeContext(req, makeEnv(db as ReturnType<typeof makeDB>)))
 
-    // The first bind argument to the INSERT must be auth.clientId (1), NOT 999
     expect(insertBindArgs[0]).toBe(1)
     expect(insertBindArgs[0]).not.toBe(999)
   })
@@ -438,7 +454,6 @@ describe('Mass assignment — forbidden fields in PUT /api/me are ignored', () =
       body: {
         name:                           'Test User',
         phone:                          '912345678',
-        // Forbidden mass-assignment fields:
         role:                           'admin',
         reservas_concluidas:            999,
         reservas_gratuitas_disponiveis: 50,
@@ -448,7 +463,6 @@ describe('Mass assignment — forbidden fields in PUT /api/me are ignored', () =
     const res = await handleMe(makeContext(req, makeEnv(db as ReturnType<typeof makeDB>)))
     expect(res.status).toBe(200)
 
-    // The UPDATE SQL must not reference any of the protected columns
     expect(updateSql).not.toMatch(/role/i)
     expect(updateSql).not.toMatch(/reservas_concluidas/i)
     expect(updateSql).not.toMatch(/reservas_gratuitas_disponiveis/i)
@@ -479,13 +493,11 @@ describe('SQL injection — inputs are passed as bind parameters', () => {
     )
     await handleAdminClients(makeContext(req, makeEnv(db as ReturnType<typeof makeDB>)))
 
-    // The raw SQL string passed to prepare() must NOT contain the injection string
     const preparedSqlCalls: string[] = db.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
     for (const sql of preparedSqlCalls) {
       expect(sql).not.toContain(malicious)
     }
 
-    // The injection string must appear as a bound parameter (wrapped in %...%)
     const allBindArgs = capturedBindArgs.flat()
     const hasInjectionAsBind = allBindArgs.some(
       (a) => typeof a === 'string' && a.includes(malicious),
@@ -528,13 +540,11 @@ describe('SQL injection — inputs are passed as bind parameters', () => {
 
     await handleReservations(makeContext(req, makeEnv(db as ReturnType<typeof makeDB>)))
 
-    // The raw SQL strings must not contain the injection payload
     const preparedSqlCalls: string[] = db.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
     for (const sql of preparedSqlCalls) {
       expect(sql).not.toContain(sqlPayload)
     }
 
-    // The payload must have been passed as a bind parameter (possibly trimmed)
     const allBindArgs = capturedBindArgs.flat()
     const hasPayloadAsBind = allBindArgs.some(
       (a) => typeof a === 'string' && a.includes("'; DROP TABLE reservas; --"),
@@ -569,7 +579,6 @@ describe('Login security — Turnstile verification is enforced', () => {
   it('proceeds with login when Turnstile verification passes', async () => {
     vi.mocked(verifyTurnstile).mockResolvedValue({ success: true })
 
-    // DB: email not found → bad credentials (we only care that Turnstile didn't block)
     const db = makeDB(() => makeBound(null))
 
     const req = makeRequest('POST', 'https://example.com/api/auth/login', {
@@ -577,7 +586,6 @@ describe('Login security — Turnstile verification is enforced', () => {
     })
     const res = await handleAuthLogin(makeContext(req, makeEnv(db)))
 
-    // 400 because credentials are wrong, NOT because of Turnstile
     expect(res.status).toBe(400)
     const body = await res.json() as { success: boolean; error?: string }
     expect(body.error).toMatch(/credenciais/i)

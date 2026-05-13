@@ -10,16 +10,20 @@ export async function onRequest(context) {
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
 
-  // Barbeiros só podem fazer GET (pesquisar clientes para agendar reservas)
-  // Operações de escrita (POST) são exclusivas de admin/superAdmin
-  const barberReadOnly = isBarber(auth) && request.method !== 'GET'
+  // Política de acesso por role:
+  //   admin / superAdmin : GET, POST, PATCH, DELETE
+  //   barbeiro           : GET (pesquisar clientes) + POST (criar cliente ao criar reserva)
+  //                        PATCH e DELETE são exclusivos de admin
+  const WRITE_ONLY_ADMIN_METHODS = ['PATCH', 'DELETE']
+
   if (!isAdmin(auth) && !isBarber(auth)) {
     console.warn('admin/clients: acesso negado', { role: auth.user?.role })
     return unauthorized('Sem permissões para aceder a clientes')
   }
-  if (barberReadOnly) {
-    console.warn('admin/clients: barbeiro tentou escrita', { role: auth.user?.role })
-    return unauthorized('Barbeiros só podem consultar clientes')
+
+  if (isBarber(auth) && WRITE_ONLY_ADMIN_METHODS.includes(request.method)) {
+    console.warn('admin/clients: barbeiro tentou operação restrita', { method: request.method })
+    return unauthorized('Barbeiros não podem editar ou eliminar clientes')
   }
 
   if (request.method === 'GET') {
