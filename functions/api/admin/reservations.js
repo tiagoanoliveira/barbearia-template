@@ -127,6 +127,8 @@ export async function onRequest(context) {
         notes,
         send_email,
         service_duration,
+        // Campo extra: novo email a aplicar antes de criar a reserva
+        update_email,
       } = body
 
       if (!isValidId(client_id))   return badRequest('ID do cliente inválido')
@@ -143,10 +145,45 @@ export async function onRequest(context) {
       const dataHora = `${date}T${time}:00`
       const service  = await env.DB.prepare('SELECT duracao, nome FROM servicos WHERE id = ?').bind(service_id).first()
       const barber   = await env.DB.prepare('SELECT nome FROM barbeiros WHERE id = ?').bind(barber_id).first()
-      const client   = await env.DB.prepare('SELECT nome, email FROM clientes WHERE id = ?').bind(client_id).first()
+      let   client   = await env.DB.prepare('SELECT nome, email FROM clientes WHERE id = ?').bind(client_id).first()
       const customDuration = Number(service_duration)
       const hasCustomDuration = Number.isFinite(customDuration) && customDuration >= 5
       const duracao  = hasCustomDuration ? Math.round(customDuration) : (service?.duracao || 60)
+
+      /**
+       * Fluxo para clientes com email placeholder (@withoutcontact.pt):
+       *
+       *  1ª chamada (sem update_email):
+       *     Se send_email=true E email é placeholder → não criar reserva ainda,
+       *     devolver { requiresEmailUpdate: true } para o frontend mostrar o modal.
+       *
+       *  2ª chamada (com update_email preenchido):
+       *     Atualizar o email do cliente na BD antes de criar a reserva.
+       *     A reserva é criada com o novo email e os emails são enviados normalmente.
+       *
+       *  Caso o admin escolha "Confirmar sem emails" (send_email=false):
+       *     A reserva é criada sem qualquer envio — sem modal.
+       */
+      const emailIsPlaceholder = isPlaceholderEmail(client?.email)
+
+      if (send_email && emailIsPlaceholder && !update_email) {
+        // Primeira chamada: avisar o frontend para mostrar o modal
+        return ok({ requiresEmailUpdate: true })
+      }
+
+      // Se o admin forneceu um novo email válido, atualizar o cliente antes de criar a reserva
+      if (update_email) {
+        const newEmail = String(update_email).trim().toLowerCase()
+        // Validação básica do formato de email
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newEmail) || isPlaceholderEmail(newEmail)) {
+          return badRequest('Email inválido')
+        }
+        await env.DB.prepare(
+          'UPDATE clientes SET email = ? WHERE id = ?'
+        ).bind(newEmail, client_id).run()
+        // Reflectir o novo email para o envio imediato abaixo
+        client = { ...client, email: newEmail }
+      }
 
       const result = await env.DB.prepare(
         `INSERT INTO reservas
@@ -160,7 +197,9 @@ export async function onRequest(context) {
 
       const reservaId = result.meta.last_row_id
 
-      // Envia email de confirmação (apenas se send_email=true, cliente tem email real)
+      // Enviar email de confirmação (apenas se send_email=true, cliente tem email real)
+      // isPlaceholderEmail é verificado novamente dentro de sendReservationConfirmation
+      // como proteção em profundidade.
       if (send_email && client?.email && !isPlaceholderEmail(client.email)) {
         sendReservationConfirmation(context, {
           reservaId,

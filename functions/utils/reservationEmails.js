@@ -15,12 +15,13 @@ import {
   sendEmail,
   buildReservationConfirmationEmail,
   buildReservationCancellationEmail,
+  isPlaceholderEmail,
 } from './email.js'
 import { SHOP, LOGO_URL, LOGO_ALT, EMAIL_SUBJECTS } from './site-config.js'
 
 const RESEND_EMAILS_URL = 'https://api.resend.com/emails'
 
-// ─── helpers ────────────────────────────────────────────────────────────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────────────────────────────
 
 function isMoreThan24hAway(dataHora) {
   const diffMs = new Date(dataHora).getTime() - Date.now()
@@ -32,9 +33,15 @@ function reminderSendAt(dataHora) {
   return d.toISOString()
 }
 
-// ─── 1. Agendar lembrete (privado) ─────────────────────────────────────────────────────────
+// ── 1. Agendar lembrete (privado) ───────────────────────────────────────────────────────────
 
 async function _scheduleReminder(context, { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao }) {
+  // ✓ Bloquear imediatamente emails placeholder — nunca chegar à Resend
+  if (isPlaceholderEmail(clientEmail)) {
+    console.log(`[_scheduleReminder] Reserva #${reservaId}: email placeholder "${clientEmail}" — lembrete não agendado.`)
+    return null
+  }
+
   const key = context.env?.RESEND_API_KEY
   if (!key) {
     console.warn('[_scheduleReminder] RESEND_API_KEY não definida — lembrete não agendado.')
@@ -84,7 +91,7 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
   }
 }
 
-// ─── 2. Cancelar lembrete agendado ──────────────────────────────────────────────────────────────
+// ── 2. Cancelar lembrete agendado ────────────────────────────────────────────────────────────────────────────────
 
 export async function cancelScheduledReminder(context, resendEmailId) {
   console.log(`[cancelScheduledReminder] Chamada com resendEmailId=${JSON.stringify(resendEmailId)}`)
@@ -126,13 +133,19 @@ export async function cancelScheduledReminder(context, resendEmailId) {
   }
 }
 
-// ─── 3. Enviar confirmação + agendar lembrete ──────────────────────────────────────────────────────
+// ── 3. Enviar confirmação + agendar lembrete ──────────────────────────────────────────────────────────────
 
 export function sendReservationConfirmation(context, params) {
   const { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao, comentario } = params
 
   if (!clientEmail) {
     console.warn(`[sendReservationConfirmation] Sem email para reserva #${reservaId} — nada enviado.`)
+    return
+  }
+
+  // Bloquear placeholder (proteção em profundidade — o admin já verifica antes de chamar)
+  if (isPlaceholderEmail(clientEmail)) {
+    console.warn(`[sendReservationConfirmation] Reserva #${reservaId}: email placeholder "${clientEmail}" — confirmação e lembrete não enviados.`)
     return
   }
 
@@ -158,6 +171,7 @@ export function sendReservationConfirmation(context, params) {
       }
 
       // 2. Agendar lembrete 24h antes (se aplicável)
+      // isPlaceholderEmail já é verificado dentro de _scheduleReminder
       try {
         const lembreteId = await _scheduleReminder(context, {
           reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao,
@@ -169,7 +183,7 @@ export function sendReservationConfirmation(context, params) {
           ).bind(lembreteId, reservaId).run()
           console.log(`[sendReservationConfirmation] Reserva #${reservaId}: resend_lembrete_id=${lembreteId} guardado na BD.`)
         } else {
-          console.log(`[sendReservationConfirmation] Reserva #${reservaId}: sem lembrete agendado (menos de 24h ou erro).`)
+          console.log(`[sendReservationConfirmation] Reserva #${reservaId}: sem lembrete agendado (menos de 24h, placeholder ou erro).`)
         }
       } catch (err) {
         console.error(`[sendReservationConfirmation] Reserva #${reservaId}: falha ao agendar lembrete:`, err?.message || err)
@@ -178,13 +192,19 @@ export function sendReservationConfirmation(context, params) {
   )
 }
 
-// ─── 4. Enviar cancelamento + cancelar lembrete ────────────────────────────────────────────────────
+// ── 4. Enviar cancelamento + cancelar lembrete ──────────────────────────────────────────────────────────────
 
 export function sendReservationCancellation(context, params) {
   const { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao, motivo, resendLembreteId } = params
 
   if (!clientEmail) {
     console.warn(`[sendReservationCancellation] Sem email para reserva #${reservaId} — nada enviado.`)
+    return
+  }
+
+  // Email placeholder não recebe emails (não há confirmação, não há cancelamento)
+  if (isPlaceholderEmail(clientEmail)) {
+    console.log(`[sendReservationCancellation] Reserva #${reservaId}: email placeholder — email de cancelamento não enviado.`)
     return
   }
 
@@ -229,7 +249,7 @@ export function sendReservationCancellation(context, params) {
   )
 }
 
-// ─── 5. Reagendar lembrete (usado em edições) ──────────────────────────────────────────────────────
+// ── 5. Reagendar lembrete (usado em edições) ──────────────────────────────────────────────────────────────
 
 export async function rescheduleReminder(context, params) {
   const { reservaId, oldLembreteId, clientEmail, clientName, dataHora, serviceName, barberName, duracao } = params
@@ -239,6 +259,17 @@ export async function rescheduleReminder(context, params) {
     `clientEmail=${clientEmail}, nova dataHora=${dataHora}`
   )
 
+  // Email placeholder — não agendar nem cancelar (não havia lembrete válido)
+  if (isPlaceholderEmail(clientEmail)) {
+    console.log(`[rescheduleReminder] Reserva #${reservaId}: email placeholder — sem lembrete para reagendar.`)
+    await context.env.DB.prepare(
+      'UPDATE reservas SET resend_lembrete_id = NULL WHERE id = ?'
+    ).bind(reservaId).run().catch(e =>
+      console.error('[rescheduleReminder] Erro ao limpar resend_lembrete_id:', e?.message)
+    )
+    return
+  }
+
   // 1. Cancelar o lembrete anterior
   if (oldLembreteId) {
     console.log(`[rescheduleReminder] Reserva #${reservaId}: a cancelar lembrete antigo ${oldLembreteId}…`)
@@ -247,7 +278,7 @@ export async function rescheduleReminder(context, params) {
     console.log(`[rescheduleReminder] Reserva #${reservaId}: sem lembrete anterior para cancelar.`)
   }
 
-  // 2. Agendar novo lembrete
+  // 2. Agendar novo lembrete (_scheduleReminder também verifica isPlaceholderEmail)
   const newLembreteId = await _scheduleReminder(context, {
     reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao,
   })
@@ -265,7 +296,7 @@ export async function rescheduleReminder(context, params) {
   )
 }
 
-// ─── Template HTML do lembrete ──────────────────────────────────────────────────────────────────────
+// ── Template HTML do lembrete ────────────────────────────────────────────────────────────────────────────────────
 
 function buildReminderHtml({ clientName, data, hora, serviceName, barberName, reservaId }) {
   return `<!DOCTYPE html><html lang="pt"><head>
