@@ -3,8 +3,8 @@
  *
  * Lê src/config/theme.ts em Node (build time / dev server) e:
  *  - Injeta env vars VITE_SHOP_* para substituir placeholders no index.html
- *  - Gera public/sw.js, public/manifest.json, public/admin-manifest.json
- *    (public/ é copiado tal-e-qual para dist/ pelo Vite — URLs estáticas garantidas)
+ *  - Gera src/sw.js, src/manifest.json, src/admin-manifest.json
+ *    (src/ é copiado tal-e-qual para dist/ pelo Vite — URLs estáticas garantidas)
  *
  * NUNCA hardcode dados da barbearia aqui — tudo vem do theme.ts.
  */
@@ -46,8 +46,6 @@ export function readThemeValues(root: string): ThemeValues {
 
 // ─── Conteúdo gerado ─────────────────────────────────────────────────────────
 
-// Os ícones ficam em public/icons/ → servidos como /icons/logo-*.png
-// (URLs estáticas, sem hash, garantidas pelo Cloudflare Pages / Vite)
 const ICON_192 = '/media/images/logos/logo-192px.png'
 const ICON_512 = '/media/images/logos/logo-512px.png'
 
@@ -185,9 +183,9 @@ export default function pwaAssetsPlugin(): Plugin {
 
   function write(root: string) {
     const t         = readThemeValues(root)
-    // Os ficheiros vão para public/ — o Vite copia-os tal-e-qual para dist/
+    // Os ficheiros vão para src/ — o Vite copia-os tal-e-qual para dist/
     // garantindo URLs estáticas sem hash (ex: /sw.js, /manifest.json)
-    const publicDir = path.join(root, 'public')
+    const publicDir = path.join(root, 'src')
     fs.mkdirSync(publicDir, { recursive: true })
     fs.writeFileSync(path.join(publicDir, 'sw.js'),               buildSW(t))
     fs.writeFileSync(path.join(publicDir, 'manifest.json'),       buildManifest(t, false))
@@ -223,8 +221,8 @@ export default function pwaAssetsPlugin(): Plugin {
       write(rootDir)
     },
 
-    // Dev server: serve os 3 ficheiros dinamicamente a partir de public/
-    // (o Vite já os serviria de public/, mas este handler garante freshness
+    // Dev server: serve os 3 ficheiros dinamicamente a partir de src/
+    // (o Vite já os serviria de src/, mas este handler garante freshness
     //  quando theme.ts muda sem reiniciar o servidor)
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
