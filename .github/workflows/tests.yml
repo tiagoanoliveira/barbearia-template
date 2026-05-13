@@ -89,13 +89,15 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET || 'test-secret-ci-only' }}
           TURNSTILE_SECRET: "1x0000000000000000000000000000000AA"
 
-      - name: Testes de reservas (reservations.test.js)
-        run: npx vitest run functions/tests/reservations.test.js --reporter=verbose
+      - name: Testes de reservas
+        # O vitest resolve pelo include definido em vite.config.ts (tests/**/*.test.{ts,tsx})
+        # Passamos apenas o nome do ficheiro sem path absoluto para não conflituar com o include
+        run: npx vitest run --reporter=verbose tests/reservations.test.ts
         env:
           NODE_ENV: test
 
-      - name: Testes de segurança (security.test.js)
-        run: npx vitest run functions/tests/security.test.js --reporter=verbose
+      - name: Testes de segurança
+        run: npx vitest run --reporter=verbose tests/security.test.ts
         env:
           NODE_ENV: test
 

@@ -202,7 +202,7 @@ export default function ReservationsPage() {
                     <td className="px-5 py-3"><StatusBadge status={r.status} /></td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        {r.client_id && (
+                        {r.client_id && !isBarber && (
                           <button
                             onClick={() => setModal({
                               type: 'client',
