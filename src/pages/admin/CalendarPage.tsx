@@ -355,6 +355,44 @@ export default function CalendarPage() {
     finally { setCopySaving(false) }
   }
 
+  // ── Handler principal: criar nova reserva ────────────────────────────────
+  // extraFields é injectado pelo NewReservationForm após decisão do utilizador
+  // no modal de email placeholder (atualizar email OU confirmar sem emails).
+  const handleSaveNewReservation = async (
+    extraFields?: { update_email?: string; send_email?: boolean }
+  ) => {
+    if (!newResForm.client_id || !newResForm.service_id || !newResForm.barber_id || !newResForm.data_hora) return
+    const iso      = newResForm.data_hora as string
+    const [date, timeFull] = iso.split('T')
+    const time     = (timeFull ?? '').slice(0, 5)
+
+    // send_email: extraFields tem precedência (decisão do modal); se não presente usa o form
+    const sendEmail = extraFields?.send_email !== undefined
+      ? extraFields.send_email
+      : (newResForm.sendEmail ?? false)
+
+    setNewResSaving(true)
+    try {
+      await adminApi.post('/api/admin/reservations', {
+        client_id:        newResForm.client_id,
+        service_id:       newResForm.service_id,
+        barber_id:        newResForm.barber_id,
+        date,
+        time,
+        notes:            newResForm.comentario ?? '',
+        nota_privada:     newResForm.nota_privada ?? '',
+        send_email:       sendEmail,
+        service_duration: newResForm.service_duration,
+        // Campo extra: novo email a persistir no cliente antes de criar a reserva.
+        // Apenas presente quando o utilizador escolheu "Atualizar Email" no modal.
+        ...(extraFields?.update_email ? { update_email: extraFields.update_email } : {}),
+      })
+      qc.invalidateQueries({ queryKey: ['cal-reservations'] })
+      close()
+    } catch {}
+    finally { setNewResSaving(false) }
+  }
+
   const timeSlots = Array.from({ length: TOTAL_SLOTS }, (_, i) => i)
   const dateLabel = useMemo(() => {
     try { return format(parseISO(selectedDate), "EEEE, d 'de' MMMM 'de' yyyy", { locale: pt }) } catch { return selectedDate }
@@ -719,32 +757,16 @@ export default function CalendarPage() {
       <Modal open={modal?.type === 'res_new'} onClose={close} title="Nova reserva">
         {modal?.type === 'res_new' ? (
           <NewReservationForm
-            barberId={modal.barberId} slot={modal.slot}
-            selectedDate={selectedDate} startH={START_H} barbers={barbers} services={services}
-            form={newResForm} saving={newResSaving}
+            barberId={modal.barberId}
+            slot={modal.slot}
+            selectedDate={selectedDate}
+            startH={START_H}
+            barbers={barbers}
+            services={services}
+            form={newResForm}
+            saving={newResSaving}
             onChange={(k, v) => setNewResForm(f => ({ ...f, [k]: v }))}
-            onSave={async () => {
-              if (!newResForm.client_id || !newResForm.service_id || !newResForm.barber_id || !newResForm.data_hora) return
-              const iso = newResForm.data_hora as string
-              const [date, timeFull] = iso.split('T')
-              const time = (timeFull ?? '').slice(0, 5)
-              setNewResSaving(true)
-              try {
-                await adminApi.post('/api/admin/reservations', {
-                  client_id:        newResForm.client_id,
-                  service_id:       newResForm.service_id,
-                  barber_id:        newResForm.barber_id,
-                  date,
-                  time,
-                  notes:            newResForm.comentario ?? '',
-                  nota_privada:     newResForm.nota_privada ?? '',
-                  send_email:       newResForm.sendEmail ?? false,
-                  service_duration: newResForm.service_duration,
-                })
-                qc.invalidateQueries({ queryKey: ['cal-reservations'] }); close()
-              } catch {}
-              finally { setNewResSaving(false) }
-            }}
+            onSave={handleSaveNewReservation}
             onCancel={close}
           />
         ) : <></>}
