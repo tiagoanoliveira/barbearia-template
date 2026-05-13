@@ -6,6 +6,7 @@ import {
 import { isValidDate, isValidTime, isValidId, sanitize } from '../utils/validators.js'
 import { sendReservationConfirmation } from '../utils/reservationEmails.js'
 import { getNowLisboa } from '../utils/time.js'
+import { computeSlots, getOpenClose } from '../utils/slots.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -83,7 +84,7 @@ export async function onRequest(context) {
       ).bind(
           `Nova reserva: ${client?.nome ?? 'Cliente'} — ${service.nome} às ${time}`,
           reservationId,
-          barber.nome,       // segunda linha do toast = nome do barbeiro
+          barber.nome,
           finalBarberId
       ).run().catch(() => {})
 
@@ -108,65 +109,96 @@ export async function onRequest(context) {
   return badRequest('Método não suportado')
 }
 
+/**
+ * Seleciona o barbeiro disponível com menos reservas no dia para o slot pedido.
+ *
+ * Algoritmo:
+ *  1. Obter todos os barbeiros activos
+ *  2. Para cada um, calcular os slots disponíveis via computeSlots
+ *     (verifica reservas existentes E indisponibilidades parciais/all-day)
+ *  3. Filtrar os que TÊM o slot pedido disponível
+ *  4. Ordenar por nº de reservas no dia (crescente)
+ *  5. Em caso de empate, usar o dia anterior como desempate
+ *  6. Em caso de empate persistente, aleatorizar
+ */
 async function pickBarber(env, date, time, duration) {
-  const dataHora   = `${date}T${time}:00`
-  const dateObj    = new Date(date)
-  const yesterday  = new Date(dateObj)
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yesterdayStr = yesterday.toISOString().slice(0, 10)
+  const dayOfWeek = new Date(date).getDay()
+  const hours     = getOpenClose(dayOfWeek)
+  if (!hours) return null  // barbearia fechada nesse dia
 
   const { results: barbers } = await env.DB.prepare(
     'SELECT id FROM barbeiros WHERE ativo = 1'
   ).all()
   if (!barbers.length) return null
 
-  const available = []
-  for (const b of barbers) {
-    const occupied = await env.DB.prepare(
-      `SELECT id FROM reservas
-       WHERE barbeiro_id = ? AND data_hora = ?
-       AND status IN ('confirmada','faltou','concluida') LIMIT 1`
-    ).bind(b.id, dataHora).first()
-
-    const unavailable = await env.DB.prepare(
-      `SELECT id FROM horarios_indisponiveis
-       WHERE barbeiro_id = ? AND is_all_day = 1 AND date(data_hora_inicio) <= ? AND date(data_hora_fim) >= ?
-       LIMIT 1`
-    ).bind(b.id, date, date).first()
-
-    if (!occupied && !unavailable) available.push(b.id)
-  }
-
-  if (!available.length) return null
-  if (available.length === 1) return available[0]
-
-  const todayCounts = await Promise.all(
-    available.map(async id => {
-      const row = await env.DB.prepare(
-        `SELECT COUNT(*) as cnt FROM reservas
+  // Para cada barbeiro, verificar se o slot específico está disponível
+  // usando computeSlots — mesma lógica de /api/slots e /api/slots-any-barber
+  const candidates = []
+  await Promise.all(barbers.map(async b => {
+    const [{ results: reservations }, { results: unavailabilities }] = await Promise.all([
+      env.DB.prepare(
+        `SELECT data_hora, duracao_minutos FROM v_reservas_duracao
          WHERE barbeiro_id = ? AND date(data_hora) = ?
          AND status IN ('confirmada','faltou','concluida')`
-      ).bind(id, date).first()
-      return { id, today: row?.cnt ?? 0 }
-    })
-  )
-  const minToday = Math.min(...todayCounts.map(r => r.today))
-  const afterToday = todayCounts.filter(r => r.today === minToday)
-  if (afterToday.length === 1) return afterToday[0].id
+      ).bind(b.id, date).all(),
+      env.DB.prepare(
+        `SELECT data_hora_inicio, data_hora_fim, is_all_day
+         FROM horarios_indisponiveis
+         WHERE barbeiro_id = ? AND date(data_hora_inicio) <= ? AND date(data_hora_fim) >= ?`
+      ).bind(b.id, date, date).all(),
+    ])
 
-  const yesterdayCounts = await Promise.all(
-    afterToday.map(async ({ id }) => {
-      const row = await env.DB.prepare(
-        `SELECT COUNT(*) as cnt FROM reservas
-         WHERE barbeiro_id = ? AND date(data_hora) = ?
-         AND status IN ('confirmada','faltou','concluida')`
-      ).bind(id, yesterdayStr).first()
-      return { id, yesterday: row?.cnt ?? 0 }
+    const availableSlots = computeSlots({
+      date,
+      serviceDuration:      duration,
+      existingReservations: reservations,
+      unavailabilities,
+      openHour:  hours.open,
+      closeHour: hours.close,
     })
-  )
-  const minYest = Math.min(...yesterdayCounts.map(r => r.yesterday))
-  const afterYest = yesterdayCounts.filter(r => r.yesterday === minYest)
-  if (afterYest.length === 1) return afterYest[0].id
 
-  return afterYest[Math.floor(Math.random() * afterYest.length)].id
+    if (availableSlots.includes(time)) {
+      candidates.push({ id: b.id })
+    }
+  }))
+
+  if (!candidates.length) return null
+  if (candidates.length === 1) return candidates[0].id
+
+  // Ordenar candidatos por nº de reservas no dia (crescente)
+  const dateObj      = new Date(date)
+  const yesterday    = new Date(dateObj)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().slice(0, 10)
+
+  const withTodayCounts = await Promise.all(candidates.map(async c => {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) as cnt FROM reservas
+       WHERE barbeiro_id = ? AND date(data_hora) = ?
+       AND status IN ('confirmada','faltou','concluida')`
+    ).bind(c.id, date).first()
+    return { id: c.id, today: row?.cnt ?? 0 }
+  }))
+
+  withTodayCounts.sort((a, b) => a.today - b.today)
+  const minToday  = withTodayCounts[0].today
+  const tiedToday = withTodayCounts.filter(r => r.today === minToday)
+
+  if (tiedToday.length === 1) return tiedToday[0].id
+
+  // Desempate: barbeiro com menos reservas ontem
+  const withYesterdayCounts = await Promise.all(tiedToday.map(async c => {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) as cnt FROM reservas
+       WHERE barbeiro_id = ? AND date(data_hora) = ?
+       AND status IN ('confirmada','faltou','concluida')`
+    ).bind(c.id, yesterdayStr).first()
+    return { id: c.id, yesterday: row?.cnt ?? 0 }
+  }))
+
+  withYesterdayCounts.sort((a, b) => a.yesterday - b.yesterday)
+  const minYest    = withYesterdayCounts[0].yesterday
+  const tiedFinal  = withYesterdayCounts.filter(r => r.yesterday === minYest)
+
+  return tiedFinal[Math.floor(Math.random() * tiedFinal.length)].id
 }

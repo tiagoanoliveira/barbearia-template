@@ -1,0 +1,98 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  # ─── Job 1: Testes unitários puros (sem servidor) ───────────────────────────
+  unit-tests:
+    name: Unit Tests (Vitest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Vitest
+        run: npx vitest run --reporter=verbose
+        env:
+          NODE_ENV: test
+
+  # ─── Job 2: Testes de API (Wrangler local + Vitest) ─────────────────────────
+  api-tests:
+    name: API Integration Tests (Wrangler + Vitest)
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply DB schema (D1 local)
+        run: npx wrangler d1 execute barbearia-db --local --file=schema.sql
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+
+      - name: Seed dados de teste
+        run: |
+          npx wrangler d1 execute barbearia-db --local --command="
+            INSERT OR IGNORE INTO servicos (id, nome, duracao, preco) VALUES (1, 'Corte', 30, 15.00);
+            INSERT OR IGNORE INTO barbeiros (id, nome, ativo) VALUES (1, 'Barbeiro Teste', 1);
+          "
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+
+      - name: Iniciar Wrangler dev
+        run: |
+          npx wrangler dev --local --port 8788 &
+          echo "Aguardando servidor arrancar..."
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:8788/api/barbers > /dev/null && echo "Servidor pronto!" && break
+            echo "  tentativa $i/20..."
+            sleep 3
+          done
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'test-secret-ci-only' }}
+          TURNSTILE_SECRET: "1x0000000000000000000000000000000AA"
+
+      - name: Testes de reservas (reservations.test.js)
+        run: npx vitest run functions/tests/reservations.test.js --reporter=verbose
+        env:
+          NODE_ENV: test
+
+      - name: Testes de segurança (security.test.js)
+        run: npx vitest run functions/tests/security.test.js --reporter=verbose
+        env:
+          NODE_ENV: test
+
+      - name: Upload artefactos de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test-results/
+            coverage/
+          retention-days: 14
