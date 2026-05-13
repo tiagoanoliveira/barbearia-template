@@ -82,9 +82,9 @@ export async function onRequest(context) {
           `INSERT INTO notifications (type, message, reservation_id, client_name, barber_id)
            VALUES ('new_booking', ?, ?, ?, ?)`
       ).bind(
-          `Nova reserva: ${client?.nome ?? 'Cliente'} — ${service.nome} às ${time}`,
+          `Nova reserva: ${client?.nome ?? 'Cliente'} — ${service?.nome}, ${date} às ${time}`,
           reservationId,
-          barber.nome,
+          client?.nome,
           finalBarberId
       ).run().catch(() => {})
 

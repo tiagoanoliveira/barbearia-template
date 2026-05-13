@@ -254,7 +254,7 @@ export default function NotificationBell() {
                 <span className="text-xl flex-shrink-0 mt-0.5">{getNotifIcon(t.type)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium text-gray-900 leading-snug line-clamp-2">{t.message}</p>
-                  {t.client_name && <p className="text-[11px] text-gray-400 mt-0.5">{t.client_name}</p>}
+                  {t.barber_name && <p className="text-[11px] text-gray-400 mt-0.5">{t.barber_name}</p>}
                 </div>
                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-1">
                   {t.reservation_id && (
@@ -327,7 +327,7 @@ export default function NotificationBell() {
                                 }`}>{n.message}</p>
                                 <p className="text-[10px] text-gray-400 mt-0.5">
                                   {dateStr && timeStr ? `${dateStr} · ${timeStr}` : ''}
-                                  {n.client_name ? ` · ${n.client_name}` : ''}
+                                  {n.barber_name ? ` · ${n.barber_name}` : ''}
                                   {n.is_read ? ' · lida' : ''}
                                 </p>
                               </button>
