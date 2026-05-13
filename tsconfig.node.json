@@ -15,5 +15,5 @@
     "noUnusedParameters": false,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vite-plugin-pwa-assets.ts"]
+  "include": ["vite.config.ts"]
 }

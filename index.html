@@ -2,36 +2,22 @@
 <html lang="pt">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="%LOGO_URL%" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Título e favicon sobrescritos em runtime pelo hook useBranding -->
-    <!-- Os valores abaixo são substituídos em build/dev por vite-plugin-pwa-assets via transformIndexHtml -->
-    <title>%VITE_SHOP_NAME%</title>
-    <meta name="description" content="%VITE_SHOP_DESCRIPTION%" />
-    <!-- PWA manifest (dinâmico: /admin/* usa admin-manifest.json) -->
-    <link rel="manifest" href="/manifest.json" id="pwa-manifest" />
-    <meta name="theme-color" content="%VITE_THEME_COLOR%" />
+    <title>%SHOP_NAME%</title>
+    <meta name="description" content="%SHOP_DESCRIPTION%" />
+    <meta name="theme-color" content="%THEME_COLOR%" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="%VITE_SHOP_SHORT_NAME%" />
-    <!-- apple-touch-icon aponta para public/icons/logo-192.png (URL estática) -->
-    <link rel="apple-touch-icon" href="/icons/logo-192.png" />
+    <meta name="apple-mobile-web-app-title" content="%SHOP_SHORT_NAME%" />
+    <link rel="apple-touch-icon" href="%LOGO_URL%" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <script>
-      // Injeta o manifest correcto antes que o browser o leia
-      ;(function () {
-        if (window.location.pathname.startsWith('/admin')) {
-          var el = document.getElementById('pwa-manifest')
-          if (el) el.setAttribute('href', '/admin-manifest.json')
-        }
-      })()
-    </script>
   </head>
   <body>
     <div id="root"></div>
