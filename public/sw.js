@@ -1,5 +1,5 @@
 /**
- * Service Worker — Brooklyn Barbearia PWA
+ * Service Worker — Barbearia PWA
  *
  * Estratégia:
  *  - Cache-first para assets estáticos (JS, CSS, imagens, fontes)
@@ -11,9 +11,9 @@
  * que a app funciona offline e que o deep-link de arranque é respeitado.
  */
 
-const CACHE_VERSION = 'v1'
-const STATIC_CACHE  = `bb-static-${CACHE_VERSION}`
-const DYNAMIC_CACHE = `bb-dynamic-${CACHE_VERSION}`
+const CACHE_VERSION = 'v1.1'
+const STATIC_CACHE  = `barbershop-static-${CACHE_VERSION}`
+const DYNAMIC_CACHE = `barbershop-dynamic-${CACHE_VERSION}`
 
 // Assets a pre-cachear no install
 const PRECACHE_URLS = [
