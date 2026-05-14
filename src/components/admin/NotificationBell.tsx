@@ -430,7 +430,7 @@ export default function NotificationBell() {
                   ) : (
                       notifications.map(n => {
                         const isUnread = !n.is_read
-                        const created  = n.created_at ? new Date(n.created_at) : null
+                        const created = n.created_at ? new Date(n.created_at.replace(' ', 'T').replace(/Z?$/, 'Z')) : null
                         const dateStr = created ? created.toLocaleDateString('pt-PT', { timeZone: 'Europe/Lisbon', day: '2-digit', month: '2-digit' }) : ''
                         const timeStr = created ? created.toLocaleTimeString('pt-PT', { timeZone: 'Europe/Lisbon', hour: '2-digit', minute: '2-digit' }) : ''
                         return (
