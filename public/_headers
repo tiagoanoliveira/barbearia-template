@@ -1,0 +1,14 @@
+# Cloudflare Pages — headers por path
+
+# Service Worker nunca deve ser servido em cache
+# O browser tem de ir sempre buscar a versão mais recente ao servidor
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+
+# Manifests também sem cache para que alterações ao start_url sejam imediatas
+/manifest.json
+  Cache-Control: no-cache
+
+/manifest-admin.json
+  Cache-Control: no-cache
