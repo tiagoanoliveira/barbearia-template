@@ -320,7 +320,7 @@ export default function BookingPage() {
                 </button>
               </div>
               <p className="text-xs text-gray-600 mt-4">
-                Sem conta? <Link to="/registo?redirect=/reservar" className="text-primary-400 hover:underline">Regista-te gratuitamente</Link>
+                Sem conta? <Link to="/login?redirect=/reservar" className="text-primary-400 hover:underline">Regista-te gratuitamente</Link>
               </p>
             </div>
           ) : (
