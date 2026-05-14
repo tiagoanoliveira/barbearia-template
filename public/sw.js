@@ -3,7 +3,7 @@
  * CACHE_VERSION: alterar sempre que se queira forçar actualização em todos os browsers
  */
 
-const CACHE_VERSION = 'v2.0'
+const CACHE_VERSION = 'v2.1'
 const STATIC_CACHE  = `bb-static-${CACHE_VERSION}`
 const DYNAMIC_CACHE = `bb-dynamic-${CACHE_VERSION}`
 
@@ -20,7 +20,7 @@ self.addEventListener('install', (event) => {
     caches
       .open(STATIC_CACHE)
       .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())   // activa imediatamente sem esperar fechar abas
+      .then(() => self.skipWaiting())
   )
 })
 
@@ -31,7 +31,7 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) => Promise.all(keys.filter((k) => !keep.includes(k)).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())  // assume controlo de todas as abas abertas
+      .then(() => self.clients.claim())
   )
 })
 
@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // sw.js e manifests → nunca cache (consistente com _headers)
+  // sw.js e manifests → nunca cache
   if (
     url.pathname === '/sw.js' ||
     url.pathname === '/manifest.json' ||
@@ -72,14 +72,15 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Assets estáticos (JS, CSS, imagens, fontes) → cache-first
-  // Excluir vídeos (geram respostas 206 que o Cache API não suporta)
+  // IMPORTANTE: clone() ANTES de qualquer await/return para evitar "body already used"
   if (url.pathname.match(/\.(js|css|woff2?|png|jpg|jpeg|svg|ico|webp)$/)) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached
         return fetch(request).then((res) => {
           if (res && res.status === 200 && res.type !== 'opaque') {
-            caches.open(STATIC_CACHE).then((c) => c.put(request, res.clone()))
+            const toCache = res.clone()  // clone ANTES de retornar res
+            caches.open(STATIC_CACHE).then((c) => c.put(request, toCache))
           }
           return res
         })
@@ -99,12 +100,14 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Restantes → stale-while-revalidate
+  // IMPORTANTE: clone() ANTES de retornar para evitar "body already used"
   event.respondWith(
     caches.open(DYNAMIC_CACHE).then((cache) =>
       cache.match(request).then((cached) => {
         const fresh = fetch(request).then((res) => {
           if (res && res.status === 200 && res.type !== 'opaque') {
-            cache.put(request, res.clone())
+            const toCache = res.clone()  // clone ANTES de retornar res
+            cache.put(request, toCache)
           }
           return res
         })
@@ -116,8 +119,10 @@ self.addEventListener('fetch', (event) => {
 
 // ─── Push ─────────────────────────────────────────────────────────────────────
 self.addEventListener('push', (event) => {
-  // Sem dados → ignorar silenciosamente
-  if (!event.data) return
+  if (!event.data) {
+    console.warn('[SW push] evento recebido mas sem dados')
+    return
+  }
 
   let payload = {}
   try {
@@ -126,14 +131,16 @@ self.addEventListener('push', (event) => {
     payload = { title: 'Barbearia', body: event.data.text() }
   }
 
+  console.log('[SW push] payload recebido:', payload)
+
   const title   = payload.title ?? 'Barbearia'
   const options = {
-    body:    payload.body ?? '',
-    icon:    '/icons/logo-96px.png',
-    badge:   '/icons/logo-96px.png',
-    vibrate: [200, 100, 200],
-    tag:     payload.tag ?? 'bb-push',          // agrupa notificações do mesmo tipo
-    renotify: true,                              // vibra mesmo quando substitui uma existente
+    body:     payload.body ?? '',
+    icon:     '/icons/logo-96px.png',
+    badge:    '/icons/logo-96px.png',
+    vibrate:  [200, 100, 200],
+    tag:      payload.tag ?? 'bb-push',
+    renotify: true,
     data: {
       url:             payload.url             ?? '/admin/dashboard',
       notification_id: payload.notification_id ?? null,
@@ -142,6 +149,8 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     self.registration.showNotification(title, options)
+      .then(() => console.log('[SW push] showNotification OK:', title))
+      .catch((err) => console.error('[SW push] showNotification falhou:', err))
   )
 })
 
@@ -152,16 +161,15 @@ self.addEventListener('notificationclick', (event) => {
   const target = event.notification.data?.url ?? '/admin/dashboard'
 
   event.waitUntil(
+    // includeUncontrolled: true para apanhar a PWA instalada mesmo sem estar focada
     self.clients
-      .matchAll({ type: 'window', includeUncontrolled: false })
+      .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clients) => {
-        // Se já há uma aba aberta deste SW, foca e navega
-        for (const client of clients) {
-          if ('focus' in client) {
-            return client.focus().then(() => client.navigate(target))
-          }
+        // Procurar aba já aberta do mesmo origin
+        const existing = clients.find((c) => new URL(c.url).origin === self.location.origin)
+        if (existing) {
+          return existing.focus().then(() => existing.navigate(target))
         }
-        // Senão abre uma nova aba
         return self.clients.openWindow(target)
       })
   )
