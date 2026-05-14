@@ -2,16 +2,39 @@
 <html lang="pt">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="%LOGO_URL%" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>%SHOP_NAME%</title>
-    <meta name="description" content="%SHOP_DESCRIPTION%" />
-    <meta name="theme-color" content="%THEME_COLOR%" />
+
+    <!-- Favicon / App icon (substituído por Vite com o logo real) -->
+    <link rel="icon" type="image/png" sizes="96x96" href="/icons/logo-96px.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/logo-512px.png" />
+
+    <!-- SEO -->
+    <title>Brooklyn Barbearia</title>
+    <meta name="description" content="Barbearia premium no Porto. Reserva online rápida e fácil." />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Brooklyn Barbearia" />
+    <meta property="og:description" content="Barbearia premium no Porto. Reserva online rápida e fácil." />
+    <meta property="og:image" content="/icons/logo-512px.png" />
+
+    <!-- Theme / PWA base -->
+    <meta name="theme-color" content="#052e16" />
+    <meta name="color-scheme" content="dark light" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="%SHOP_SHORT_NAME%" />
-    <link rel="apple-touch-icon" href="%LOGO_URL%" />
+    <meta name="apple-mobile-web-app-title" content="Brooklyn" />
+    <link rel="apple-touch-icon" href="/icons/logo-512px.png" />
+
+    <!--
+      PWA manifest é injetado dinamicamente pelo service-worker-registration.ts
+      consoante a URL de instalação (/admin vs público).
+      O <link rel="manifest"> é adicionado via JS antes do registo do SW.
+    -->
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
