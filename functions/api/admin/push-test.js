@@ -2,16 +2,13 @@
  * /api/admin/push-test
  *
  * GET  — devolve as subscrições registadas para o admin autenticado
- *        (sem dados sensíveis — apenas endpoint truncado, user_agent, created_at)
- *
- * POST — dispara um push de teste imediato para todas as subscrições
- *        do admin autenticado e devolve o resultado de cada tentativa
- *
- * Útil para diagnosticar problemas de push sem ter de criar uma reserva.
+ * POST — dispara push de teste com payload encriptado
+ * PUT  — dispara push SEM payload (body vazio) para isolar bugs de encriptação
+ *        Se o SW receber o evento push com event.data===null, a encriptação é o problema.
  */
 import { authenticateAdmin } from '../../utils/auth.js'
 import { ok, unauthorized, serverError, corsOptions } from '../../utils/response.js'
-import { sendWebPush } from '../../utils/webpush.js'
+import { sendWebPush, sendWebPushEmpty } from '../../utils/webpush.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -53,7 +50,50 @@ export async function onRequest(context) {
     }
   }
 
-  // ─── POST: dispara push de teste ────────────────────────────────────────────
+  // ─── PUT: ping sem payload (isolar bug encriptação) ──────────────────────────
+  if (request.method === 'PUT') {
+    const pub     = env.VAPID_PUBLIC_KEY
+    const priv    = env.VAPID_PRIVATE_KEY
+    const subject = env.VAPID_SUBJECT ?? 'mailto:admin@barbearia.pt'
+
+    if (!pub || !priv) return ok({ error: 'VAPID não configurado' })
+
+    try {
+      const { results: subs } = await db.prepare(
+        `SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE admin_user_id = ?`
+      ).bind(auth.adminId).all()
+
+      if (!subs.length) return ok({ error: 'Sem subscrições' })
+
+      const vapid = { publicKey: pub, privateKey: priv, subject }
+
+      const outcomes = await Promise.allSettled(
+        subs.map(async (s) => {
+          const result = await sendWebPushEmpty(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            vapid
+          )
+          return {
+            endpoint: s.endpoint.slice(0, 50) + '...',
+            status:   result.status,
+            body:     result.body,
+            success:  result.status === 201 || result.status === 200,
+          }
+        })
+      )
+
+      return ok({
+        mode: 'empty-payload-ping',
+        instruction: 'Se o SW loggar [SW push] payload recebido com data=null, a encriptação é o problema. Se não logar nada, o problema é VAPID/entrega.',
+        results: outcomes.map(o => o.status === 'fulfilled' ? o.value : { success: false, error: o.reason?.message }),
+      })
+    } catch (e) {
+      console.error('[push-test PUT]', e?.message)
+      return serverError('Erro ao enviar ping')
+    }
+  }
+
+  // ─── POST: dispara push de teste com payload ─────────────────────────────────
   if (request.method === 'POST') {
     const pub     = env.VAPID_PUBLIC_KEY
     const priv    = env.VAPID_PRIVATE_KEY
@@ -77,7 +117,7 @@ export async function onRequest(context) {
       if (!subs.length) {
         return ok({
           error: 'Sem subscrições',
-          detail: 'Não existe nenhuma subscrição push registada para este utilizador. Clica em "Ativar push" no sino de notificações.',
+          detail: 'Não existe nenhuma subscrição push registada para este utilizador.',
           results: []
         })
       }
@@ -99,7 +139,6 @@ export async function onRequest(context) {
               testMsg,
               vapid
             )
-            // Limpar subscrição expirada
             if (result.status === 410 || result.status === 404) {
               await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')
                 .bind(s.endpoint).run().catch(() => {})
@@ -125,14 +164,12 @@ export async function onRequest(context) {
       )
 
       const results = outcomes.map(o => o.status === 'fulfilled' ? o.value : { success: false, error: o.reason?.message })
-      const allOk   = results.every(r => r.success)
-      const anyOk   = results.some(r => r.success)
 
       return ok({
         vapid_public_key_preview: pub.slice(0, 20) + '...',
         subscriptions_tested: subs.length,
-        all_succeeded: allOk,
-        any_succeeded: anyOk,
+        all_succeeded: results.every(r => r.success),
+        any_succeeded: results.some(r => r.success),
         results,
       })
     } catch (e) {
