@@ -128,11 +128,12 @@ async function encryptPayload(plaintext, p256dhB64u, authB64u) {
 
 /**
  * Envia uma Web Push notification para uma subscrição.
+ * Devolve um objeto com o status HTTP e o body da resposta do push service.
  *
  * @param {{ endpoint: string, keys: { p256dh: string, auth: string } }} subscription
  * @param {{ title: string, body: string, url?: string, notification_id?: number|null, tag?: string }} payload
  * @param {{ publicKey: string, privateKey: string, subject: string }} vapid
- * @returns {Promise<Response>}  resposta HTTP do push service (201 = sucesso)
+ * @returns {Promise<{ status: number, statusText: string, body: string }>}
  */
 export async function sendWebPush(subscription, payload, vapid) {
   const { endpoint, keys: { p256dh, auth } } = subscription
@@ -145,7 +146,7 @@ export async function sendWebPush(subscription, payload, vapid) {
   const body    = new TextEncoder().encode(JSON.stringify(payload))
   const encrypt = await encryptPayload(body, p256dh, auth)
 
-  return fetch(endpoint, {
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Authorization':    `vapid t=${jwt},k=${vapid.publicKey}`,
@@ -155,26 +156,32 @@ export async function sendWebPush(subscription, payload, vapid) {
     },
     body: encrypt,
   })
+
+  const resBody = await res.text().catch(() => '')
+  return { status: res.status, statusText: res.statusText, body: resBody }
 }
 
 /**
  * Envia push a todos os admins/barbeiros relevantes.
+ * Retorna um array com o resultado de cada tentativa (útil para debug).
  *
  * Se barber_id preenchido → apenas às subscrições desse barbeiro.
  * Se null               → a todos os admins activos.
  *
- * Falhas individuais são silenciosas (não abortam a request principal).
- *
  * @param {D1Database} db
  * @param {{ message: string, barber_id?: number|null, notification_id?: number|null }} notification
  * @param {object} env   env do Cloudflare (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT)
+ * @returns {Promise<Array<{ endpoint: string, status: number, error?: string }>>}
  */
 export async function sendPushToBarbers(db, notification, env) {
   const pub     = env.VAPID_PUBLIC_KEY
   const priv    = env.VAPID_PRIVATE_KEY
   const subject = env.VAPID_SUBJECT ?? 'mailto:admin@barbearia.pt'
 
-  if (!pub || !priv) return   // VAPID não configurado → skip silencioso
+  if (!pub || !priv) {
+    console.error('[webpush] VAPID não configurado — VAPID_PUBLIC_KEY ou VAPID_PRIVATE_KEY em falta nas variáveis de ambiente')
+    return []
+  }
 
   try {
     let stmt, params
@@ -193,7 +200,13 @@ export async function sendPushToBarbers(db, notification, env) {
     }
 
     const { results: subs } = await db.prepare(stmt).bind(...params).all()
-    if (!subs.length) return
+
+    if (!subs.length) {
+      console.warn('[webpush] Nenhuma subscrição push encontrada para barber_id=', notification.barber_id ?? 'todos')
+      return []
+    }
+
+    console.log(`[webpush] A enviar push para ${subs.length} subscrição(ões) — barber_id=${notification.barber_id ?? 'todos'}`)
 
     const vapid = { publicKey: pub, privateKey: priv, subject }
     const msg   = {
@@ -203,20 +216,37 @@ export async function sendPushToBarbers(db, notification, env) {
       notification_id: notification.notification_id ?? null,
     }
 
-    await Promise.allSettled(
-      subs.map((s) =>
-        sendWebPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, msg, vapid)
-          .then((res) => {
-            // Subscrição expirada/inválida → limpar da BD
-            if (res.status === 410 || res.status === 404) {
-              db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')
-                .bind(s.endpoint).run().catch(() => {})
-            }
-          })
-          .catch(() => {})   // falha individual nunca rebenta a request principal
-      )
+    const results = await Promise.allSettled(
+      subs.map(async (s) => {
+        try {
+          const result = await sendWebPush(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            msg,
+            vapid
+          )
+          const endpointShort = s.endpoint.slice(-40)
+          if (result.status === 201 || result.status === 200) {
+            console.log(`[webpush] ✓ Push enviado com sucesso (${result.status}) → ...${endpointShort}`)
+          } else {
+            console.error(`[webpush] ✗ Push falhou (${result.status} ${result.statusText}) → ...${endpointShort} | body: ${result.body}`)
+          }
+          // Subscrição expirada/inválida → limpar da BD
+          if (result.status === 410 || result.status === 404) {
+            await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')
+              .bind(s.endpoint).run().catch(() => {})
+            console.warn(`[webpush] Subscrição removida da BD (${result.status}) → ...${endpointShort}`)
+          }
+          return { endpoint: s.endpoint, status: result.status }
+        } catch (err) {
+          console.error('[webpush] Erro ao enviar push:', err?.message, '→ endpoint:', s.endpoint.slice(-40))
+          return { endpoint: s.endpoint, status: 0, error: err?.message }
+        }
+      })
     )
-  } catch (_) {
-    // Erro global também silencioso
+
+    return results.map(r => r.status === 'fulfilled' ? r.value : { status: 0, error: r.reason?.message })
+  } catch (err) {
+    console.error('[webpush] Erro global em sendPushToBarbers:', err?.message)
+    return []
   }
 }
