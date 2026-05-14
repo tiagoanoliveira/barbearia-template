@@ -1,11 +1,8 @@
 /**
  * webpush.js — envia Web Push notifications via VAPID (sem dependências externas)
  *
- * Usado apenas por código server-side (Cloudflare Pages Functions).
  * Implementa RFC 8291 (encriptação) + RFC 8292 (VAPID) + RFC 8188 (aes128gcm).
  */
-
-// ─── Helpers base64url ────────────────────────────────────────────────────────
 
 function b64uToBytes(b64u) {
   const b64 = b64u.replace(/-/g, '+').replace(/_/g, '/')
@@ -21,16 +18,14 @@ function bytesToB64u(buf) {
     .replace(/=/g, '')
 }
 
-// ─── JWT VAPID (ES256) ────────────────────────────────────────────────────────
-
 async function makeVapidJWT(audience, subject, privateKey) {
-  const now     = Math.floor(Date.now() / 1000)
-  const header  = { typ: 'JWT', alg: 'ES256' }
-  const claims  = { aud: audience, exp: now + 43200, sub: subject }  // 12h
+  const now    = Math.floor(Date.now() / 1000)
+  const header = { typ: 'JWT', alg: 'ES256' }
+  const claims = { aud: audience, exp: now + 43200, sub: subject }
 
-  const enc     = new TextEncoder()
-  const h64     = bytesToB64u(enc.encode(JSON.stringify(header)))
-  const c64     = bytesToB64u(enc.encode(JSON.stringify(claims)))
+  const enc    = new TextEncoder()
+  const h64    = bytesToB64u(enc.encode(JSON.stringify(header)))
+  const c64    = bytesToB64u(enc.encode(JSON.stringify(claims)))
   const signing = `${h64}.${c64}`
 
   const sig = await crypto.subtle.sign(
@@ -43,8 +38,8 @@ async function makeVapidJWT(audience, subject, privateKey) {
 }
 
 async function importVapidPrivateKey(privB64u, pubB64u) {
-  const pub  = b64uToBytes(pubB64u)   // 65 bytes: 0x04 + x(32) + y(32)
-  const priv = b64uToBytes(privB64u)  // 32 bytes
+  const pub  = b64uToBytes(pubB64u)
+  const priv = b64uToBytes(privB64u)
 
   return crypto.subtle.importKey(
     'jwk',
@@ -60,8 +55,6 @@ async function importVapidPrivateKey(privB64u, pubB64u) {
     ['sign'],
   )
 }
-
-// ─── Cifra AES-128-GCM (RFC 8188 / aes128gcm) ────────────────────────────────
 
 function concat(...arrays) {
   const total  = arrays.reduce((n, a) => n + a.length, 0)
@@ -80,10 +73,9 @@ async function hkdf(ikm, salt, info, len) {
 
 async function encryptPayload(plaintext, p256dhB64u, authB64u) {
   const enc        = new TextEncoder()
-  const clientPub  = b64uToBytes(p256dhB64u)  // ua_public: chave pública do browser (65 bytes)
-  const authSecret = b64uToBytes(authB64u)     // auth secret do browser (16 bytes)
+  const clientPub  = b64uToBytes(p256dhB64u)
+  const authSecret = b64uToBytes(authB64u)
 
-  // Par de chaves ECDH efémeras do servidor (as_public / as_private)
   const serverKP = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']
   )
@@ -93,45 +85,37 @@ async function encryptPayload(plaintext, p256dhB64u, authB64u) {
     'raw', clientPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []
   )
 
-  // ECDH shared secret: 32 bytes
   const sharedBits = new Uint8Array(
     await crypto.subtle.deriveBits({ name: 'ECDH', public: clientPubKey }, serverKP.privateKey, 256)
   )
 
   const salt = crypto.getRandomValues(new Uint8Array(16))
 
-  // RFC 8291 §3.4: info = "WebPush: info" || 0x00 || ua_public(65) || as_public(65)
-  // NOTA: ua_public (cliente/receiver) vem ANTES de as_public (servidor/sender)
   const webpushInfo = concat(
     enc.encode('WebPush: info'),
-    new Uint8Array([0x00]),   // null byte explícito — não depender de escape JS
-    clientPub,                // ua_public: receiver (browser)
-    serverPubRaw,             // as_public: sender (servidor)
+    new Uint8Array([0x00]),
+    clientPub,
+    serverPubRaw,
   )
 
   const ikm = await hkdf(sharedBits, authSecret, webpushInfo, 32)
 
-  // RFC 8188: content key (16 bytes) e nonce (12 bytes)
   const contentKey = await hkdf(ikm, salt, enc.encode('Content-Encoding: aes128gcm\0'), 16)
   const nonce      = await hkdf(ikm, salt, enc.encode('Content-Encoding: nonce\0'), 12)
 
   const aesKey = await crypto.subtle.importKey('raw', contentKey, 'AES-GCM', false, ['encrypt'])
 
-  // RFC 8188 §2.5: plaintext + 0x02 (delimiter de último registo)
   const padded = concat(plaintext, new Uint8Array([0x02]))
   const cipher = new Uint8Array(
     await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, aesKey, padded)
   )
 
-  // RFC 8188 header: salt(16) + rs(4, big-endian) + idlen(1) + serverPublicKey(65)
   const rsBytes = new Uint8Array(4)
   new DataView(rsBytes.buffer).setUint32(0, 4096, false)
   const header = concat(salt, rsBytes, new Uint8Array([serverPubRaw.length]), serverPubRaw)
 
   return concat(header, cipher)
 }
-
-// ─── API pública ──────────────────────────────────────────────────────────────
 
 /**
  * Envia uma Web Push notification para uma subscrição com payload encriptado.
@@ -163,30 +147,6 @@ export async function sendWebPush(subscription, payload, vapid) {
 }
 
 /**
- * Envia um push SEM payload (body vazio) — apenas VAPID auth, sem encriptação.
- * Usado para isolar se o problema é na encriptação ou na entrega VAPID.
- */
-export async function sendWebPushEmpty(subscription, vapid) {
-  const { endpoint } = subscription
-  const origin   = new URL(endpoint)
-  const audience = `${origin.protocol}//${origin.host}`
-
-  const privateKey = await importVapidPrivateKey(vapid.privateKey, vapid.publicKey)
-  const jwt        = await makeVapidJWT(audience, vapid.subject, privateKey)
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `vapid t=${jwt},k=${vapid.publicKey}`,
-      'TTL':           '86400',
-    },
-  })
-
-  const resBody = await res.text().catch(() => '')
-  return { status: res.status, statusText: res.statusText, body: resBody }
-}
-
-/**
  * Envia push a todos os admins/barbeiros relevantes.
  */
 export async function sendPushToBarbers(db, notification, env) {
@@ -195,7 +155,7 @@ export async function sendPushToBarbers(db, notification, env) {
   const subject = env.VAPID_SUBJECT ?? 'mailto:admin@barbearia.pt'
 
   if (!pub || !priv) {
-    console.error('[webpush] VAPID não configurado — VAPID_PUBLIC_KEY ou VAPID_PRIVATE_KEY em falta nas variáveis de ambiente')
+    console.error('[webpush] VAPID_PUBLIC_KEY ou VAPID_PRIVATE_KEY não configurados')
     return []
   }
 
@@ -216,13 +176,7 @@ export async function sendPushToBarbers(db, notification, env) {
     }
 
     const { results: subs } = await db.prepare(stmt).bind(...params).all()
-
-    if (!subs.length) {
-      console.warn('[webpush] Nenhuma subscrição push encontrada para barber_id=', notification.barber_id ?? 'todos')
-      return []
-    }
-
-    console.log(`[webpush] A enviar push para ${subs.length} subscrição(ões) — barber_id=${notification.barber_id ?? 'todos'}`)
+    if (!subs.length) return []
 
     const vapid = { publicKey: pub, privateKey: priv, subject }
     const msg   = {
@@ -240,20 +194,15 @@ export async function sendPushToBarbers(db, notification, env) {
             msg,
             vapid
           )
-          const endpointShort = s.endpoint.slice(-40)
-          if (result.status === 201 || result.status === 200) {
-            console.log(`[webpush] ✓ Push enviado com sucesso (${result.status}) → ...${endpointShort}`)
-          } else {
-            console.error(`[webpush] ✗ Push falhou (${result.status} ${result.statusText}) → ...${endpointShort} | body: ${result.body}`)
-          }
           if (result.status === 410 || result.status === 404) {
             await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')
               .bind(s.endpoint).run().catch(() => {})
-            console.warn(`[webpush] Subscrição removida da BD (${result.status}) → ...${endpointShort}`)
+          } else if (result.status !== 201 && result.status !== 200) {
+            console.error(`[webpush] Push falhou (${result.status}) → ${s.endpoint.slice(-40)} | ${result.body}`)
           }
           return { endpoint: s.endpoint, status: result.status }
         } catch (err) {
-          console.error('[webpush] Erro ao enviar push:', err?.message, '→ endpoint:', s.endpoint.slice(-40))
+          console.error('[webpush] Erro ao enviar push:', err?.message)
           return { endpoint: s.endpoint, status: 0, error: err?.message }
         }
       })
@@ -261,7 +210,7 @@ export async function sendPushToBarbers(db, notification, env) {
 
     return results.map(r => r.status === 'fulfilled' ? r.value : { status: 0, error: r.reason?.message })
   } catch (err) {
-    console.error('[webpush] Erro global em sendPushToBarbers:', err?.message)
+    console.error('[webpush] Erro em sendPushToBarbers:', err?.message)
     return []
   }
 }
