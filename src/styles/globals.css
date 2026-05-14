@@ -1,70 +1,99 @@
+/*
+ * globals.css — GENERICO, sem valores de cor hardcoded.
+ *
+ * Todas as cores vêm de CSS custom properties injetadas pelo ThemeProvider
+ * (src/components/ThemeProvider.tsx), que as lê de src/config/theme.ts.
+ *
+ * Para personalizar uma barbearia, edita APENAS:
+ *   • src/config/theme.ts   (cores, textos, media)
+ *   • public/icons/*
+ *   • public/manifest*.json
+ *   • index.html
+ *   • functions/utils/site-config.js
+ *   • src/media/*
+ *   • wrangler.toml
+ */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Variáveis CSS ──────────────────────────────────────────────────────────── */
+/* ─── Layout / estrutura — valores neutros, não muda por barbearia ─────────── */
 :root {
-  --color-brand-50:  var(--color-primary-50);
-  --color-brand-100: var(--color-primary-100);
-  --color-brand-200: var(--color-primary-200);
-  --color-brand-300: var(--color-primary-300);
-  --color-brand-400: var(--color-primary-400);
-  --color-brand-500: var(--color-primary-500);
-  --color-brand-600: var(--color-primary-600);
-  --color-brand-700: var(--color-primary-700);
-  --color-brand-800: var(--color-primary-800);
-  --color-brand-900: var(--color-primary-900);
+  --sidebar-width:            260px;
+  --sidebar-collapsed-width:   56px;
+  --header-height:             64px;
 
-  --sidebar-width:           260px;
-  --sidebar-collapsed-width:  56px;
-  --header-height:            64px;
-
-  --surface:        #ffffff;
-  --surface-subtle: #f9fafb;
-  --surface-raised: #f3f4f6;
+  /* Superfícies (neutras) */
+  --surface:          #ffffff;
+  --surface-subtle:   #f9fafb;
+  --surface-raised:   #f3f4f6;
   --surface-elevated: #ffffff;
-  --border-subtle:  #e5e7eb;
 
-  --text:           #111827;
-  --text-muted:     #6b7280;
-  --text-subtle:    #9ca3af;
-  --border:         #e5e7eb;
+  /* Bordas */
+  --border:        #e5e7eb;
+  --border-subtle: #e5e7eb;
+
+  /* Texto */
+  --text:        #111827;
+  --text-muted:  #6b7280;
+  --text-subtle: #9ca3af;
 }
 
+/* ─── Base ───────────────────────────────────────────────────────────────────── */
 @layer base {
   * { box-sizing: border-box; }
+
   html {
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     color-scheme: light;
   }
+
   body {
     background-color: var(--surface-subtle);
     color: var(--text);
   }
+
+  /* Scrollbar suave */
   ::-webkit-scrollbar       { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background-color: var(--border); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
   ::-webkit-scrollbar-thumb:hover { background-color: var(--text-subtle); }
 }
 
+/* ─── Componentes reutilizáveis ──────────────────────────────────────────────── */
 @layer components {
+
+  /* Card */
   .card {
     background-color: var(--surface);
     border-color: var(--border);
     @apply rounded-2xl shadow-card border;
   }
+
+  /* Input */
   .input {
-    background-color: #ffffff;
+    background-color: var(--surface);
     border-color: var(--border);
-    color: #111827;
+    color: var(--text);
     @apply w-full px-3 py-2 rounded-xl text-sm
            placeholder:text-gray-400
            focus:outline-none focus:ring-2
            focus:ring-primary-500 focus:border-transparent
            transition-shadow border;
   }
-  .label { color: var(--text-muted); @apply block text-sm font-medium mb-1; }
+
+  /* Label */
+  .label {
+    color: var(--text-muted);
+    @apply block text-sm font-medium mb-1;
+  }
+
+  /* Botões */
   .btn-primary {
     @apply inline-flex items-center gap-2 px-4 py-2
            bg-primary-500 text-white font-medium rounded-xl
@@ -72,21 +101,36 @@
            transition-colors duration-150
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
+
   .btn-secondary {
-    background-color: #f3f4f6;
-    color: #6b7280;
+    background-color: var(--surface-raised);
+    color: var(--text-muted);
     @apply inline-flex items-center gap-2 px-4 py-2
            font-medium rounded-xl transition-colors duration-150;
   }
-  .btn-secondary:hover { background-color: #e5e7eb; }
+  .btn-secondary:hover { background-color: var(--border); }
+
   .btn-danger {
     @apply inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white
            font-medium rounded-xl hover:bg-red-600 active:bg-red-700
            transition-colors duration-150;
   }
+
+  /* Badges de estado de reserva */
   .badge           { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
-  .badge-confirmed { @apply badge bg-blue-100    text-blue-800; }
-  .badge-completed { @apply badge bg-green-100   text-green-800; }
-  .badge-cancelled { @apply badge bg-red-100     text-red-800; }
-  .badge-no_show   { @apply badge bg-gray-100    text-yellow-600; }
+  .badge-confirmed { @apply badge bg-blue-100   text-blue-800; }
+  .badge-completed { @apply badge bg-green-100  text-green-800; }
+  .badge-cancelled { @apply badge bg-red-100    text-red-800; }
+  .badge-no_show   { @apply badge bg-yellow-100 text-yellow-700; }
+
+  /* Sidebar (usa vars injetadas pelo ThemeProvider) */
+  .sidebar {
+    background-color: var(--sidebar-bg);
+    color: var(--sidebar-text);
+  }
+  .sidebar-link-active {
+    color: var(--sidebar-text-active);
+    background-color: color-mix(in srgb, var(--sidebar-accent) 15%, transparent);
+  }
+  .sidebar-accent { color: var(--sidebar-accent); }
 }
