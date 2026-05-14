@@ -2,11 +2,11 @@
  * Utilitário de envio de email via Resend.
  * Usado por todos os endpoints que precisam de enviar emails.
  *
- * Todos os dados da barbearia (nome, domínio, contacto) são importados
+ * Todos os dados da barbearia (nome, domínio, contacto, cores) são importados
  * de functions/utils/site-config.js — edite apenas aí.
  */
 
-import { SHOP, LOGO_URL, LOGO_ALT } from './site-config.js'
+import { SHOP, LOGO_URL, LOGO_ALT, EMAIL_COLORS as C } from './site-config.js'
 
 /**
  * Verifica se um endereço de email é um placeholder sem contacto.
@@ -30,56 +30,72 @@ function emailCSS() {
   return `
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-         line-height:1.6;background:#f8f9fa}
-    .wrap{background:linear-gradient(135deg,#f5f7fa,#e8ecf1);min-height:100vh}
-    .container{max-width:600px;margin:0 auto;background:#fff;border-radius:16px;
-               overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.1)}
-    .logo-sec{background:#2d4a3e;text-align:center;padding:20px}
+         line-height:1.6;background:${C.bodyBg}}
+    .wrap{background:linear-gradient(135deg,${C.wrapBgFrom},${C.wrapBgTo});min-height:100vh}
+    .container{max-width:600px;margin:0 auto;background:${C.containerBg};border-radius:16px;
+               overflow:hidden;box-shadow:0 10px 40px ${C.containerShadow}}
+    .logo-sec{background:${C.logoBg};text-align:center;padding:20px}
     .logo{max-width:70px;height:auto}
-    .header-green{background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;
+    .header-green{background:linear-gradient(135deg,${C.headerGreenFrom},${C.headerGreenTo});color:#fff;
                   padding:20px;text-align:center}
-    .header-red{background:linear-gradient(135deg,#c0392b,#e74c3c);color:#fff;
+    .header-red{background:linear-gradient(135deg,${C.headerRedFrom},${C.headerRedTo});color:#fff;
                 padding:20px;text-align:center}
-    .header-gold{background:linear-gradient(135deg,#92400e,#d4a017);color:#fff;
+    .header-gold{background:linear-gradient(135deg,${C.headerGoldFrom},${C.headerGoldTo});color:#fff;
                  padding:20px;text-align:center}
-    .header-green h1,.header-red h1,.header-gold h1{margin:0;font-size:20px;
+    .header-amber{background:linear-gradient(135deg,${C.headerAmberFrom},${C.headerAmberTo});color:#fff;
+                  padding:20px;text-align:center}
+    .header-green h1,.header-red h1,.header-gold h1,.header-amber h1{margin:0;font-size:20px;
       font-weight:600;letter-spacing:-.5px}
     .content{padding:20px}
-    .content p{color:#4a5568;font-size:15px;margin-bottom:10px}
-    .content strong{color:#2d3748;font-weight:600}
-    .info-box{background:#f7fafc;border-radius:12px;padding:15px;margin:10px 0;
-              border:1px solid #e2e8f0}
-    .info-box h3{color:#2d3748;font-size:15px;margin-bottom:10px;font-weight:600}
-    .border-green{border-left:4px solid #22c55e}
-    .border-red{border-left:4px solid #e74c3c}
-    .border-amber{border-left:4px solid #f59e0b;background:#fffbf5}
+    .content p{color:${C.contentText};font-size:15px;margin-bottom:10px}
+    .content strong{color:${C.contentStrong};font-weight:600}
+    .info-box{background:${C.infoBoxBg};border-radius:12px;padding:15px;margin:10px 0;
+              border:1px solid ${C.infoBoxBorder}}
+    .info-box h3{color:${C.infoBoxTitle};font-size:15px;margin-bottom:10px;font-weight:600}
+    .border-green{border-left:4px solid ${C.borderGreen}}
+    .border-red{border-left:4px solid ${C.borderRed}}
+    .border-amber{border-left:4px solid ${C.borderAmber};background:${C.infoBoxAmberBg}}
+    .border-reminder{border-left:4px solid ${C.borderAmber};background:${C.infoBoxReminderBg};
+                     border-color:${C.infoBoxReminderBorder}}
+    .border-reminder h3{color:${C.infoBoxReminderTitle}}
     .detail-row{display:flex;align-items:center;margin-bottom:10px;
-                padding:10px;background:#fff;border-radius:8px}
+                padding:10px;background:${C.detailRowBg};border-radius:8px}
     .detail-row:last-child{margin-bottom:0}
     .di{font-size:20px;margin-right:10px;min-width:24px}
     .dc{font-size:14px}
-    .dc strong{color:#2d3748;margin-bottom:2px}
-    .reason-text{color:#78350f;font-style:italic;margin:0;padding:10px 15px;
-                 background:#fef3c7;border-radius:8px}
+    .dc strong{color:${C.contentStrong};margin-bottom:2px}
+    .reason-text{color:${C.reasonText};font-style:italic;margin:0;padding:10px 15px;
+                 background:${C.reasonBg};border-radius:8px}
     .cta-sec{text-align:center;margin:10px 0;padding:15px;
-             background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:12px}
-    .cta-text{color:#166534;font-size:15px;margin-bottom:20px}
-    .btn{display:inline-block;background:linear-gradient(135deg,#2d4a3e,#3d5a4e);
+             background:linear-gradient(135deg,${C.ctaGreenBgFrom},${C.ctaGreenBgTo});border-radius:12px}
+    .cta-sec.amber{background:linear-gradient(135deg,${C.ctaAmberBgFrom},${C.ctaAmberBgTo})}
+    .cta-text{color:${C.ctaGreenText};font-size:15px;margin-bottom:20px}
+    .cta-text.amber{color:${C.ctaAmberText}}
+    .btn{display:inline-block;background:linear-gradient(135deg,${C.btnBgFrom},${C.btnBgTo});
          color:#fff!important;text-decoration:none;padding:10px 15px;
          border-radius:8px;font-weight:600;font-size:15px;
-         box-shadow:0 4px 12px rgba(45,74,62,.3)}
+         box-shadow:0 4px 12px ${C.btnShadow}}
     .contact-sec{margin-top:15px;text-align:center}
-    .contact-link{display:inline-flex;align-items:center;color:#2d4a3e;
+    .contact-link{display:inline-flex;align-items:center;color:${C.contactLinkText};
                   text-decoration:none;font-weight:600;font-size:15px;
-                  padding:10px 15px;background:#f0fdf4;border-radius:8px}
-    .warn{background:#fff3cd;border-left:4px solid #ffc107;padding:12px;margin:20px 0}
-    .footer{background:#1a202c;color:#a0aec0;text-align:center;padding:20px}
+                  padding:10px 15px;background:${C.contactLinkBg};border-radius:8px}
+    .warn{background:${C.warnBg};border-left:4px solid ${C.warnBorder};padding:12px;margin:20px 0}
+    .footer{background:${C.footerBg};color:${C.footerText};text-align:center;padding:20px}
     .footer p{margin:8px 0;font-size:14px}
-    .footer a{color:#d4af7a;text-decoration:none}
+    .footer a{color:${C.footerLink};text-decoration:none}
   `
 }
 
-function shell(headerClass, headerTitle, body) {
+/**
+ * Estrutura base de todos os emails.
+ * Exportada para que outros módulos (ex: reservationEmails.js) possam reutilizá-la
+ * sem duplicar HTML de logo, cabeçalho e rodapé.
+ *
+ * @param {string} headerClass  - Classe CSS do header (header-green, header-red, header-gold, header-amber)
+ * @param {string} headerTitle  - Conteúdo HTML do <h1> no header
+ * @param {string} body         - Conteúdo HTML da secção .content
+ */
+export function shell(headerClass, headerTitle, body) {
   return `<!DOCTYPE html><html lang="pt"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>${emailCSS()}</style></head>
@@ -90,14 +106,18 @@ function shell(headerClass, headerTitle, body) {
   <div class="${headerClass}"><h1>${headerTitle}</h1></div>
   <div class="content">${body}</div>
   <div class="footer">
-    <p style="font-size:12px;color:#718096">Este é um email automático, por favor não responda.</p>
+    <p style="font-size:12px;color:${C.footerMeta}">Este é um email automático, por favor não responda.</p>
     <p>&copy; ${new Date().getFullYear()} ${SHOP.name} &ndash; Todos os direitos reservados.
        Feito com &#129293; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
   </div>
 </div></div></body></html>`
 }
 
-function detailRow(icon, label, value) {
+/**
+ * Linha de detalhe reutilizável (ícone + label + valor).
+ * Exportada para reutilização em outros templates.
+ */
+export function detailRow(icon, label, value) {
   return `<div class="detail-row"><span class="di">${icon}</span>
 <div class="dc"><strong>${label}</strong> ${value}</div></div>`
 }
@@ -351,7 +371,7 @@ export function buildVerificationEmail({ clientName, verifyToken }) {
       <a href="${verifyUrl}" class="btn">Verificar Email</a>
     </div>
     <p style="font-size:14px;color:#888">Ou copie este link:</p>
-    <p style="word-break:break-all;font-size:12px;color:#2d4a3e">${verifyUrl}</p>
+    <p style="word-break:break-all;font-size:12px;color:${C.contactLinkText}">${verifyUrl}</p>
     <div class="warn">
       <p><strong>&#9888;&#65039;</strong> Este link expira em <strong>24 horas</strong>.</p>
       <p>Se não criou esta conta, ignore este email.</p>
@@ -373,7 +393,7 @@ export function buildEmailChangeEmail({ clientName, confirmToken, newEmail }) {
       <a href="${confirmUrl}" class="btn">Confirmar novo email</a>
     </div>
     <p style="font-size:14px;color:#888">Ou copie este link:</p>
-    <p style="word-break:break-all;font-size:12px;color:#2d4a3e">${confirmUrl}</p>
+    <p style="word-break:break-all;font-size:12px;color:${C.contactLinkText}">${confirmUrl}</p>
     <div class="warn">
       <p><strong>&#9888;&#65039;</strong> Este link expira em <strong>24 horas</strong>.</p>
       <p>Se não pediu esta alteração, ignore este email &mdash; a sua conta não será alterada.</p>
@@ -401,8 +421,32 @@ export function buildPasswordResetEmail({ clientName, resetToken }) {
       <p>&bull; A sua password atual permanecerá válida até que defina uma nova.</p>
     </div>
     <p style="font-size:12px;color:#888">Se o botão não funcionar, copie este link:</p>
-    <p style="word-break:break-all;font-size:12px;color:#2d4a3e">${resetUrl}</p>
+    <p style="word-break:break-all;font-size:12px;color:${C.contactLinkText}">${resetUrl}</p>
   `)
 
+  return { html }
+}
+
+// ─── 6. Lembrete de reserva ────────────────────────────────────────────────────────────────
+/**
+ * Exportada para uso em reservationEmails.js.
+ * Usa shell() e detailRow() do mesmo módulo, eliminando HTML duplicado.
+ */
+export function buildReminderEmail({ clientName, data, hora, serviceName, barberName, reservaId }) {
+  const html = shell('header-amber', '&#9200; Lembrete de Reserva', `
+    <p>Olá <strong>${clientName}</strong>,</p>
+    <p>Este é um lembrete de que tem uma reserva <strong>amanhã</strong>:</p>
+    <div class="info-box border-reminder">
+      <h3>&#128197; Detalhes da Reserva #${reservaId}</h3>
+      ${detailRow('&#128197;', 'Data:', data)}
+      ${detailRow('&#128341;', 'Hora:', hora)}
+      ${detailRow('&#9986;&#65039;', 'Serviço:', serviceName)}
+      ${detailRow('&#128100;', 'Barbeiro:', barberName)}
+    </div>
+    <div class="cta-sec amber">
+      <p class="cta-text amber">Precisa de cancelar ou reagendar?</p>
+      <a href="${SHOP.baseUrl}/reservations" class="btn">Gerir a minha reserva</a>
+    </div>
+  `)
   return { html }
 }

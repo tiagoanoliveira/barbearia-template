@@ -42,6 +42,89 @@ export const LOGO_URL = `${SHOP.baseUrl}${SHOP.logoPath}`
 export const LOGO_ALT = SHOP.name
 
 /**
+ * Paleta de cores usada nos templates de email.
+ * Centralizada aqui para que uma única alteração actualize todos os emails.
+ *
+ * Convenção de nomes:
+ *   bg*      — fundos de secção ou wrapper
+ *   text*    — cor de texto
+ *   border*  — cor de borda
+ *   btn*     — botão principal
+ *   link*    — links no footer
+ */
+export const EMAIL_COLORS = {
+  // ── Estrutura geral ──────────────────────────────────────────────────────
+  bodyBg:          '#f8f9fa',
+  wrapBgFrom:      '#f5f7fa',
+  wrapBgTo:        '#e8ecf1',
+  containerBg:     '#ffffff',
+  containerShadow: 'rgba(0,0,0,.1)',
+
+  // ── Secção do logo ───────────────────────────────────────────────────────
+  logoBg:          '#2d4a3e',
+
+  // ── Headers de cor ───────────────────────────────────────────────────────
+  headerGreenFrom: '#16a34a',
+  headerGreenTo:   '#22c55e',
+  headerRedFrom:   '#c0392b',
+  headerRedTo:     '#e74c3c',
+  headerGoldFrom:  '#92400e',
+  headerGoldTo:    '#d4a017',
+  headerAmberFrom: '#b45309',
+  headerAmberTo:   '#d97706',
+
+  // ── Conteúdo ─────────────────────────────────────────────────────────────
+  contentText:     '#4a5568',
+  contentStrong:   '#2d3748',
+
+  // ── Info box ─────────────────────────────────────────────────────────────
+  infoBoxBg:       '#f7fafc',
+  infoBoxBorder:   '#e2e8f0',
+  infoBoxTitle:    '#2d3748',
+  borderGreen:     '#22c55e',
+  borderRed:       '#e74c3c',
+  borderAmber:     '#f59e0b',
+  infoBoxAmberBg:  '#fffbf5',
+  infoBoxReminderBg:     '#fffbeb',
+  infoBoxReminderBorder: '#fde68a',
+  infoBoxReminderTitle:  '#92400e',
+  detailRowBg:     '#ffffff',
+
+  // ── Texto de razão de cancelamento ───────────────────────────────────────
+  reasonText:      '#78350f',
+  reasonBg:        '#fef3c7',
+
+  // ── CTA verde ────────────────────────────────────────────────────────────
+  ctaGreenBgFrom:  '#f0fdf4',
+  ctaGreenBgTo:    '#dcfce7',
+  ctaGreenText:    '#166534',
+
+  // ── CTA âmbar (lembrete) ─────────────────────────────────────────────────
+  ctaAmberBgFrom:  '#fffbeb',
+  ctaAmberBgTo:    '#fef3c7',
+  ctaAmberText:    '#92400e',
+
+  // ── Botão principal ───────────────────────────────────────────────────────
+  btnBgFrom:       '#2d4a3e',
+  btnBgTo:         '#3d5a4e',
+  btnShadow:       'rgba(45,74,62,.3)',
+
+  // ── Link de contacto ──────────────────────────────────────────────────────
+  contactLinkBg:   '#f0fdf4',
+  contactLinkText: '#2d4a3e',
+
+  // ── Aviso (warn) ─────────────────────────────────────────────────────────
+  warnBg:          '#fff3cd',
+  warnBorder:      '#ffc107',
+
+  // ── Footer ───────────────────────────────────────────────────────────────
+  footerBg:        '#1a202c',
+  footerText:      '#a0aec0',
+  footerMeta:      '#718096',
+  footerLink:      '#d4af7a',
+}
+
+/**
  * Horário de funcionamento da barbearia.
  * Espelho de barberShopConfig.workingHours em src/config/theme.ts.
  *

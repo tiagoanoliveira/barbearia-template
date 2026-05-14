@@ -15,9 +15,10 @@ import {
   sendEmail,
   buildReservationConfirmationEmail,
   buildReservationCancellationEmail,
+  buildReminderEmail,
   isPlaceholderEmail,
 } from './email.js'
-import { SHOP, LOGO_URL, LOGO_ALT, EMAIL_SUBJECTS } from './site-config.js'
+import { SHOP, EMAIL_SUBJECTS } from './site-config.js'
 
 const RESEND_EMAILS_URL = 'https://api.resend.com/emails'
 
@@ -35,7 +36,7 @@ function reminderSendAt(dataHora) {
 
 // ── 1. Agendar lembrete (privado) ───────────────────────────────────────────────────────────
 
-async function _scheduleReminder(context, { reservaId, clientEmail, clientName, dataHora, serviceName, barberName, duracao }) {
+async function _scheduleReminder(context, { reservaId, clientEmail, clientName, dataHora, serviceName, barberName }) {
   // ✓ Bloquear imediatamente emails placeholder — nunca chegar à Resend
   if (isPlaceholderEmail(clientEmail)) {
     console.log(`[_scheduleReminder] Reserva #${reservaId}: email placeholder "${clientEmail}" — lembrete não agendado.`)
@@ -55,10 +56,10 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
 
   const sendAt = reminderSendAt(dataHora)
   const dt   = new Date(dataHora)
-  const data = dt.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  const hora = dt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
+  const data = dt.toLocaleDateString('pt-PT', { timeZone: 'Europe/Lisbon', day: '2-digit', month: '2-digit', year: 'numeric' })
+  const hora = dt.toLocaleTimeString('pt-PT', { timeZone: 'Europe/Lisbon', hour: '2-digit', minute: '2-digit' })
 
-  const html = buildReminderHtml({ clientName, data, hora, serviceName, barberName, reservaId })
+  const { html } = buildReminderEmail({ clientName, data, hora, serviceName, barberName, reservaId })
 
   const payload = {
     from:         SHOP.fromEmail,
@@ -294,63 +295,4 @@ export async function rescheduleReminder(context, params) {
     `[rescheduleReminder] Reserva #${reservaId}: resend_lembrete_id actualizado para`,
     newLembreteId ?? 'NULL (menos de 24h ou erro)'
   )
-}
-
-// ── Template HTML do lembrete ────────────────────────────────────────────────────────────────────────────────────
-
-function buildReminderHtml({ clientName, data, hora, serviceName, barberName, reservaId }) {
-  return `<!DOCTYPE html><html lang="pt"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;background:#f8f9fa}
-  .wrap{background:linear-gradient(135deg,#f5f7fa,#e8ecf1);padding:40px 20px;min-height:100vh}
-  .container{max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.1)}
-  .logo-sec{background:#2d4a3e;text-align:center;padding:30px 20px}
-  .logo{max-width:70px;height:auto}
-  .header{background:linear-gradient(135deg,#b45309,#d97706);color:#fff;padding:40px 30px;text-align:center}
-  .header h1{margin:0;font-size:28px;font-weight:600;letter-spacing:-.5px}
-  .content{padding:40px 30px}
-  .content p{color:#4a5568;font-size:16px;margin-bottom:20px}
-  .content strong{color:#2d3748;font-weight:600}
-  .info-box{background:#fffbeb;border-radius:12px;padding:25px;margin:25px 0;border:1px solid #fde68a;border-left:4px solid #f59e0b}
-  .info-box h3{color:#92400e;font-size:18px;margin-bottom:20px;font-weight:600}
-  .detail-row{display:flex;align-items:flex-start;margin-bottom:15px;padding:12px;background:#fff;border-radius:8px}
-  .detail-row:last-child{margin-bottom:0}
-  .di{font-size:20px;margin-right:12px;min-width:24px}
-  .dc{flex:1}
-  .dc strong{display:block;color:#2d3748;margin-bottom:2px;font-size:14px}
-  .cta-sec{text-align:center;margin:35px 0;padding:30px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:12px}
-  .btn{display:inline-block;background:linear-gradient(135deg,#2d4a3e,#3d5a4e);color:#fff!important;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 12px rgba(45,74,62,.3)}
-  .footer{background:#1a202c;color:#a0aec0;text-align:center;padding:30px 20px}
-  .footer p{margin:8px 0;font-size:14px}
-  .footer a{color:#d4af7a;text-decoration:none}
-  @media(max-width:600px){.content{padding:30px 20px}.info-box{padding:20px 15px}.detail-row{flex-direction:column}}
-</style></head>
-<body><div class="wrap"><div class="container">
-  <div class="logo-sec">
-    <img src="${LOGO_URL}" alt="${LOGO_ALT}" class="logo">
-  </div>
-  <div class="header"><h1>&#9200; Lembrete de Reserva</h1></div>
-  <div class="content">
-    <p>Olá <strong>${clientName}</strong>,</p>
-    <p>Este é um lembrete de que tem uma reserva <strong>amanhã</strong>:</p>
-    <div class="info-box">
-      <h3>&#128197; Detalhes da Reserva #${reservaId}</h3>
-      <div class="detail-row"><span class="di">&#128197;</span><div class="dc"><strong>Data:</strong>${data}</div></div>
-      <div class="detail-row"><span class="di">&#128341;</span><div class="dc"><strong>Hora:</strong>${hora}</div></div>
-      <div class="detail-row"><span class="di">&#9986;&#65039;</span><div class="dc"><strong>Serviço:</strong>${serviceName}</div></div>
-      <div class="detail-row"><span class="di">&#128100;</span><div class="dc"><strong>Barbeiro:</strong>${barberName}</div></div>
-    </div>
-    <div class="cta-sec">
-      <p style="color:#92400e;margin-bottom:20px">Precisa de cancelar ou reagendar?</p>
-      <a href="${SHOP.baseUrl}/reservations" class="btn">Gerir a minha reserva</a>
-    </div>
-  </div>
-  <div class="footer">
-    <p style="font-size:12px;color:#718096">Este é um email automático, por favor não responda.</p>
-    <p>&copy; ${new Date().getFullYear()} ${SHOP.name} &ndash; Todos os direitos reservados.
-       Feito com &#129820; por <a href="https://www.tiagoanoliveira.pt">Tiago Oliveira</a>.</p>
-  </div>
-</div></div></body></html>`
 }
