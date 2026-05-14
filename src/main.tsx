@@ -28,18 +28,7 @@ function initializeThemeColors() {
   }
 }
 
-function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return
-
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
-      .catch((err) => console.warn('[SW] Registo falhou:', err))
-  })
-}
-
 initializeThemeColors()
-registerServiceWorker()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
