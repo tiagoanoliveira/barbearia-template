@@ -1,0 +1,10 @@
+# Ficheiros únicos de cada site — NUNCA sobrescrever
+# src/config/routes.ts
+# src/config/theme.ts
+# src/media/images/
+# src/media/video/
+wrangler.toml
+# schema.sql
+
+# O próprio ficheiro de ignore não pode ser sincronizado
+.templatesyncignore
