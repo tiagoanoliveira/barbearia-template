@@ -127,13 +127,7 @@ async function encryptPayload(plaintext, p256dhB64u, authB64u) {
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 /**
- * Envia uma Web Push notification para uma subscrição.
- * Devolve um objeto com o status HTTP e o body da resposta do push service.
- *
- * @param {{ endpoint: string, keys: { p256dh: string, auth: string } }} subscription
- * @param {{ title: string, body: string, url?: string, notification_id?: number|null, tag?: string }} payload
- * @param {{ publicKey: string, privateKey: string, subject: string }} vapid
- * @returns {Promise<{ status: number, statusText: string, body: string }>}
+ * Envia uma Web Push notification para uma subscrição com payload encriptado.
  */
 export async function sendWebPush(subscription, payload, vapid) {
   const { endpoint, keys: { p256dh, auth } } = subscription
@@ -162,16 +156,34 @@ export async function sendWebPush(subscription, payload, vapid) {
 }
 
 /**
+ * Envia um push SEM payload (body vazio) — apenas VAPID auth, sem encriptação.
+ * Usado para isolar se o problema é na encriptação ou na entrega VAPID.
+ * Se o SW receber o evento push com event.data === null, a encriptação é o problema.
+ * Se não receber nada, o problema é no VAPID/JWT ou na entrega do push service.
+ */
+export async function sendWebPushEmpty(subscription, vapid) {
+  const { endpoint } = subscription
+  const origin   = new URL(endpoint)
+  const audience = `${origin.protocol}//${origin.host}`
+
+  const privateKey = await importVapidPrivateKey(vapid.privateKey, vapid.publicKey)
+  const jwt        = await makeVapidJWT(audience, vapid.subject, privateKey)
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `vapid t=${jwt},k=${vapid.publicKey}`,
+      'TTL':           '86400',
+      // Sem Content-Type nem body — push vazio (ping)
+    },
+  })
+
+  const resBody = await res.text().catch(() => '')
+  return { status: res.status, statusText: res.statusText, body: resBody }
+}
+
+/**
  * Envia push a todos os admins/barbeiros relevantes.
- * Retorna um array com o resultado de cada tentativa (útil para debug).
- *
- * Se barber_id preenchido → apenas às subscrições desse barbeiro.
- * Se null               → a todos os admins activos.
- *
- * @param {D1Database} db
- * @param {{ message: string, barber_id?: number|null, notification_id?: number|null }} notification
- * @param {object} env   env do Cloudflare (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT)
- * @returns {Promise<Array<{ endpoint: string, status: number, error?: string }>>}
  */
 export async function sendPushToBarbers(db, notification, env) {
   const pub     = env.VAPID_PUBLIC_KEY
@@ -230,7 +242,6 @@ export async function sendPushToBarbers(db, notification, env) {
           } else {
             console.error(`[webpush] ✗ Push falhou (${result.status} ${result.statusText}) → ...${endpointShort} | body: ${result.body}`)
           }
-          // Subscrição expirada/inválida → limpar da BD
           if (result.status === 410 || result.status === 404) {
             await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')
               .bind(s.endpoint).run().catch(() => {})
