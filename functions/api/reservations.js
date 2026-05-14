@@ -7,6 +7,7 @@ import { isValidDate, isValidTime, isValidId, sanitize } from '../utils/validato
 import { sendReservationConfirmation } from '../utils/reservationEmails.js'
 import { getNowLisboa } from '../utils/time.js'
 import { computeSlots, getOpenClose } from '../utils/slots.js'
+import { sendPushToBarbers } from '../utils/webpush.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -78,15 +79,23 @@ export async function onRequest(context) {
 
       const reservationId = result.meta.last_row_id
 
-      await env.DB.prepare(
+      const notifMessage = `Nova reserva: ${client?.nome ?? 'Cliente'} — ${service?.nome}, ${date} às ${time}`
+      const notifResult = await env.DB.prepare(
           `INSERT INTO notifications (type, message, reservation_id, client_name, barber_id)
            VALUES ('new_booking', ?, ?, ?, ?)`
       ).bind(
-          `Nova reserva: ${client?.nome ?? 'Cliente'} — ${service?.nome}, ${date} às ${time}`,
+          notifMessage,
           reservationId,
           client?.nome,
           finalBarberId
       ).run().catch(() => {})
+
+      // Enviar Web Push aos admins/barbeiro em background
+      sendPushToBarbers(
+        env.DB,
+        { message: notifMessage, barber_id: finalBarberId, notification_id: notifResult?.meta?.last_row_id ?? null },
+        env
+      ).catch(() => {})
 
       // Envia email de confirmação e agenda lembrete 24h antes (em background)
       sendReservationConfirmation(context, {

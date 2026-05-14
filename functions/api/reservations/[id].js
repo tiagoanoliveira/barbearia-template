@@ -16,6 +16,7 @@ import {
 } from '../../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../../utils/validators.js'
 import { getNowLisboa } from '../../utils/time.js'
+import { sendPushToBarbers } from '../../utils/webpush.js'
 
 export async function onRequest(context) {
   const { request, env, params } = context
@@ -54,7 +55,7 @@ export async function onRequest(context) {
   if (!reservation) return notFound('Reserva não encontrada')
   if (reservation.cliente_id !== auth.clientId) return forbidden()
 
-  // ─── DELETE: cancelar reserva ───────────────────────────────────────────────
+  // ─── DELETE: cancelar reserva ───────────────────────────────────────────────────────────────────────
   if (request.method === 'DELETE') {
     try {
       if (!['confirmada'].includes(reservation.status)) {
@@ -68,18 +69,24 @@ export async function onRequest(context) {
       ).bind(id).run()
 
       // Notificação interna
+      let notifId = null
       try {
         const dt      = new Date(reservation.data_hora)
         const dateStr = dt.toLocaleDateString('pt-PT')
         const timeStr = dt.toTimeString().substring(0, 5)
         const message = `${reservation.cliente_nome} cancelou a reserva com ${reservation.barbeiro_nome} de ${dateStr} às ${timeStr}`
-        await insertNotification(env, {
+        notifId = await insertNotification(env, {
           type: 'cancelled',
           message,
           reservationId: reservation.id,
           clientName: reservation.cliente_nome,
           barberId: reservation.barbeiro_id,
         })
+        sendPushToBarbers(
+          env.DB,
+          { message, barber_id: reservation.barbeiro_id, notification_id: notifId },
+          env
+        ).catch(() => {})
       } catch (e) {
         console.error('[reservations/[id] DELETE] Erro ao criar notificação:', e)
       }
@@ -114,7 +121,7 @@ export async function onRequest(context) {
     }
   }
 
-  // ─── PUT: editar reserva ────────────────────────────────────────────────────
+  // ─── PUT: editar reserva ─────────────────────────────────────────────────────────────────────────
   if (request.method === 'PUT') {
     try {
       const body = await request.json()
@@ -222,13 +229,18 @@ export async function onRequest(context) {
 
       try {
         const message = buildEditedMessage(reservation.cliente_nome, changes)
-        await insertNotification(env, {
+        const notifId = await insertNotification(env, {
           type: 'edited',
           message,
           reservationId: reservation.id,
           clientName: reservation.cliente_nome,
           barberId: newBarberId,
         })
+        sendPushToBarbers(
+          env.DB,
+          { message, barber_id: newBarberId, notification_id: notifId },
+          env
+        ).catch(() => {})
       } catch (e) {
         console.error('[reservations/[id] PUT] Erro ao criar notificação:', e)
       }
@@ -272,12 +284,14 @@ export async function onRequest(context) {
 
 async function insertNotification(env, { type, message, reservationId, clientName, barberId }) {
   try {
-    await env.DB.prepare(
+    const result = await env.DB.prepare(
       `INSERT INTO notifications (type, message, reservation_id, client_name, barber_id)
        VALUES (?, ?, ?, ?, ?)`
     ).bind(type, message, reservationId, clientName, barberId).run()
+    return result.meta.last_row_id
   } catch (e) {
     console.error('Erro ao inserir notificação:', e)
+    return null
   }
 }
 
