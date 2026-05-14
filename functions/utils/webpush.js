@@ -2,7 +2,7 @@
  * webpush.js — envia Web Push notifications via VAPID (sem dependências externas)
  *
  * Usado apenas por código server-side (Cloudflare Pages Functions).
- * Implementa o protocolo RFC 8188 (aes128gcm) + JWT VAPID ES256.
+ * Implementa RFC 8291 (encriptação) + RFC 8292 (VAPID) + RFC 8188 (aes128gcm).
  */
 
 // ─── Helpers base64url ────────────────────────────────────────────────────────
@@ -80,10 +80,10 @@ async function hkdf(ikm, salt, info, len) {
 
 async function encryptPayload(plaintext, p256dhB64u, authB64u) {
   const enc        = new TextEncoder()
-  const clientPub  = b64uToBytes(p256dhB64u)
-  const authSecret = b64uToBytes(authB64u)
+  const clientPub  = b64uToBytes(p256dhB64u)  // ua_public: chave pública do browser (65 bytes)
+  const authSecret = b64uToBytes(authB64u)     // auth secret do browser (16 bytes)
 
-  // Par de chaves ECDH efémeras do servidor
+  // Par de chaves ECDH efémeras do servidor (as_public / as_private)
   const serverKP = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']
   )
@@ -93,30 +93,37 @@ async function encryptPayload(plaintext, p256dhB64u, authB64u) {
     'raw', clientPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []
   )
 
+  // ECDH shared secret: 32 bytes
   const sharedBits = new Uint8Array(
     await crypto.subtle.deriveBits({ name: 'ECDH', public: clientPubKey }, serverKP.privateKey, 256)
   )
 
   const salt = crypto.getRandomValues(new Uint8Array(16))
 
-  const ikm = await hkdf(
-    sharedBits, authSecret,
-    concat(enc.encode('WebPush: info\0'), serverPubRaw, clientPub),
-    32,
+  // RFC 8291 §3.4: info = "WebPush: info" || 0x00 || ua_public(65) || as_public(65)
+  // NOTA: ua_public (cliente/receiver) vem ANTES de as_public (servidor/sender)
+  const webpushInfo = concat(
+    enc.encode('WebPush: info'),
+    new Uint8Array([0x00]),   // null byte explícito — não depender de escape JS
+    clientPub,                // ua_public: receiver (browser)
+    serverPubRaw,             // as_public: sender (servidor)
   )
 
+  const ikm = await hkdf(sharedBits, authSecret, webpushInfo, 32)
+
+  // RFC 8188: content key (16 bytes) e nonce (12 bytes)
   const contentKey = await hkdf(ikm, salt, enc.encode('Content-Encoding: aes128gcm\0'), 16)
   const nonce      = await hkdf(ikm, salt, enc.encode('Content-Encoding: nonce\0'), 12)
 
   const aesKey = await crypto.subtle.importKey('raw', contentKey, 'AES-GCM', false, ['encrypt'])
 
-  // Padding: adicionar byte 0x02 (delimiter de último registo)
-  const padded  = concat(plaintext, new Uint8Array([0x02]))
-  const cipher  = new Uint8Array(
+  // RFC 8188 §2.5: plaintext + 0x02 (delimiter de último registo)
+  const padded = concat(plaintext, new Uint8Array([0x02]))
+  const cipher = new Uint8Array(
     await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, aesKey, padded)
   )
 
-  // Header RFC 8188: salt(16) + rs(4) + keyid_len(1) + serverPublicKey(65)
+  // RFC 8188 header: salt(16) + rs(4, big-endian) + idlen(1) + serverPublicKey(65)
   const rsBytes = new Uint8Array(4)
   new DataView(rsBytes.buffer).setUint32(0, 4096, false)
   const header = concat(salt, rsBytes, new Uint8Array([serverPubRaw.length]), serverPubRaw)
@@ -158,8 +165,6 @@ export async function sendWebPush(subscription, payload, vapid) {
 /**
  * Envia um push SEM payload (body vazio) — apenas VAPID auth, sem encriptação.
  * Usado para isolar se o problema é na encriptação ou na entrega VAPID.
- * Se o SW receber o evento push com event.data === null, a encriptação é o problema.
- * Se não receber nada, o problema é no VAPID/JWT ou na entrega do push service.
  */
 export async function sendWebPushEmpty(subscription, vapid) {
   const { endpoint } = subscription
@@ -174,7 +179,6 @@ export async function sendWebPushEmpty(subscription, vapid) {
     headers: {
       'Authorization': `vapid t=${jwt},k=${vapid.publicKey}`,
       'TTL':           '86400',
-      // Sem Content-Type nem body — push vazio (ping)
     },
   })
 
