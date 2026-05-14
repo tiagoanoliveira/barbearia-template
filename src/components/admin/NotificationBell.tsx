@@ -64,7 +64,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 function usePushSubscription() {
   const [state, setState] = useState<PushState>('loading')
 
-  // Verifica estado inicial
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       setState('unsupported')
@@ -74,11 +73,10 @@ function usePushSubscription() {
       setState('denied')
       return
     }
-    navigator.serviceWorker.ready.then(reg =>
-      reg.pushManager.getSubscription()
-    ).then(sub => {
-      setState(sub ? 'subscribed' : 'unsubscribed')
-    }).catch(() => setState('unsubscribed'))
+    navigator.serviceWorker.ready
+      .then(reg => reg.pushManager.getSubscription())
+      .then(sub => setState(sub ? 'subscribed' : 'unsubscribed'))
+      .catch(() => setState('unsubscribed'))
   }, [])
 
   const subscribe = useCallback(async () => {
@@ -92,8 +90,7 @@ function usePushSubscription() {
       await adminApi.post('/api/admin/push-subscription', sub.toJSON())
       setState('subscribed')
     } catch (e: any) {
-      if (Notification.permission === 'denied') setState('denied')
-      else setState('unsubscribed')
+      setState(Notification.permission === 'denied' ? 'denied' : 'unsubscribed')
       console.warn('[Push] Falha ao subscrever:', e?.message)
     }
   }, [])
@@ -104,7 +101,10 @@ function usePushSubscription() {
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.getSubscription()
       if (sub) {
-        await adminApi.delete('/api/admin/push-subscription', { endpoint: sub.endpoint })
+        // Passa o endpoint como query string — adminApi.delete não suporta body
+        await adminApi.delete(
+          `/api/admin/push-subscription?endpoint=${encodeURIComponent(sub.endpoint)}`
+        )
         await sub.unsubscribe()
       }
       setState('unsubscribed')
@@ -311,7 +311,6 @@ export default function NotificationBell() {
     navigateToReservation(t)
   }
 
-  // Botão de push: texto e ícone conforme estado
   const pushButton = (() => {
     if (pushState === 'unsupported') return null
     if (pushState === 'denied') return (
@@ -338,7 +337,6 @@ export default function NotificationBell() {
         Push ativo
       </button>
     )
-    // unsubscribed
     return (
       <button
         onClick={subscribe}
@@ -413,7 +411,6 @@ export default function NotificationBell() {
                 <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2">
                   <span className="font-semibold text-gray-800 text-[13px] flex-shrink-0">Notificações</span>
 
-                  {/* Botão push — entre o título e "marcar todas" */}
                   {pushButton && (
                     <span className="flex-1 flex justify-center">
                       {pushButton}

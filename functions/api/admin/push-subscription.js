@@ -1,8 +1,8 @@
 /**
  * /api/admin/push-subscription
  *
- * POST  — guarda ou actualiza uma subscrição Web Push para o admin autenticado
- * DELETE — remove a subscrição (unsubscribe)
+ * POST   — guarda ou actualiza uma subscrição Web Push para o admin autenticado
+ * DELETE — remove a subscrição (endpoint passado como query string: ?endpoint=...)
  */
 import { authenticateAdmin } from '../../utils/auth.js'
 import { ok, created, unauthorized, badRequest, serverError, corsOptions } from '../../utils/response.js'
@@ -15,7 +15,7 @@ export async function onRequest(context) {
   const auth = await authenticateAdmin(request, env)
   if (!auth.success) return unauthorized()
 
-  // ─── POST: subscrever ───────────────────────────────────────────────────────
+  // ─── POST: subscrever / actualizar ──────────────────────────────────────────────────
   if (request.method === 'POST') {
     let body
     try {
@@ -32,7 +32,6 @@ export async function onRequest(context) {
     const userAgent = request.headers.get('User-Agent') ?? null
 
     try {
-      // UPSERT: se o endpoint já existe actualiza as chaves; senão insere
       await env.DB.prepare(
         `INSERT INTO push_subscriptions (admin_user_id, endpoint, p256dh, auth, user_agent)
          VALUES (?, ?, ?, ?, ?)
@@ -53,15 +52,11 @@ export async function onRequest(context) {
 
   // ─── DELETE: dessubscrever ──────────────────────────────────────────────────
   if (request.method === 'DELETE') {
-    let body
-    try {
-      body = await request.json()
-    } catch {
-      return badRequest('JSON inválido')
-    }
+    // O endpoint vem como query string: DELETE /api/admin/push-subscription?endpoint=<url>
+    const url      = new URL(request.url)
+    const endpoint = url.searchParams.get('endpoint')
 
-    const { endpoint } = body ?? {}
-    if (!endpoint) return badRequest('endpoint é obrigatório')
+    if (!endpoint) return badRequest('Parâmetro endpoint em falta')
 
     try {
       await env.DB.prepare(
