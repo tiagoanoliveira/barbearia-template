@@ -1,4 +1,4 @@
-import { Bell, Check, RotateCcw } from 'lucide-react'
+import { Bell, Check, RotateCcw, BellOff, BellRing, Loader2 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi } from '@/api/client'
@@ -34,6 +34,7 @@ function isoToLocalDateStr(iso: string): string {
 }
 
 const SEEN_IDS_KEY = 'notif_seen_ids'
+const VAPID_PUBLIC_KEY = 'BLZgq4JhJQEiLs3bJv2gwU3u4W6E2MN7rC-rKDjkZBdvH_JQrYZQ9nCiRvuD_0JUmjpVZe10suA0rHxQFM_Rsw0'
 
 function loadSeenIds(): Set<number> {
   try {
@@ -49,6 +50,75 @@ function saveSeenIds(ids: Set<number>) {
   } catch {}
 }
 
+// ─── Hook: Web Push subscription ─────────────────────────────────────────────
+
+type PushState = 'unsupported' | 'loading' | 'subscribed' | 'unsubscribed' | 'denied'
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw     = window.atob(base64)
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+}
+
+function usePushSubscription() {
+  const [state, setState] = useState<PushState>('loading')
+
+  // Verifica estado inicial
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setState('unsupported')
+      return
+    }
+    if (Notification.permission === 'denied') {
+      setState('denied')
+      return
+    }
+    navigator.serviceWorker.ready.then(reg =>
+      reg.pushManager.getSubscription()
+    ).then(sub => {
+      setState(sub ? 'subscribed' : 'unsubscribed')
+    }).catch(() => setState('unsubscribed'))
+  }, [])
+
+  const subscribe = useCallback(async () => {
+    setState('loading')
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      })
+      await adminApi.post('/api/admin/push-subscription', sub.toJSON())
+      setState('subscribed')
+    } catch (e: any) {
+      if (Notification.permission === 'denied') setState('denied')
+      else setState('unsubscribed')
+      console.warn('[Push] Falha ao subscrever:', e?.message)
+    }
+  }, [])
+
+  const unsubscribe = useCallback(async () => {
+    setState('loading')
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.getSubscription()
+      if (sub) {
+        await adminApi.delete('/api/admin/push-subscription', { endpoint: sub.endpoint })
+        await sub.unsubscribe()
+      }
+      setState('unsubscribed')
+    } catch (e: any) {
+      console.warn('[Push] Falha ao dessubscrever:', e?.message)
+      setState('subscribed')
+    }
+  }, [])
+
+  return { state, subscribe, unsubscribe }
+}
+
+// ─── Hook: Notificações ───────────────────────────────────────────────────────
+
 function useAdminNotifications() {
   const adminUser = useAdminUser()
   const isBarber  = adminUser?.role === 'barbeiro'
@@ -62,11 +132,9 @@ function useAdminNotifications() {
   const lastSeenIdsRef  = useRef<Set<number>>(loadSeenIds())
   const isFirstFetchRef = useRef(true)
 
-  // Audio: usa src/media/notification.mp3 (servido como /media/notification.mp3 pelo Vite)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    // Vite serve src/media como asset estático via import; usar URL pública direta
     const audio = new Audio(new URL('/src/media/notification.mp3', import.meta.url).href)
     audio.preload = 'auto'
     audioRef.current = audio
@@ -209,9 +277,12 @@ function useAdminNotifications() {
   return { notifications, unreadCount, toasts, dismissToast, fetchPanel, markAsRead, markAsUnread }
 }
 
+// ─── Componente principal ─────────────────────────────────────────────────────
+
 export default function NotificationBell() {
   const navigate = useNavigate()
   const { notifications, unreadCount, toasts, dismissToast, fetchPanel, markAsRead, markAsUnread } = useAdminNotifications()
+  const { state: pushState, subscribe, unsubscribe } = usePushSubscription()
   const [open, setOpen] = useState(false)
 
   const handleOpenToggle = () => {
@@ -239,6 +310,46 @@ export default function NotificationBell() {
     await markAsRead(t.id)
     navigateToReservation(t)
   }
+
+  // Botão de push: texto e ícone conforme estado
+  const pushButton = (() => {
+    if (pushState === 'unsupported') return null
+    if (pushState === 'denied') return (
+      <span
+        title="Notificações push bloqueadas pelo browser. Permite nas definições do site."
+        className="flex items-center gap-1 text-[11px] text-gray-400 cursor-not-allowed select-none"
+      >
+        <BellOff size={12} />
+        Bloqueadas
+      </span>
+    )
+    if (pushState === 'loading') return (
+      <span className="flex items-center gap-1 text-[11px] text-gray-400">
+        <Loader2 size={12} className="animate-spin" />
+      </span>
+    )
+    if (pushState === 'subscribed') return (
+      <button
+        onClick={unsubscribe}
+        title="Desativar notificações push neste dispositivo"
+        className="flex items-center gap-1 text-[11px] text-emerald-600 hover:text-red-500 transition-colors"
+      >
+        <BellRing size={12} />
+        Push ativo
+      </button>
+    )
+    // unsubscribed
+    return (
+      <button
+        onClick={subscribe}
+        title="Ativar notificações push neste dispositivo"
+        className="flex items-center gap-1 text-[11px] text-brand-600 hover:text-brand-700 transition-colors font-medium"
+      >
+        <BellRing size={12} />
+        Ativar push
+      </button>
+    )
+  })()
 
   return (
       <div className="relative flex items-center">
@@ -290,7 +401,7 @@ export default function NotificationBell() {
           )}
         </button>
 
-        {/* Painel de notificações — fixed com z-index alto para ficar sempre por cima */}
+        {/* Painel de notificações */}
         {open && (
             <>
               <div className="fixed inset-0 z-[8000]" onClick={() => setOpen(false)} />
@@ -298,10 +409,19 @@ export default function NotificationBell() {
                   className="fixed w-96 max-w-[90vw] bg-white border border-gray-200 rounded-xl shadow-xl text-xs overflow-hidden"
                   style={{ top: '56px', right: '16px', zIndex: 8500 }}
               >
-                <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">
-                  <span className="font-semibold text-gray-800 text-[13px]">Notificações</span>
+                {/* Header do painel */}
+                <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2">
+                  <span className="font-semibold text-gray-800 text-[13px] flex-shrink-0">Notificações</span>
+
+                  {/* Botão push — entre o título e "marcar todas" */}
+                  {pushButton && (
+                    <span className="flex-1 flex justify-center">
+                      {pushButton}
+                    </span>
+                  )}
+
                   {notifications.some(n => !n.is_read) && (
-                      <button className="text-[11px] text-brand-600 hover:underline" onClick={() => markAsRead(null)}>
+                      <button className="text-[11px] text-brand-600 hover:underline flex-shrink-0" onClick={() => markAsRead(null)}>
                         Marcar todas como lidas
                       </button>
                   )}
