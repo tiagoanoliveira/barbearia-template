@@ -431,8 +431,8 @@ export default function NotificationBell() {
                       notifications.map(n => {
                         const isUnread = !n.is_read
                         const created  = n.created_at ? new Date(n.created_at) : null
-                        const dateStr  = created ? created.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' }) : ''
-                        const timeStr  = created ? created.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : ''
+                        const dateStr = created ? created.toLocaleDateString('pt-PT', { timeZone: 'Europe/Lisbon', day: '2-digit', month: '2-digit' }) : ''
+                        const timeStr = created ? created.toLocaleTimeString('pt-PT', { timeZone: 'Europe/Lisbon', hour: '2-digit', minute: '2-digit' }) : ''
                         return (
                             <div key={n.id} className={`flex items-start gap-2 px-3 py-2.5 transition-colors ${
                                 isUnread ? 'bg-blue-50/40 hover:bg-blue-50/70' : 'hover:bg-gray-50'
