@@ -56,8 +56,8 @@ async function _scheduleReminder(context, { reservaId, clientEmail, clientName, 
 
   const sendAt = reminderSendAt(dataHora)
   const dt   = new Date(dataHora)
-  const data = dt.toLocaleDateString('pt-PT', { timeZone: 'Europe/Lisbon', day: '2-digit', month: '2-digit', year: 'numeric' })
-  const hora = dt.toLocaleTimeString('pt-PT', { timeZone: 'Europe/Lisbon', hour: '2-digit', minute: '2-digit' })
+  const data = dt.toLocaleDateString('pt-PT', {day: '2-digit', month: '2-digit', year: 'numeric' })
+  const hora = dt.toLocaleTimeString('pt-PT', {hour: '2-digit', minute: '2-digit' })
 
   const { html } = buildReminderEmail({ clientName, data, hora, serviceName, barberName, reservaId })
 
