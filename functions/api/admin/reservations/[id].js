@@ -11,7 +11,6 @@ import { buildReservationConfirmationEmail, sendEmail } from '../../../utils/ema
 import { SHOP } from '../../../utils/site-config.js'
 
 const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou']
-// null = sem pagamento (oferta total); string = meio escolhido pelo barbeiro
 const VALID_MEIOS    = ['multibanco', 'dinheiro', 'outro']
 
 export async function onRequest(context) {
@@ -45,7 +44,6 @@ export async function onRequest(context) {
 
   if (!reservation) return notFound('Reserva não encontrada')
 
-  // Barbeiros só podem aceder às suas próprias reservas
   if (!canAccessReservation(auth, reservation.barbeiro_id)) {
     console.warn('admin/reservations/[id]: acesso negado', { role: auth.user?.role, barbeiro_id: auth.user?.barbeiro_id, reservaBarbeiroId: reservation.barbeiro_id })
     return unauthorized('Sem permissões para aceder a esta reserva')
@@ -55,7 +53,27 @@ export async function onRequest(context) {
 
   if (request.method === 'PATCH') {
     try {
-      const body = await request.json()
+      // ── [DEBUG] Log do body raw ────────────────────────────────────────────────
+      let rawBody
+      try {
+        rawBody = await request.text()
+        console.log(`[DEBUG][reservations/${id}] Body raw recebido:`, rawBody)
+      } catch (e) {
+        console.error(`[DEBUG][reservations/${id}] Erro ao ler body:`, e?.message)
+        return serverError('Erro ao ler corpo do pedido')
+      }
+
+      let body
+      try {
+        body = JSON.parse(rawBody)
+      } catch (e) {
+        console.error(`[DEBUG][reservations/${id}] Body não é JSON válido:`, rawBody)
+        return badRequest('Body inválido — JSON esperado')
+      }
+
+      console.log(`[DEBUG][reservations/${id}] Body parsed:`, JSON.stringify(body))
+      console.log(`[DEBUG][reservations/${id}] Chaves recebidas:`, Object.keys(body).join(', '))
+
       const {
         status,
         notes,
@@ -72,17 +90,19 @@ export async function onRequest(context) {
         gorjeta,
         meio_gorjeta,
         comentario_pagamento,
-        // Campos de oferta
         oferta_valor,
         oferta_tipo,
-        // Reenvio de email de confirmação
-        // O frontend envia "send_email"; aceitar também "reenviar_confirmacao" por retrocompatibilidade
+        // Ambos os nomes possíveis para o campo de reenvio
         send_email,
         reenviar_confirmacao,
       } = body
 
-      // Normalizar: qualquer dos dois campos activa o reenvio
+      console.log(`[DEBUG][reservations/${id}] send_email=${JSON.stringify(send_email)}, reenviar_confirmacao=${JSON.stringify(reenviar_confirmacao)}`)
+      console.log(`[DEBUG][reservations/${id}] data_hora=${JSON.stringify(data_hora)}, barber_id=${JSON.stringify(barber_id)}, service_id=${JSON.stringify(service_id)}`)
+      console.log(`[DEBUG][reservations/${id}] cliente_email na BD: ${reservation.cliente_email ?? '(null/vazio)'}`)
+
       const deveReenviarConfirmacao = !!(send_email || reenviar_confirmacao)
+      console.log(`[DEBUG][reservations/${id}] deveReenviarConfirmacao=${deveReenviarConfirmacao}`)
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
       if (barber_id   !== undefined && !isValidId(barber_id))   return badRequest('ID de barbeiro inválido')
@@ -92,25 +112,19 @@ export async function onRequest(context) {
         if (!isValidDate(d) || !isValidTime(h?.slice(0, 5))) return badRequest('Data/hora inválida')
       }
 
-      // Validar oferta_valor: deve ser inteiro não-negativo se fornecido
       if (oferta_valor !== undefined && oferta_valor !== null) {
         const v = Number(oferta_valor)
         if (!Number.isInteger(v) || v < 0) return badRequest('oferta_valor deve ser um inteiro não-negativo (cêntimos)')
       }
 
-      // Validar meio_pagamento:
-      //   null  → oferta total (sem cobranças) — válido
-      //   string → deve estar em VALID_MEIOS
       if (meio_pagamento !== undefined && meio_pagamento !== null) {
         if (!VALID_MEIOS.includes(meio_pagamento)) return badRequest('Meio de pagamento inválido')
       }
 
-      // Validar meio_gorjeta (nunca pode ser null)
       if (meio_gorjeta !== undefined) {
         if (!VALID_MEIOS.includes(meio_gorjeta)) return badRequest('Meio de gorjeta inválido')
       }
 
-      // Validar comentário obrigatório quando o método é 'outro'
       const effectiveComentario = comentario_pagamento ?? reservation.comentario_pagamento ?? ''
       if (meio_pagamento === 'outro' && !effectiveComentario.trim()) {
         return badRequest('O campo "Observações de Pagamento" é obrigatório quando o método é "Outro".')
@@ -135,10 +149,9 @@ export async function onRequest(context) {
         vals.push(Number(service_duration))
       }
 
-      // meio_pagamento: null (oferta total) ou string válida
       if (meio_pagamento !== undefined) {
         updates.push('meio_pagamento = ?')
-        vals.push(meio_pagamento) // null é guardado como NULL na BD
+        vals.push(meio_pagamento)
       }
       if (valor_pago !== undefined && Number.isFinite(Number(valor_pago))) {
         updates.push('valor_pago = ?')
@@ -157,7 +170,6 @@ export async function onRequest(context) {
         vals.push(sanitize(comentario_pagamento, 1000))
       }
 
-      // Campos de oferta
       if (oferta_valor !== undefined) {
         updates.push('oferta_valor = ?')
         vals.push(oferta_valor === null ? null : Number(oferta_valor))
@@ -167,10 +179,9 @@ export async function onRequest(context) {
         vals.push(oferta_tipo === null ? null : String(oferta_tipo).trim())
       }
 
-      // ── Histórico de edições ───────────────────────────────────────────────────────
-      // Registar a edição no histórico sempre que dados relevantes são alterados
-      // (data/hora, barbeiro ou serviço) — independentemente de ser admin ou cliente.
       const changedRelevant = data_hora !== undefined || barber_id !== undefined || service_id !== undefined
+      console.log(`[DEBUG][reservations/${id}] changedRelevant=${changedRelevant}, updates antes de histórico:`, updates.join(', '))
+
       if (changedRelevant) {
         const historicoRaw = reservation.historico_edicoes ?? '[]'
         let historico = []
@@ -189,48 +200,43 @@ export async function onRequest(context) {
         vals.push(JSON.stringify(historico))
       }
 
-      if (!updates.length) return badRequest('Nada para actualizar')
+      if (!updates.length) {
+        console.log(`[DEBUG][reservations/${id}] Nenhum update — a devolver badRequest`)
+        return badRequest('Nada para actualizar')
+      }
 
       updates.push('atualizado_em = CURRENT_TIMESTAMP')
 
+      console.log(`[DEBUG][reservations/${id}] A executar UPDATE com ${updates.length} campos`)
       await env.DB.prepare(
         `UPDATE reservas SET ${updates.join(', ')} WHERE id = ?`
       ).bind(...vals, id).run()
+      console.log(`[DEBUG][reservations/${id}] UPDATE concluído`)
 
-      // ── Acções pós-update ────────────────────────────────────────────────
+      // ── Pós-update ────────────────────────────────────────────────────────────
 
-      // 1. Cancelamento
       if (status === 'cancelada') {
         const lembreteId = reservation.resend_lembrete_id ?? null
-        console.log(
-          `[admin/reservations/[id] PATCH] Reserva #${id} → cancelada.`,
-          `resend_lembrete_id na BD: ${lembreteId ?? '(nenhum)'}`
-        )
         if (lembreteId) {
-          console.log(`[admin/reservations/[id] PATCH] A cancelar lembrete agendado ${lembreteId}…`)
           context.waitUntil(
             cancelScheduledReminder(context, lembreteId)
-              .then(() =>
-                env.DB.prepare('UPDATE reservas SET resend_lembrete_id = NULL WHERE id = ?')
-                  .bind(id).run()
-              )
-              .catch(e => console.error('[admin/reservations/[id] PATCH] Erro ao cancelar lembrete:', e?.message))
+              .then(() => env.DB.prepare('UPDATE reservas SET resend_lembrete_id = NULL WHERE id = ?').bind(id).run())
+              .catch(e => console.error(`[reservations/${id}] Erro ao cancelar lembrete:`, e?.message))
           )
-        } else {
-          console.log(`[admin/reservations/[id] PATCH] Reserva #${id} sem lembrete agendado — nada a cancelar.`)
         }
       }
 
-      // 2. Alteração de data/hora, barbeiro ou serviço → reagendar lembrete
-      // 3. deveReenviarConfirmacao=true → enviar email de confirmação actualizada
-      //    (pode acontecer com ou sem changedRelevant)
       const notCancelled = status !== 'cancelada'
+      console.log(`[DEBUG][reservations/${id}] notCancelled=${notCancelled}, cliente_email=${reservation.cliente_email ?? '(null)'}, changedRelevant=${changedRelevant}, deveReenviarConfirmacao=${deveReenviarConfirmacao}`)
+      console.log(`[DEBUG][reservations/${id}] Condição de envio de email: ${notCancelled && !!reservation.cliente_email && (changedRelevant || deveReenviarConfirmacao)}`)
 
       if (notCancelled && reservation.cliente_email && (changedRelevant || deveReenviarConfirmacao)) {
         let newBarberName  = reservation.barbeiro_nome
         let newServiceName = reservation.servico_nome
         let newDuration    = reservation.service_duration
         let newDataHora    = data_hora ?? reservation.data_hora
+
+        console.log(`[DEBUG][reservations/${id}] Dados para email: barber=${newBarberName}, service=${newServiceName}, dataHora=${newDataHora}, duracao=${newDuration}`)
 
         if (barber_id !== undefined) {
           const b = await env.DB.prepare('SELECT nome FROM barbeiros WHERE id = ?').bind(barber_id).first()
@@ -241,7 +247,6 @@ export async function onRequest(context) {
           if (s) { newServiceName = s.nome; newDuration = s.duracao ?? newDuration }
         }
 
-        // Calcular SEQUENCE com base no histórico antes desta edição (+1 pela edição actual)
         const historicoFinal = (() => {
           try {
             const h = JSON.parse(reservation.historico_edicoes ?? '[]')
@@ -250,13 +255,10 @@ export async function onRequest(context) {
         })()
         const sequence = historicoFinal.length + 1
 
-        console.log(
-          `[admin/reservations/[id] PATCH] Reserva #${id} — changedRelevant=${changedRelevant},`,
-          `deveReenviarConfirmacao=${deveReenviarConfirmacao}, sequence=${sequence}`
-        )
+        console.log(`[DEBUG][reservations/${id}] sequence=${sequence}, changedRelevant=${changedRelevant}, deveReenviarConfirmacao=${deveReenviarConfirmacao}`)
 
         if (changedRelevant) {
-          // Reagendar lembrete E opcionalmente enviar confirmação
+          console.log(`[DEBUG][reservations/${id}] A chamar rescheduleReminder (sendConfirmation=${deveReenviarConfirmacao})…`)
           context.waitUntil(
             rescheduleReminder(context, {
               reservaId:        reservation.id,
@@ -272,10 +274,12 @@ export async function onRequest(context) {
             })
           )
         } else {
-          // Só reenviar confirmação, sem tocar no lembrete
+          // Só reenvio de confirmação sem alterar lembrete
+          console.log(`[DEBUG][reservations/${id}] A enviar email de confirmação directo (sem reschedule)…`)
           context.waitUntil(
             (async () => {
               try {
+                console.log(`[DEBUG][reservations/${id}] buildReservationConfirmationEmail com:`, { reservaId: reservation.id, clientName: reservation.cliente_nome, clientEmail: reservation.cliente_email, dataHora: newDataHora, serviceName: newServiceName, barberName: newBarberName, duracao: newDuration, sequence })
                 const { html, attachments } = buildReservationConfirmationEmail({
                   reservaId:   reservation.id,
                   clientName:  reservation.cliente_nome,
@@ -286,24 +290,27 @@ export async function onRequest(context) {
                   duracao:     newDuration,
                   sequence,
                 })
+                console.log(`[DEBUG][reservations/${id}] HTML gerado (${html?.length ?? 0} chars), attachments: ${attachments?.length ?? 0}`)
                 await sendEmail(context, {
                   to:          reservation.cliente_email,
                   subject:     `Reserva #${reservation.id} actualizada – ${SHOP.name}`,
                   html,
                   attachments,
                 })
-                console.log(`[admin/reservations/[id] PATCH] Reserva #${id}: email de confirmação reenviado (sequence=${sequence}).`)
+                console.log(`[DEBUG][reservations/${id}] sendEmail concluído com sucesso (sequence=${sequence})`)
               } catch (err) {
-                console.error(`[admin/reservations/[id] PATCH] Reserva #${id}: falha no reenvio de confirmação:`, err?.message || err)
+                console.error(`[DEBUG][reservations/${id}] ERRO no sendEmail:`, err?.message || err, err?.stack)
               }
             })()
           )
         }
+      } else {
+        console.log(`[DEBUG][reservations/${id}] Email NÃO enviado. Razão: notCancelled=${notCancelled}, cliente_email=${reservation.cliente_email ?? '(null)'}, changedRelevant=${changedRelevant}, deveReenviarConfirmacao=${deveReenviarConfirmacao}`)
       }
 
       return ok({ message: 'Reserva actualizada' })
     } catch (e) {
-      console.error('[admin/reservations/[id] PATCH] Erro inesperado:', e?.message)
+      console.error(`[reservations/${id}] Erro inesperado no PATCH:`, e?.message, e?.stack)
       return serverError('Erro ao actualizar reserva', e.message)
     }
   }
@@ -311,22 +318,13 @@ export async function onRequest(context) {
   if (request.method === 'DELETE') {
     try {
       const lembreteId = reservation.resend_lembrete_id ?? null
-      console.log(
-        `[admin/reservations/[id] DELETE] A eliminar reserva #${id}.`,
-        `resend_lembrete_id: ${lembreteId ?? '(nenhum)'}`
-      )
-
       if (lembreteId) {
-        console.log(`[admin/reservations/[id] DELETE] A cancelar lembrete agendado ${lembreteId}…`)
         await cancelScheduledReminder(context, lembreteId)
-        console.log(`[admin/reservations/[id] DELETE] Lembrete ${lembreteId} cancelado (ou já inactivo).`)
       }
-
       await env.DB.prepare('DELETE FROM reservas WHERE id = ?').bind(id).run()
-      console.log(`[admin/reservations/[id] DELETE] Reserva #${id} eliminada.`)
       return ok({ message: 'Reserva eliminada' })
     } catch (e) {
-      console.error('[admin/reservations/[id] DELETE] Erro inesperado:', e?.message)
+      console.error(`[reservations/${id}] Erro inesperado no DELETE:`, e?.message)
       return serverError('Erro ao eliminar reserva', e.message)
     }
   }
