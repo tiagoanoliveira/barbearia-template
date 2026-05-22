@@ -34,7 +34,7 @@ export const barberShopConfig = {
 
   // ─ OAuth social ──────────────────────────────────────────────────────────
   // O botão do Facebook fica oculto e o do Google ocupa a linha toda.
-  facebookEnabled: false,
+  facebookEnabled: true,
 
   // Dados legais
   nif:           '515753300',
