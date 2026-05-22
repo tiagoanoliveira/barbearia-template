@@ -76,8 +76,13 @@ export async function onRequest(context) {
         oferta_valor,
         oferta_tipo,
         // Reenvio de email de confirmação
+        // O frontend envia "send_email"; aceitar também "reenviar_confirmacao" por retrocompatibilidade
+        send_email,
         reenviar_confirmacao,
       } = body
+
+      // Normalizar: qualquer dos dois campos activa o reenvio
+      const deveReenviarConfirmacao = !!(send_email || reenviar_confirmacao)
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
       if (barber_id   !== undefined && !isValidId(barber_id))   return badRequest('ID de barbeiro inválido')
@@ -217,11 +222,11 @@ export async function onRequest(context) {
       }
 
       // 2. Alteração de data/hora, barbeiro ou serviço → reagendar lembrete
-      // 3. reenviar_confirmacao=true → enviar email de confirmação actualizada
+      // 3. deveReenviarConfirmacao=true → enviar email de confirmação actualizada
       //    (pode acontecer com ou sem changedRelevant)
       const notCancelled = status !== 'cancelada'
 
-      if (notCancelled && reservation.cliente_email && (changedRelevant || reenviar_confirmacao)) {
+      if (notCancelled && reservation.cliente_email && (changedRelevant || deveReenviarConfirmacao)) {
         let newBarberName  = reservation.barbeiro_nome
         let newServiceName = reservation.servico_nome
         let newDuration    = reservation.service_duration
@@ -247,7 +252,7 @@ export async function onRequest(context) {
 
         console.log(
           `[admin/reservations/[id] PATCH] Reserva #${id} — changedRelevant=${changedRelevant},`,
-          `reenviar_confirmacao=${!!reenviar_confirmacao}, sequence=${sequence}`
+          `deveReenviarConfirmacao=${deveReenviarConfirmacao}, sequence=${sequence}`
         )
 
         if (changedRelevant) {
@@ -262,7 +267,7 @@ export async function onRequest(context) {
               serviceName:      newServiceName,
               barberName:       newBarberName,
               duracao:          newDuration,
-              sendConfirmation: !!reenviar_confirmacao,
+              sendConfirmation: deveReenviarConfirmacao,
               sequence,
             })
           )
