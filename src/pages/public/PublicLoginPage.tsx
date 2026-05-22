@@ -233,7 +233,7 @@ export default function PublicLoginPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                  Telemóvel <span className="text-brand-400">*</span>
+                  Telemóvel
                 </label>
                 <input
                   type="tel"
