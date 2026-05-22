@@ -32,6 +32,10 @@ export const barberShopConfig = {
   // ─ Cloudflare Turnstile ─────────────────────────────────────────────────
   turnstileSiteKey: '0x4AAAAAACob-aLDgwmHRXUO',
 
+  // ─ OAuth social ──────────────────────────────────────────────────────────
+  // O botão do Facebook fica oculto e o do Google ocupa a linha toda.
+  facebookEnabled: false,
+
   // Dados legais
   nif:           '515753300',
   legalName:     'Horizonte Inicial.',
