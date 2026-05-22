@@ -7,6 +7,8 @@ import { barberShopConfig } from '@/config/theme'
 
 type Mode = 'login' | 'register'
 
+const facebookEnabled = (barberShopConfig as any).facebookEnabled !== false
+
 export default function PublicLoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -175,6 +177,7 @@ export default function PublicLoginPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 pt-24">
       <div className="w-full max-w-sm">
+        {/* Toggle login/register */}
         <div className="flex bg-white/5 rounded-2xl p-1 mb-6">
           {(['login', 'register'] as Mode[]).map(m => (
             <button key={m} onClick={() => { setMode(m); setError(null); setSuccessMsg(null); setPhoneNoEmailWarning(null) }}
@@ -186,7 +189,10 @@ export default function PublicLoginPage() {
           ))}
         </div>
 
-        <div className="mb-4 grid grid-cols-2 gap-4">
+        {/* Botões OAuth — layout adapta-se ao facebookEnabled */}
+        <div className={`mb-4 grid gap-4 ${
+          facebookEnabled ? 'grid-cols-2' : 'grid-cols-1'
+        }`}>
           <button
             onClick={() => window.location.href = `/api/auth/google?redirect=${encodeURIComponent(redirectTo)}`}
             className="w-full flex items-center justify-center gap-3 py-3 bg-white/5 border
@@ -201,17 +207,20 @@ export default function PublicLoginPage() {
             </svg>
             Google
           </button>
-          <button
-            onClick={() => window.location.href = `/api/auth/facebook?redirect=${encodeURIComponent(redirectTo)}`}
-            className="w-full flex items-center justify-center gap-3 py-3 bg-[#1877F2]/10 border
-                       border-[#1877F2]/30 rounded-xl text-white text-sm font-medium
-                       hover:bg-[#1877F2]/20 transition-all"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2">
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-            </svg>
-            Facebook
-          </button>
+
+          {facebookEnabled && (
+            <button
+              onClick={() => window.location.href = `/api/auth/facebook?redirect=${encodeURIComponent(redirectTo)}`}
+              className="w-full flex items-center justify-center gap-3 py-3 bg-[#1877F2]/10 border
+                         border-[#1877F2]/30 rounded-xl text-white text-sm font-medium
+                         hover:bg-[#1877F2]/20 transition-all"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+              </svg>
+              Facebook
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3 mb-6">
@@ -233,7 +242,7 @@ export default function PublicLoginPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                  Telemóvel
+                  Telemóvel <span className="text-brand-400">*</span>
                 </label>
                 <input
                   type="tel"
