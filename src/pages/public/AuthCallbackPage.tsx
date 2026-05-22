@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Scissors, Phone } from 'lucide-react'
+import { api } from '@/api/client'
 
 /**
  * Rota: /auth/callback
  * Intermediário entre o callback OAuth (server-side) e o frontend.
  * O servidor redireciona para cá com ?token=...&redirect=...&needs_phone=1 (opcional).
  *
- * Se needs_phone=1: guarda o token e mostra modal a pedir o contacto.
- * Após guardar o contacto (ou em caso de erro), navega para o destino.
+ * Se needs_phone=1: guarda o token e mostra ecrã de introdução do contacto (obrigatório).
+ * Após guardar o contacto navega para o destino final.
  */
 export default function AuthCallbackPage() {
   const navigate       = useNavigate()
@@ -31,7 +32,6 @@ export default function AuthCallbackPage() {
     }
 
     localStorage.setItem('user_token', token)
-    // Notificar o Navbar imediatamente (login novo)
     window.dispatchEvent(new Event('authchange'))
     setRedirectTo(redirect)
 
@@ -48,41 +48,24 @@ export default function AuthCallbackPage() {
 
     const cleaned = phone.replace(/\s/g, '')
     if (!cleaned || cleaned.length < 9) {
-      setPhoneError('Insere um número de telemóvel válido.')
+      setPhoneError('Insere um número de telemóvel válido (mínimo 9 dígitos).')
       return
     }
 
     setSaving(true)
-    try {
-      const token = localStorage.getItem('user_token')
-      const res = await fetch('/api/client/profile', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ telefone: cleaned }),
-      })
+    // Usa o mesmo endpoint e método do ProfilePage (/api/me PUT)
+    const res = await api.put('/api/me', { phone: cleaned })
+    setSaving(false)
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setPhoneError((data as any)?.error ?? 'Erro ao guardar o contacto.')
-        return
-      }
-
-      navigate(redirectTo, { replace: true })
-    } catch {
-      setPhoneError('Erro de rede. Tenta novamente.')
-    } finally {
-      setSaving(false)
+    if (!res.success) {
+      setPhoneError((res as any).error ?? 'Erro ao guardar o contacto.')
+      return
     }
-  }
 
-  function handleSkip() {
     navigate(redirectTo, { replace: true })
   }
 
-  // ── Modal de pedido de contacto ──────────────────────────────────────────
+  // ── Ecrã de introdução de contacto (obrigatório) ──────────────────────
   if (showPhoneModal) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
@@ -102,7 +85,7 @@ export default function AuthCallbackPage() {
           <form onSubmit={handleSavePhone} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="phone" className="text-gray-300 text-sm font-medium">
-                Telemóvel
+                Telemóvel <span className="text-brand-400">*</span>
               </label>
               <input
                 id="phone"
@@ -112,6 +95,7 @@ export default function AuthCallbackPage() {
                 value={phone}
                 onChange={e => { setPhone(e.target.value); setPhoneError('') }}
                 autoFocus
+                required
                 className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition"
               />
               {phoneError && (
@@ -127,14 +111,6 @@ export default function AuthCallbackPage() {
               {saving ? 'A guardar…' : 'Guardar e continuar'}
             </button>
           </form>
-
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="text-gray-500 hover:text-gray-400 text-xs text-center transition"
-          >
-            Ignorar por agora
-          </button>
         </div>
       </div>
     )

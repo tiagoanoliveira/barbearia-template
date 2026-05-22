@@ -88,9 +88,16 @@ export default function PublicLoginPage() {
       return
     }
 
-    if (mode === 'register' && form.password !== form.confirm) {
-      setError('As passwords não coincidem.')
-      return
+    if (mode === 'register') {
+      if (form.password !== form.confirm) {
+        setError('As passwords não coincidem.')
+        return
+      }
+      const cleaned = form.phone.replace(/\s/g, '')
+      if (!cleaned || cleaned.length < 9) {
+        setError('Insere um número de telemóvel válido (mínimo 9 dígitos).')
+        return
+      }
     }
 
     setLoading(true)
@@ -109,12 +116,10 @@ export default function PublicLoginPage() {
     }
 
     if (!res.success || !res.data) {
-      // Tentar interpretar erro estruturado
       try {
         const parsed = JSON.parse(res.error ?? '')
 
         if (parsed?.code === 'PHONE_EXISTS_NO_EMAIL') {
-          // Conta criada pelo admin sem email real — redirecionar para suporte
           setPhoneNoEmailWarning({
             phone:      form.phone,
             supportUrl: parsed.support_url ?? '/suporte',
@@ -129,7 +134,7 @@ export default function PublicLoginPage() {
           return
         }
       } catch {
-        // não é JSON estruturado — mostrar erro normalmente
+        // não é JSON estruturado
       }
 
       if (res.error === 'Email já registado') {
@@ -142,11 +147,11 @@ export default function PublicLoginPage() {
 
     if (mode === 'login') {
       localStorage.setItem('user_token', res.data.token)
+      window.dispatchEvent(new Event('authchange'))
       navigate(redirectTo)
       return
     }
 
-    // Registo: não faz login automático, apenas informa o utilizador
     setSuccessMsg(res.data.message ?? 'Conta criada! Verifique o seu email para confirmar o registo.')
     setMode('login')
     setForm({ name: '', email: form.email, phone: form.phone, password: '', confirm: '' })
@@ -170,7 +175,6 @@ export default function PublicLoginPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 pt-24">
       <div className="w-full max-w-sm">
-        {/* Toggle login/register */}
         <div className="flex bg-white/5 rounded-2xl p-1 mb-6">
           {(['login', 'register'] as Mode[]).map(m => (
             <button key={m} onClick={() => { setMode(m); setError(null); setSuccessMsg(null); setPhoneNoEmailWarning(null) }}
@@ -182,7 +186,6 @@ export default function PublicLoginPage() {
           ))}
         </div>
 
-        {/* Social login */}
         <div className="mb-4 grid grid-cols-2 gap-4">
           <button
             onClick={() => window.location.href = `/api/auth/google?redirect=${encodeURIComponent(redirectTo)}`}
@@ -229,12 +232,20 @@ export default function PublicLoginPage() {
                                   focus:outline-none focus:ring-2 focus:ring-brand-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1.5">Telefone</label>
-                <input type="tel" value={form.phone} onChange={field('phone')}
-                       placeholder="9XX XXX XXX"
-                       className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
-                                  text-white placeholder:text-gray-600 text-sm
-                                  focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <label className="block text-sm font-medium text-gray-400 mb-1.5">
+                  Telemóvel <span className="text-brand-400">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={form.phone}
+                  onChange={field('phone')}
+                  placeholder="9XX XXX XXX"
+                  pattern="[0-9 +]{9,15}"
+                  inputMode="numeric"
+                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
+                             text-white placeholder:text-gray-600 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-brand-500" />
               </div>
             </>
           )}
@@ -293,7 +304,6 @@ export default function PublicLoginPage() {
             </p>
           )}
 
-          {/* Aviso especial: conta criada pelo admin sem email */}
           {phoneNoEmailWarning && (
             <div className="flex gap-3 bg-amber-950/60 border border-amber-700/60 rounded-xl px-4 py-3">
               <AlertTriangle size={18} className="text-amber-400 mt-0.5 shrink-0" />
@@ -332,7 +342,6 @@ export default function PublicLoginPage() {
         </form>
       </div>
 
-      {/* Modal: telefone já associado a outra conta com email real */}
       <ConfirmDialog
         open={phoneExistModal}
         onClose={() => setPhoneExistModal(false)}
