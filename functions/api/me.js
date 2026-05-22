@@ -73,19 +73,21 @@ export async function onRequest(context) {
       const { name, email, phone, nif, current_password, new_password } = body
 
       if (new_password) {
-        if (!current_password) return badRequest('Password atual é necessária')
         if (new_password.length < 8) return badRequest('Nova password mínimo 8 caracteres')
 
         const clientPw = await env.DB.prepare(
-          'SELECT password_hash FROM clientes WHERE id = ?'
+            'SELECT password_hash FROM clientes WHERE id = ?'
         ).bind(auth.clientId).first()
 
-        const valid = await verifyPassword(current_password, clientPw.password_hash)
-        if (!valid) return badRequest('Password atual incorreta')
+        if (clientPw.password_hash) {
+          if (!current_password) return badRequest('Password atual é necessária')
+          const valid = await verifyPassword(current_password, clientPw.password_hash)
+          if (!valid) return badRequest('Password atual incorreta')
+        }
 
         const newHash = await hashPassword(new_password)
         await env.DB.prepare(
-          'UPDATE clientes SET password_hash = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?'
+            'UPDATE clientes SET password_hash = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?'
         ).bind(newHash, auth.clientId).run()
       }
 
