@@ -7,6 +7,8 @@ import {
   cancelScheduledReminder,
   rescheduleReminder,
 } from '../../../utils/reservationEmails.js'
+import { buildReservationConfirmationEmail, sendEmail } from '../../../utils/email.js'
+import { SHOP } from '../../../utils/site-config.js'
 
 const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou']
 // null = sem pagamento (oferta total); string = meio escolhido pelo barbeiro
@@ -214,12 +216,12 @@ export async function onRequest(context) {
         }
       }
 
-      // 2. Alteração de data/hora, barbeiro ou serviço:
-      //    - reagendar lembrete SEMPRE
-      //    - enviar email de confirmação actualizada SE reenviar_confirmacao=true
+      // 2. Alteração de data/hora, barbeiro ou serviço → reagendar lembrete
+      // 3. reenviar_confirmacao=true → enviar email de confirmação actualizada
+      //    (pode acontecer com ou sem changedRelevant)
       const notCancelled = status !== 'cancelada'
 
-      if (changedRelevant && notCancelled && reservation.cliente_email) {
+      if (notCancelled && reservation.cliente_email && (changedRelevant || reenviar_confirmacao)) {
         let newBarberName  = reservation.barbeiro_nome
         let newServiceName = reservation.servico_nome
         let newDuration    = reservation.service_duration
@@ -234,37 +236,64 @@ export async function onRequest(context) {
           if (s) { newServiceName = s.nome; newDuration = s.duracao ?? newDuration }
         }
 
-        // Calcular SEQUENCE com base no histórico atualizado
-        // (já inclui a edição que acabámos de registar)
+        // Calcular SEQUENCE com base no histórico antes desta edição (+1 pela edição actual)
         const historicoFinal = (() => {
           try {
             const h = JSON.parse(reservation.historico_edicoes ?? '[]')
             return Array.isArray(h) ? h : []
           } catch { return [] }
         })()
-        // +1 porque a entrada actual já foi adicionada ao array antes do UPDATE
         const sequence = historicoFinal.length + 1
 
         console.log(
-          `[admin/reservations/[id] PATCH] Reserva #${id} — dados relevantes alterados.`,
-          `oldLembreteId: ${reservation.resend_lembrete_id ?? '(nenhum)'},`,
-          `nova data: ${newDataHora}, sendConfirmation: ${!!reenviar_confirmacao}, sequence: ${sequence}`
+          `[admin/reservations/[id] PATCH] Reserva #${id} — changedRelevant=${changedRelevant},`,
+          `reenviar_confirmacao=${!!reenviar_confirmacao}, sequence=${sequence}`
         )
 
-        context.waitUntil(
-          rescheduleReminder(context, {
-            reservaId:        reservation.id,
-            oldLembreteId:    reservation.resend_lembrete_id ?? null,
-            clientEmail:      reservation.cliente_email,
-            clientName:       reservation.cliente_nome,
-            dataHora:         newDataHora,
-            serviceName:      newServiceName,
-            barberName:       newBarberName,
-            duracao:          newDuration,
-            sendConfirmation: !!reenviar_confirmacao,
-            sequence,
-          })
-        )
+        if (changedRelevant) {
+          // Reagendar lembrete E opcionalmente enviar confirmação
+          context.waitUntil(
+            rescheduleReminder(context, {
+              reservaId:        reservation.id,
+              oldLembreteId:    reservation.resend_lembrete_id ?? null,
+              clientEmail:      reservation.cliente_email,
+              clientName:       reservation.cliente_nome,
+              dataHora:         newDataHora,
+              serviceName:      newServiceName,
+              barberName:       newBarberName,
+              duracao:          newDuration,
+              sendConfirmation: !!reenviar_confirmacao,
+              sequence,
+            })
+          )
+        } else {
+          // Só reenviar confirmação, sem tocar no lembrete
+          context.waitUntil(
+            (async () => {
+              try {
+                const { html, attachments } = buildReservationConfirmationEmail({
+                  reservaId:   reservation.id,
+                  clientName:  reservation.cliente_nome,
+                  clientEmail: reservation.cliente_email,
+                  dataHora:    newDataHora,
+                  serviceName: newServiceName,
+                  barberName:  newBarberName,
+                  duracao:     newDuration,
+                  sequence,
+                })
+                await sendEmail(context, {
+                  to:          reservation.cliente_email,
+                  subject:     `Reserva #${reservation.id} actualizada – ${SHOP.name}`,
+                  html,
+                  attachments,
+                })
+                console.log(`[admin/reservations/[id] PATCH] Reserva #${id}: email de confirmação reenviado (sequence=${sequence}).`)
+              } catch (err) {
+                console.error(`[admin/reservations/[id] PATCH] Reserva #${id}: falha no reenvio de confirmação:`, err?.message || err)
+              }
+            })()
+          )
+        }
       }
 
       return ok({ message: 'Reserva actualizada' })
