@@ -108,8 +108,13 @@ CREATE TABLE IF NOT EXISTS reservas (
   -- Meio de pagamento da gorjeta (pode diferir do meio principal)
   meio_gorjeta           TEXT    DEFAULT NULL,
   -- Comentário livre sobre o pagamento (obrigatório quando meio = 'outro')
-  comentario_pagamento   TEXT    DEFAULT NULL
-);
+    comentario_pagamento   TEXT    DEFAULT NULL,
+
+    -- ── Oferta / Fidelização ────────────────────────────────────────────────────────────
+    -- Valor oferecido em cêntimos (null = sem oferta; 0 = oferta total)
+    oferta_valor           INTEGER DEFAULT NULL,
+    -- Tipo de oferta (ex: 'fidelizacao', 'promocao', 'cortesia', etc.)
+    oferta_tipo            TEXT    DEFAULT NULL);
 
 CREATE INDEX IF NOT EXISTS idx_reservas_cliente_data          ON reservas(cliente_id, data_hora);
 CREATE INDEX IF NOT EXISTS idx_reservas_barbeiro_data_status  ON reservas(barbeiro_id, data_hora, status);
@@ -414,7 +419,8 @@ END;
 -- ALTER TABLE clientes ADD COLUMN reservas_gratuitas_disponiveis INTEGER DEFAULT 0;
 -- UPDATE clientes SET reservas_gratuitas_disponiveis = MAX(0, (reservas_concluidas + 1) / 10);
 -- ALTER TABLE reservas ADD COLUMN comentario_pagamento TEXT DEFAULT NULL;
-
+-- ALTER TABLE reservas ADD COLUMN oferta_valor INTEGER DEFAULT NULL;
+-- ALTER TABLE reservas ADD COLUMN oferta_tipo  TEXT    DEFAULT NULL;
 -- ================================================
 -- VIEWS
 -- ================================================
@@ -425,6 +431,7 @@ SELECT
   r.created_by, r.duracao_minutos, r.criado_em, r.atualizado_em,
   r.historico_edicoes, r.wpp_lembrete,
   r.moloni_document_id, r.moloni_document_number,
+  r.resend_lembrete_id,
   r.meio_pagamento,
   r.valor_pago,
   r.gorjeta,
@@ -436,6 +443,8 @@ SELECT
   c.nif      AS cliente_nif,
   c.reservas_concluidas AS cliente_total_reservas,
   c.reservas_gratuitas_disponiveis AS cliente_gratuitas_disponiveis,
+  r.oferta_valor,
+  r.oferta_tipo,
   b.nome  AS barbeiro_nome,
   b.foto  AS barbeiro_foto,
   b.color AS barbeiro_color,
