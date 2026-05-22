@@ -72,8 +72,6 @@ export async function onRequest(context) {
       const body = await request.json()
       const { name, email, phone, nif, current_password, new_password } = body
 
-      if (!name) return badRequest('Nome é obrigatório')
-
       if (new_password) {
         if (!current_password) return badRequest('Password atual é necessária')
         if (new_password.length < 8) return badRequest('Nova password mínimo 8 caracteres')
@@ -92,22 +90,24 @@ export async function onRequest(context) {
       }
 
       const current = await env.DB.prepare(
-        'SELECT nome, email FROM clientes WHERE id = ?'
+          'SELECT nome, email FROM clientes WHERE id = ?'
       ).bind(auth.clientId).first()
 
       const newEmail    = email ? sanitize(email, 200).toLowerCase() : current.email
       const emailChange = newEmail && newEmail !== current.email
 
+      const resolvedName = name ? sanitize(name, 100) : current.nome
+
       await env.DB.prepare(
-        `UPDATE clientes
-         SET nome = ?, telefone = ?, nif = ?,
-             atualizado_em = CURRENT_TIMESTAMP
-         WHERE id = ?`
+          `UPDATE clientes
+           SET nome = ?, telefone = ?, nif = ?, 
+               atualizado_em = CURRENT_TIMESTAMP
+           WHERE id = ?`
       ).bind(
-        sanitize(name, 100),
-        sanitize(phone ?? '', 30),
-        nif ?? null,
-        auth.clientId
+          resolvedName,
+          sanitize(phone ?? '', 30),
+          nif ?? null,
+          auth.clientId
       ).run()
 
       if (emailChange) {
