@@ -70,7 +70,7 @@ export async function onRequest(context) {
   if (request.method === 'PUT') {
     try {
       const body = await request.json()
-      const { name, email, phone, nif, current_password, new_password } = body
+      const { name, email, phone, nif, new_password } = body
 
       if (new_password) {
         if (new_password.length < 8) return badRequest('Nova password mínimo 8 caracteres')
@@ -100,6 +100,11 @@ export async function onRequest(context) {
 
       const resolvedName = name ? sanitize(name, 100) : current.nome
 
+      const resolvedPhone = phone !== undefined ? sanitize(phone, 30) : (current.telefone ?? '')
+      if (!resolvedPhone && current.telefone) {
+        return badRequest('O número de telemóvel não pode ser removido')
+      }
+
       await env.DB.prepare(
           `UPDATE clientes
            SET nome = ?, telefone = ?, nif = ?, 
@@ -107,7 +112,7 @@ export async function onRequest(context) {
            WHERE id = ?`
       ).bind(
           resolvedName,
-          phone !== undefined ? sanitize(phone, 30) : (current.telefone ?? ''),
+          resolvedPhone,
           nif  !== undefined ? nif : current.nif,
           auth.clientId
       ).run()

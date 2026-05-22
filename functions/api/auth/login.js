@@ -57,6 +57,19 @@ export async function onRequest(context) {
 
     const token = await signJWT({ id: client.id, email: client.email }, env.JWT_SECRET)
 
+    if (!client.telefone || !client.telefone.trim()) {
+      return ok({
+        token,
+        phone_required: true,
+        user: {
+          id:        client.id,
+          name:      client.nome,
+          email:     client.email,
+          photo_url: client.foto_perfil,
+        },
+      })
+    }
+
     return ok({
       token,
       user: {
