@@ -107,8 +107,8 @@ export async function onRequest(context) {
            WHERE id = ?`
       ).bind(
           resolvedName,
-          sanitize(phone ?? '', 30),
-          nif ?? null,
+          phone !== undefined ? sanitize(phone, 30) : (current.telefone ?? ''),
+          nif  !== undefined ? nif : current.nif,
           auth.clientId
       ).run()
 
