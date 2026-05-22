@@ -1,30 +1,150 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Scissors } from 'lucide-react'
+import { Scissors, Phone } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 
 /**
  * Rota: /auth/callback
  * Intermediário entre o callback OAuth (server-side) e o frontend.
- * O servidor redireciona para cá com ?token=...&redirect=...
- * Esta página guarda o token no localStorage e navega para o destino.
+ * O servidor redireciona para cá com ?token=...&redirect=...&needs_phone=1 (opcional).
+ *
+ * Se needs_phone=1: guarda o token e mostra modal a pedir o contacto.
+ * Após guardar o contacto (ou em caso de erro), navega para o destino.
  */
 export default function AuthCallbackPage() {
-  const navigate = useNavigate()
+  const navigate       = useNavigate()
   const [searchParams] = useSearchParams()
+  const { refreshUser } = useAuth()
+
+  const [showPhoneModal, setShowPhoneModal] = useState(false)
+  const [redirectTo, setRedirectTo]         = useState('/perfil')
+  const [phone, setPhone]                   = useState('')
+  const [phoneError, setPhoneError]         = useState('')
+  const [saving, setSaving]                 = useState(false)
 
   useEffect(() => {
-    const token    = searchParams.get('token')
-    const redirect = searchParams.get('redirect') ?? '/perfil'
+    const token      = searchParams.get('token')
+    const redirect   = searchParams.get('redirect') ?? '/perfil'
+    const needsPhone = searchParams.get('needs_phone') === '1'
 
-    if (token) {
-      localStorage.setItem('user_token', token)
-      navigate(redirect, { replace: true })
-    } else {
-      // Token ausente — algo correu mal
+    if (!token) {
       navigate('/login?error=oauth_failed', { replace: true })
+      return
+    }
+
+    localStorage.setItem('user_token', token)
+    setRedirectTo(redirect)
+
+    if (needsPhone) {
+      setShowPhoneModal(true)
+    } else {
+      navigate(redirect, { replace: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function handleSavePhone(e: React.FormEvent) {
+    e.preventDefault()
+    setPhoneError('')
+
+    const cleaned = phone.replace(/\s/g, '')
+    if (!cleaned || cleaned.length < 9) {
+      setPhoneError('Insere um número de telemóvel válido.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const token = localStorage.getItem('user_token')
+      const res = await fetch('/api/client/profile', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ telefone: cleaned }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setPhoneError((data as any)?.error ?? 'Erro ao guardar o contacto.')
+        return
+      }
+
+      await refreshUser?.().catch(() => {})
+      navigate(redirectTo, { replace: true })
+    } catch {
+      setPhoneError('Erro de rede. Tenta novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleSkip() {
+    navigate(redirectTo, { replace: true })
+  }
+
+  // ── Modal de pedido de contacto ───────────────────────────────────────────
+  if (showPhoneModal) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-2xl p-8 flex flex-col gap-6">
+          {/* Ícone */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center">
+              <Phone size={22} className="text-white" />
+            </div>
+            <h1 className="text-white text-xl font-semibold text-center">
+              Falta só o teu contacto
+            </h1>
+            <p className="text-gray-400 text-sm text-center">
+              Para poderes fazer reservas precisamos do teu número de telemóvel.
+            </p>
+          </div>
+
+          {/* Formulário */}
+          <form onSubmit={handleSavePhone} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="phone" className="text-gray-300 text-sm font-medium">
+                Telemóvel
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                inputMode="numeric"
+                placeholder="912 345 678"
+                value={phone}
+                onChange={e => { setPhone(e.target.value); setPhoneError('') }}
+                autoFocus
+                className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition"
+              />
+              {phoneError && (
+                <p className="text-red-400 text-xs mt-0.5">{phoneError}</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition text-sm"
+            >
+              {saving ? 'A guardar…' : 'Guardar e continuar'}
+            </button>
+          </form>
+
+          {/* Skip */}
+          <button
+            type="button"
+            onClick={handleSkip}
+            className="text-gray-500 hover:text-gray-400 text-xs text-center transition"
+          >
+            Ignorar por agora
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Ecrã de carregamento (enquanto redireciona) ───────────────────────────
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center">
       <div className="flex flex-col items-center gap-4">

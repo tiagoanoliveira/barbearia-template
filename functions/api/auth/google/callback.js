@@ -7,6 +7,9 @@ import { sanitize } from '../../../utils/validators.js'
  * Recebe o authorization code da Google, troca por tokens,
  * obtém o perfil do utilizador, cria ou actualiza o registo em `clientes`,
  * emite o nosso próprio JWT e redireciona para o destino original.
+ *
+ * Quando um cliente NOVO é criado (sem telefone), o redirect inclui
+ * needs_phone=1 para que o frontend peça o contacto antes de continuar.
  */
 export async function onRequest(context) {
   const { request, env } = context
@@ -17,12 +20,10 @@ export async function onRequest(context) {
     const state = url.searchParams.get('state')
     const error = url.searchParams.get('error')
 
-    // Utilizador cancelou ou houve erro do lado da Google
     if (error || !code) {
       return Response.redirect(`${url.origin}/login?error=google_cancelled`, 302)
     }
 
-    // Recuperar redirect a partir do state
     let redirectTo = '/perfil'
     let linkMode = false
     let linkClientId = null
@@ -72,16 +73,15 @@ export async function onRequest(context) {
     }
 
     const profile = await profileRes.json()
-    // profile: { sub, email, name, picture, email_verified }
 
     if (!profile.email) {
       return Response.redirect(`${url.origin}/login?error=google_no_email`, 302)
     }
 
-    const email     = profile.email.toLowerCase()
-    const googleId  = profile.sub
-    const nome      = sanitize(profile.name ?? email.split('@')[0], 100)
-    const fotoUrl   = profile.picture ?? null
+    const email    = profile.email.toLowerCase()
+    const googleId = profile.sub
+    const nome     = sanitize(profile.name ?? email.split('@')[0], 100)
+    const fotoUrl  = profile.picture ?? null
 
     // ── Modo LINK: associar a conta já autenticada, sem criar nova ───────────
     if (linkMode) {
@@ -125,22 +125,24 @@ export async function onRequest(context) {
       )
     }
 
-    // ── Modo LOGIN normal: comportamento anterior ───────────────────────────
+    // ── Modo LOGIN normal ───────────────────────────────────────────────────
 
     // 3. Procurar cliente existente por google_id ou email
     let client = await env.DB.prepare(
-      'SELECT id, nome, email, foto_perfil, auth_methods FROM clientes WHERE google_id = ?'
+      'SELECT id, nome, email, telefone, foto_perfil, auth_methods FROM clientes WHERE google_id = ?'
     ).bind(googleId).first()
 
     if (!client) {
       client = await env.DB.prepare(
-        'SELECT id, nome, email, foto_perfil, auth_methods FROM clientes WHERE email = ?'
+        'SELECT id, nome, email, telefone, foto_perfil, auth_methods FROM clientes WHERE email = ?'
       ).bind(email).first()
     }
 
+    let isNewClient = false
+
     if (client) {
       // 4a. Cliente já existe — actualizar google_id, foto e auth_methods
-      const methods = client.auth_methods ?? 'password'
+      const methods    = client.auth_methods ?? 'password'
       const newMethods = methods.includes('google') ? methods : `${methods},google`
 
       await env.DB.prepare(
@@ -151,28 +153,34 @@ export async function onRequest(context) {
       ).bind(googleId, fotoUrl, newMethods, client.id).run()
 
     } else {
-      // 4b. Novo cliente — criar registo
-      // password_hash vazio (ÓAuth puro) — coluna NOT NULL, usar placeholder inerte
+      // 4b. Novo cliente — criar registo (sem telefone)
       const result = await env.DB.prepare(
         `INSERT INTO clientes (nome, email, google_id, foto_perfil, auth_methods,
                                password_hash, email_verificado)
          VALUES (?, ?, ?, ?, 'google', '', 1)`
       ).bind(nome, email, googleId, fotoUrl).run()
 
-      client = { id: result.meta.last_row_id, nome, email, foto_perfil: fotoUrl }
+      client = { id: result.meta.last_row_id, nome, email, telefone: null, foto_perfil: fotoUrl }
+      isNewClient = true
     }
 
-    // 5. Emitir JWT próprio (mesmo formato do login normal)
+    // 5. Emitir JWT próprio
     const jwt = await signJWT(
       { id: client.id, email: client.email ?? email },
       env.JWT_SECRET
     )
 
-    // 6. Redirecionar para o destino com token no fragment (#)
-    //    O frontend lê o token do fragment e guarda no localStorage
-    const dest = new URL(redirectTo, url.origin)
+    // 6. Se cliente novo (sem telefone) — sinalizar ao frontend para pedir contacto
+    const needsPhone = isNewClient || !client.telefone
+
+    const params = new URLSearchParams({
+      token:    jwt,
+      redirect: redirectTo,
+    })
+    if (needsPhone) params.set('needs_phone', '1')
+
     return Response.redirect(
-      `${url.origin}/auth/callback?token=${encodeURIComponent(jwt)}&redirect=${encodeURIComponent(redirectTo)}`,
+      `${url.origin}/auth/callback?${params.toString()}`,
       302
     )
 

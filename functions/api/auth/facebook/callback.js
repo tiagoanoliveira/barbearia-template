@@ -6,6 +6,9 @@ import { sanitize } from '../../../utils/validators.js'
  * GET /api/auth/facebook/callback?code=...&state=...
  * Troca o code por access_token, obtém o perfil,
  * cria/actualiza registo em `clientes` e emite JWT próprio.
+ *
+ * Quando um cliente NOVO é criado (sem telefone), o redirect inclui
+ * needs_phone=1 para que o frontend peça o contacto antes de continuar.
  */
 export async function onRequest(context) {
   const { request, env } = context
@@ -122,18 +125,20 @@ export async function onRequest(context) {
       )
     }
 
-    // ── Modo LOGIN normal: comportamento anterior ───────────────────────────
+    // ── Modo LOGIN normal ───────────────────────────────────────────────────
 
     // 3. Procurar cliente existente por facebook_id ou email
     let client = await env.DB.prepare(
-      'SELECT id, nome, email, foto_perfil, auth_methods FROM clientes WHERE facebook_id = ?'
+      'SELECT id, nome, email, telefone, foto_perfil, auth_methods FROM clientes WHERE facebook_id = ?'
     ).bind(facebookId).first()
 
     if (!client) {
       client = await env.DB.prepare(
-        'SELECT id, nome, email, foto_perfil, auth_methods FROM clientes WHERE email = ?'
+        'SELECT id, nome, email, telefone, foto_perfil, auth_methods FROM clientes WHERE email = ?'
       ).bind(email).first()
     }
+
+    let isNewClient = false
 
     if (client) {
       const methods    = client.auth_methods ?? 'password'
@@ -145,25 +150,39 @@ export async function onRequest(context) {
                auth_methods = ?, atualizado_em = CURRENT_TIMESTAMP
          WHERE id = ?`
       ).bind(facebookId, fotoUrl, newMethods, client.id).run()
+
     } else {
+      // Novo cliente — criar registo (sem telefone)
       const result = await env.DB.prepare(
         `INSERT INTO clientes (nome, email, facebook_id, foto_perfil, auth_methods,
                                password_hash, email_verificado)
          VALUES (?, ?, ?, ?, 'facebook', '', 1)`
       ).bind(nome, email, facebookId, fotoUrl).run()
 
-      client = { id: result.meta.last_row_id, nome, email, foto_perfil: fotoUrl }
+      client = { id: result.meta.last_row_id, nome, email, telefone: null, foto_perfil: fotoUrl }
+      isNewClient = true
     }
 
+    // 4. Emitir JWT próprio
     const jwt = await signJWT(
       { id: client.id, email: client.email ?? email },
       env.JWT_SECRET
     )
 
+    // 5. Se cliente novo (sem telefone) — sinalizar ao frontend para pedir contacto
+    const needsPhone = isNewClient || !client.telefone
+
+    const params = new URLSearchParams({
+      token:    jwt,
+      redirect: redirectTo,
+    })
+    if (needsPhone) params.set('needs_phone', '1')
+
     return Response.redirect(
-      `${url.origin}/auth/callback?token=${encodeURIComponent(jwt)}&redirect=${encodeURIComponent(redirectTo)}`,
+      `${url.origin}/auth/callback?${params.toString()}`,
       302
     )
+
   } catch (e) {
     console.error('Facebook OAuth callback error:', e)
     return Response.redirect(
