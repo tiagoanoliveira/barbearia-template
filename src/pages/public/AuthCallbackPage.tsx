@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Scissors, Phone } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
 
 /**
  * Rota: /auth/callback
@@ -14,7 +13,6 @@ import { useAuth } from '@/contexts/AuthContext'
 export default function AuthCallbackPage() {
   const navigate       = useNavigate()
   const [searchParams] = useSearchParams()
-  const { refreshUser } = useAuth()
 
   const [showPhoneModal, setShowPhoneModal] = useState(false)
   const [redirectTo, setRedirectTo]         = useState('/perfil')
@@ -33,6 +31,8 @@ export default function AuthCallbackPage() {
     }
 
     localStorage.setItem('user_token', token)
+    // Notificar o Navbar imediatamente (login novo)
+    window.dispatchEvent(new Event('authchange'))
     setRedirectTo(redirect)
 
     if (needsPhone) {
@@ -70,7 +70,6 @@ export default function AuthCallbackPage() {
         return
       }
 
-      await refreshUser?.().catch(() => {})
       navigate(redirectTo, { replace: true })
     } catch {
       setPhoneError('Erro de rede. Tenta novamente.')
@@ -83,12 +82,11 @@ export default function AuthCallbackPage() {
     navigate(redirectTo, { replace: true })
   }
 
-  // ── Modal de pedido de contacto ───────────────────────────────────────────
+  // ── Modal de pedido de contacto ──────────────────────────────────────────
   if (showPhoneModal) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
         <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-2xl p-8 flex flex-col gap-6">
-          {/* Ícone */}
           <div className="flex flex-col items-center gap-3">
             <div className="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center">
               <Phone size={22} className="text-white" />
@@ -101,7 +99,6 @@ export default function AuthCallbackPage() {
             </p>
           </div>
 
-          {/* Formulário */}
           <form onSubmit={handleSavePhone} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="phone" className="text-gray-300 text-sm font-medium">
@@ -131,7 +128,6 @@ export default function AuthCallbackPage() {
             </button>
           </form>
 
-          {/* Skip */}
           <button
             type="button"
             onClick={handleSkip}

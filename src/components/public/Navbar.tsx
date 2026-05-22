@@ -72,15 +72,20 @@ const Navbar = memo(function Navbar() {
   useEffect(() => setOpen(false), [location])
 
   useEffect(() => {
+    // 'authchange'  → disparado na mesma tab (logout, login, update foto)
+    // 'storage'     → disparado por outras tabs
+    // 'focus'       → recuperar estado ao voltar à tab
     const syncAuth = () => {
       setLoggedIn(isLoggedIn())
       setPicture(getProfilePicture())
     }
-    window.addEventListener('storage', syncAuth)
-    window.addEventListener('focus', syncAuth)
+    window.addEventListener('authchange', syncAuth)
+    window.addEventListener('storage',    syncAuth)
+    window.addEventListener('focus',      syncAuth)
     return () => {
-      window.removeEventListener('storage', syncAuth)
-      window.removeEventListener('focus', syncAuth)
+      window.removeEventListener('authchange', syncAuth)
+      window.removeEventListener('storage',    syncAuth)
+      window.removeEventListener('focus',      syncAuth)
     }
   }, [])
 

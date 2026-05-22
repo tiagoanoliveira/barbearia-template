@@ -148,7 +148,7 @@ export default function ProfilePage() {
       } else {
         localStorage.removeItem('user_photo')
       }
-      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('authchange'))
     }
   }, [user])
 
@@ -210,8 +210,11 @@ export default function ProfilePage() {
   const handleLogout = () => {
     localStorage.removeItem('user_token')
     localStorage.removeItem('user_photo')
+    // Notificar todos os componentes na mesma tab (storage só dispara noutras tabs)
+    window.dispatchEvent(new Event('authchange'))
     navigate('/login')
   }
+
   const field = (key: keyof ProfileForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [key]: e.target.value }))
 
@@ -233,7 +236,7 @@ export default function ProfilePage() {
       if (data.success) {
         if (data.data?.photo_url) {
           localStorage.setItem('user_photo', data.data.photo_url)
-          window.dispatchEvent(new Event('storage'))
+          window.dispatchEvent(new Event('authchange'))
         }
         qc.invalidateQueries({ queryKey: ['me'] })
       } else {
@@ -299,19 +302,10 @@ export default function ProfilePage() {
   if (isLoading) return <div className="pt-24 flex justify-center py-20"><LoadingSpinner size="lg" /></div>
   if (!user)     return <Navigate to="/login?redirect=/perfil" replace />
 
-  // ── Lógica de fidelização ─────────────────────────────────────────────────
-  // everyN: de X em X reservas PAGAS a Nª é gratuita.
-  // Ex: everyN = 10 → a 10ª reserva paga é gratuita.
-  // O cliente paga 9 reservas normais; na 10ª apresenta o cartão.
-  // Ou seja:
-  //   - currentStamps = totalCompleted % everyN (reservas pagas no ciclo atual)
-  //   - stampsNeeded  = everyN - 1 (número de reservas pagas antes de ganhar a gratuita)
-  //   - isNextFree    = currentStamps === everyN - 1
-  //                     → após pagar (everyN-1) reservas, a próxima (everyN-ésima) é gratuita
   const { everyN } = barberShopConfig.loyalty
-  const stampsNeeded   = everyN - 1          // células pagas antes da gratuita
+  const stampsNeeded   = everyN - 1
   const totalCompleted = user.completed_reservations ?? 0
-  const currentStamps  = totalCompleted % everyN   // quantas reservas pagas no ciclo atual
+  const currentStamps  = totalCompleted % everyN
   const isNextFree     = currentStamps === stampsNeeded
   const faltam         = stampsNeeded - currentStamps
 
@@ -333,7 +327,6 @@ export default function ProfilePage() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
           </Link>
 
-          {/* Cartão de fidelização */}
           {barberShopConfig.loyalty.enabled && (
             <Card>
               <div className="flex items-center justify-between mb-3">
@@ -343,14 +336,7 @@ export default function ProfilePage() {
                 </div>
                 <span className="text-xs text-gray-500">{totalCompleted} cortes concluídos</span>
               </div>
-              {/* Descrição dinâmica baseada em everyN */}
               <p className="text-xs text-gray-500 mb-3">O {everyN}º corte é por conta da casa 🍻</p>
-
-              {/*
-                Grelha com everyN células:
-                  - células 0 … everyN-2 → reservas pagas (stamps normais)
-                  - célula  everyN-1     → a reserva gratuita (presente 🎁)
-              */}
               <div
                 className="grid gap-2 mb-3 max-w-md mx-auto"
                 style={{ gridTemplateColumns: `repeat(${Math.min(everyN, 5)}, minmax(0, 1fr))` }}
@@ -374,7 +360,6 @@ export default function ProfilePage() {
                   )
                 })}
               </div>
-
               {isNextFree
                   ? <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">O teu próximo corte será gratuito. Apresenta este ecrã no pagamento para aplicar a oferta.</p>
                   : <p className="text-xs text-gray-500">Faltam <span className="font-semibold text-gray-700">{faltam}</span> {faltam === 1 ? 'reserva' : 'reservas'} para o próximo corte grátis.</p>
@@ -382,7 +367,6 @@ export default function ProfilePage() {
             </Card>
           )}
 
-          {/* Foto de perfil */}
           <Card>
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Foto de perfil</h3>
             <div className="flex items-center gap-5">
@@ -412,7 +396,6 @@ export default function ProfilePage() {
             </div>
           </Card>
 
-          {/* Info pessoal */}
           <Card>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Informações pessoais</h3>
@@ -436,14 +419,12 @@ export default function ProfilePage() {
             </dl>
           </Card>
 
-          {/* Métodos de autenticação */}
           <Card>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Métodos de autenticação</h3>
             <p className="text-xs text-gray-500 mb-3">
               Podes associar a tua conta do Google ou Facebook. Para remover todos os métodos sociais, é obrigatório ter uma password definida.
             </p>
             <div className="space-y-2">
-              {/* Password */}
               <div className="flex items-center justify-between py-2 border-b border-gray-50">
                 <div>
                   <p className="text-sm font-medium text-gray-900">Password</p>
@@ -461,8 +442,6 @@ export default function ProfilePage() {
                     )
                 }
               </div>
-
-              {/* Google */}
               <div className="flex items-center justify-between py-2 border-b border-gray-50">
                 <div>
                   <p className="text-sm font-medium text-gray-900">Google</p>
@@ -477,8 +456,6 @@ export default function ProfilePage() {
                     </button>
                 }
               </div>
-
-              {/* Facebook */}
               <div className="flex items-center justify-between py-2">
                 <div>
                   <p className="text-sm font-medium text-gray-900">Facebook</p>
@@ -499,7 +476,6 @@ export default function ProfilePage() {
 
         </div>
 
-        {/* Modal editar perfil */}
         {editOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
               <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl">
