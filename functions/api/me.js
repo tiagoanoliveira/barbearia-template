@@ -75,16 +75,6 @@ export async function onRequest(context) {
       if (new_password) {
         if (new_password.length < 8) return badRequest('Nova password mínimo 8 caracteres')
 
-        const clientPw = await env.DB.prepare(
-            'SELECT password_hash FROM clientes WHERE id = ?'
-        ).bind(auth.clientId).first()
-
-        if (clientPw.password_hash) {
-          if (!current_password) return badRequest('Password atual é necessária')
-          const valid = await verifyPassword(current_password, clientPw.password_hash)
-          if (!valid) return badRequest('Password atual incorreta')
-        }
-
         const newHash = await hashPassword(new_password)
         await env.DB.prepare(
             'UPDATE clientes SET password_hash = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?'
@@ -92,8 +82,18 @@ export async function onRequest(context) {
       }
 
       const current = await env.DB.prepare(
-          'SELECT nome, email FROM clientes WHERE id = ?'
+          'SELECT nome, email, telefone, nif, auth_methods FROM clientes WHERE id = ?'
       ).bind(auth.clientId).first()
+
+      if (new_password) {
+        const methods = (current.auth_methods || '').split(',').map(s => s.trim()).filter(Boolean)
+        if (!methods.includes('password')) {
+          methods.push('password')
+          await env.DB.prepare(
+              'UPDATE clientes SET auth_methods = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?'
+          ).bind(methods.join(','), auth.clientId).run()
+        }
+      }
 
       const newEmail    = email ? sanitize(email, 200).toLowerCase() : current.email
       const emailChange = newEmail && newEmail !== current.email
