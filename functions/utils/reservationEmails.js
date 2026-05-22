@@ -5,7 +5,8 @@
  *   sendReservationConfirmation  – envia email de confirmação e agenda lembrete 24h antes
  *   sendReservationCancellation  – envia email de cancelamento e cancela lembrete agendado
  *   cancelScheduledReminder      – cancela um email agendado na Resend
- *   rescheduleReminder           – cancela o lembrete antigo e agenda um novo (usado em edições)
+ *   rescheduleReminder           – cancela o lembrete antigo e agenda um novo (usado em edições);
+ *                                  opcionalmente envia também email de confirmação actualizada
  *
  * Todos os erros são tratados internamente (não rebentam a request).
  * As funções que enviam emails usam context.waitUntil para não bloquear a resposta HTTP.
@@ -154,11 +155,12 @@ export function sendReservationConfirmation(context, params) {
 
   context.waitUntil(
     (async () => {
-      // 1. Email de confirmação
+      // 1. Email de confirmação (sequence=0 na criação inicial)
       try {
         const { html, attachments } = buildReservationConfirmationEmail({
           reservaId, clientName, clientEmail, dataHora, serviceName, barberName, duracao,
           comentario: comentario ?? '',
+          sequence: 0,
         })
         await sendEmail(context, {
           to:      clientEmail,
@@ -251,13 +253,36 @@ export function sendReservationCancellation(context, params) {
 }
 
 // ── 5. Reagendar lembrete (usado em edições) ──────────────────────────────────────────────────────────────
-
+/**
+ * Cancela o lembrete anterior e agenda um novo.
+ * Se sendConfirmation=true, envia também um email de confirmação actualizada
+ * com um ICS de METHOD:REQUEST e SEQUENCE=sequence para sobrescrever o evento
+ * no calendário do cliente sem criar um duplicado.
+ *
+ * @param {object} params
+ * @param {number}  params.reservaId
+ * @param {string|null} params.oldLembreteId
+ * @param {string}  params.clientEmail
+ * @param {string}  params.clientName
+ * @param {string}  params.dataHora
+ * @param {string}  params.serviceName
+ * @param {string}  params.barberName
+ * @param {number}  [params.duracao]
+ * @param {boolean} [params.sendConfirmation=false]  – se true, envia email de confirmação actualizada
+ * @param {number}  [params.sequence=1]              – SEQUENCE do ICS (nº de edições já feitas)
+ */
 export async function rescheduleReminder(context, params) {
-  const { reservaId, oldLembreteId, clientEmail, clientName, dataHora, serviceName, barberName, duracao } = params
+  const {
+    reservaId, oldLembreteId, clientEmail, clientName,
+    dataHora, serviceName, barberName, duracao,
+    sendConfirmation = false,
+    sequence = 1,
+  } = params
 
   console.log(
     `[rescheduleReminder] Reserva #${reservaId}: oldLembreteId=${JSON.stringify(oldLembreteId)},`,
-    `clientEmail=${clientEmail}, nova dataHora=${dataHora}`
+    `clientEmail=${clientEmail}, nova dataHora=${dataHora},`,
+    `sendConfirmation=${sendConfirmation}, sequence=${sequence}`
   )
 
   // Email placeholder — não agendar nem cancelar (não havia lembrete válido)
@@ -295,4 +320,23 @@ export async function rescheduleReminder(context, params) {
     `[rescheduleReminder] Reserva #${reservaId}: resend_lembrete_id actualizado para`,
     newLembreteId ?? 'NULL (menos de 24h ou erro)'
   )
+
+  // 4. Enviar email de confirmação actualizada (com ICS de actualização)
+  if (sendConfirmation) {
+    try {
+      const { html, attachments } = buildReservationConfirmationEmail({
+        reservaId, clientName, clientEmail, dataHora, serviceName, barberName, duracao,
+        sequence,
+      })
+      await sendEmail(context, {
+        to:      clientEmail,
+        subject: `Reserva #${reservaId} actualizada – ${SHOP.name}`,
+        html,
+        attachments,
+      })
+      console.log(`[rescheduleReminder] Reserva #${reservaId}: email de confirmação actualizada enviado (sequence=${sequence}).`)
+    } catch (err) {
+      console.error(`[rescheduleReminder] Reserva #${reservaId}: falha no email de confirmação actualizada:`, err?.message || err)
+    }
+  }
 }

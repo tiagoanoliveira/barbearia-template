@@ -24,7 +24,7 @@ export async function onRequest(context) {
 
   const reservation = await env.DB.prepare(
     `SELECT r.id, r.status, r.data_hora, r.comentario, r.nota_privada,
-            r.resend_lembrete_id,
+            r.resend_lembrete_id, r.historico_edicoes,
             r.cliente_id, r.barbeiro_id, r.servico_id,
             r.meio_pagamento, r.valor_pago, r.gorjeta, r.meio_gorjeta,
             r.comentario_pagamento,
@@ -73,6 +73,8 @@ export async function onRequest(context) {
         // Campos de oferta
         oferta_valor,
         oferta_tipo,
+        // Reenvio de email de confirmação
+        reenviar_confirmacao,
       } = body
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
@@ -158,6 +160,28 @@ export async function onRequest(context) {
         vals.push(oferta_tipo === null ? null : String(oferta_tipo).trim())
       }
 
+      // ── Histórico de edições ───────────────────────────────────────────────────────
+      // Registar a edição no histórico sempre que dados relevantes são alterados
+      // (data/hora, barbeiro ou serviço) — independentemente de ser admin ou cliente.
+      const changedRelevant = data_hora !== undefined || barber_id !== undefined || service_id !== undefined
+      if (changedRelevant) {
+        const historicoRaw = reservation.historico_edicoes ?? '[]'
+        let historico = []
+        try { historico = JSON.parse(historicoRaw) } catch { historico = [] }
+        if (!Array.isArray(historico)) historico = []
+
+        historico.push({
+          ts:         new Date().toISOString(),
+          by:         auth.user?.role ?? 'admin',
+          data_hora:  data_hora   ?? null,
+          barbeiro_id: barber_id  ?? null,
+          servico_id:  service_id ?? null,
+        })
+
+        updates.push('historico_edicoes = ?')
+        vals.push(JSON.stringify(historico))
+      }
+
       if (!updates.length) return badRequest('Nada para actualizar')
 
       updates.push('atualizado_em = CURRENT_TIMESTAMP')
@@ -190,9 +214,10 @@ export async function onRequest(context) {
         }
       }
 
-      // 2. Alteração de data/hora, barbeiro ou serviço: reagendar lembrete
-      const changedRelevant = data_hora !== undefined || barber_id !== undefined || service_id !== undefined
-      const notCancelled    = status !== 'cancelada'
+      // 2. Alteração de data/hora, barbeiro ou serviço:
+      //    - reagendar lembrete SEMPRE
+      //    - enviar email de confirmação actualizada SE reenviar_confirmacao=true
+      const notCancelled = status !== 'cancelada'
 
       if (changedRelevant && notCancelled && reservation.cliente_email) {
         let newBarberName  = reservation.barbeiro_nome
@@ -209,22 +234,35 @@ export async function onRequest(context) {
           if (s) { newServiceName = s.nome; newDuration = s.duracao ?? newDuration }
         }
 
+        // Calcular SEQUENCE com base no histórico atualizado
+        // (já inclui a edição que acabámos de registar)
+        const historicoFinal = (() => {
+          try {
+            const h = JSON.parse(reservation.historico_edicoes ?? '[]')
+            return Array.isArray(h) ? h : []
+          } catch { return [] }
+        })()
+        // +1 porque a entrada actual já foi adicionada ao array antes do UPDATE
+        const sequence = historicoFinal.length + 1
+
         console.log(
           `[admin/reservations/[id] PATCH] Reserva #${id} — dados relevantes alterados.`,
           `oldLembreteId: ${reservation.resend_lembrete_id ?? '(nenhum)'},`,
-          `nova data: ${newDataHora}`
+          `nova data: ${newDataHora}, sendConfirmation: ${!!reenviar_confirmacao}, sequence: ${sequence}`
         )
 
         context.waitUntil(
           rescheduleReminder(context, {
-            reservaId:     reservation.id,
-            oldLembreteId: reservation.resend_lembrete_id ?? null,
-            clientEmail:   reservation.cliente_email,
-            clientName:    reservation.cliente_nome,
-            dataHora:      newDataHora,
-            serviceName:   newServiceName,
-            barberName:    newBarberName,
-            duracao:       newDuration,
+            reservaId:        reservation.id,
+            oldLembreteId:    reservation.resend_lembrete_id ?? null,
+            clientEmail:      reservation.cliente_email,
+            clientName:       reservation.cliente_nome,
+            dataHora:         newDataHora,
+            serviceName:      newServiceName,
+            barberName:       newBarberName,
+            duracao:          newDuration,
+            sendConfirmation: !!reenviar_confirmacao,
+            sequence,
           })
         )
       }

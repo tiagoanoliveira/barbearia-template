@@ -187,7 +187,13 @@ function icsParams(dataHora, duracao) {
   return { dtStart, dtEnd }
 }
 
-function icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName) {
+/**
+ * Gera um ICS de confirmação (METHOD:REQUEST).
+ * sequence — número de edições já registadas, usado para sobrescrever o evento
+ *            no calendário do cliente sem criar um duplicado.
+ *            0 = criação inicial; N>0 = actualização.
+ */
+function icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName, sequence = 0) {
   return [
     'BEGIN:VCALENDAR', 'VERSION:2.0',
     `PRODID:-//${SHOP.name}//Reservas//PT`,
@@ -203,7 +209,7 @@ function icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barbe
     `LOCATION:${SHOP.name} \u2013 ${SHOP.address}`,
     `ORGANIZER;CN=${SHOP.name}:mailto:${SHOP.email}`,
     `ATTENDEE:mailto:${clientEmail}`,
-    'STATUS:CONFIRMED', 'SEQUENCE:0',
+    'STATUS:CONFIRMED', `SEQUENCE:${sequence}`,
     'END:VEVENT', 'END:VCALENDAR',
   ].join('\r\n')
 }
@@ -287,7 +293,7 @@ export async function retrieveEmail(context, emailId) {
 
 // ─── 1. Confirmação de reserva ───────────────────────────────────────────────────────────────
 export function buildReservationConfirmationEmail({ reservaId, clientName, clientEmail,
-  dataHora, serviceName, barberName, duracao, comentario }) {
+  dataHora, serviceName, barberName, duracao, comentario, sequence = 0 }) {
 
   const dt   = new Date(dataHora)
   const data = dt.toLocaleDateString('pt-PT', { day:'2-digit', month:'2-digit', year:'numeric' })
@@ -296,9 +302,16 @@ export function buildReservationConfirmationEmail({ reservaId, clientName, clien
 
   const notasHtml = comentario ? detailRow('&#128172;', 'Notas:', `<br>${comentario}`) : ''
 
-  const html = shell('header-green', 'Reserva Confirmada!', `
+  // Para atualizações (sequence > 0) usa título diferente no email
+  const isUpdate    = sequence > 0
+  const headerTitle = isUpdate ? 'Reserva Actualizada &#128197;' : 'Reserva Confirmada!'
+  const introText   = isUpdate
+    ? 'A sua reserva foi <strong>actualizada</strong>. Aqui estão os novos detalhes:'
+    : 'A sua reserva foi confirmada com sucesso. Aqui estão os detalhes:'
+
+  const html = shell('header-green', headerTitle, `
     <p>Olá ${clientName},</p>
-    <p>A sua reserva foi confirmada com sucesso. Aqui estão os detalhes:</p>
+    <p>${introText}</p>
     <div class="info-box border-green">
       <h3>Detalhes da Reserva</h3>
       ${detailRow('&#128197;', 'Data:', data)}
@@ -317,7 +330,7 @@ export function buildReservationConfirmationEmail({ reservaId, clientName, clien
     </div>
   `)
 
-  const ics = icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName)
+  const ics = icsConfirmed(reservaId, clientEmail, dtStart, dtEnd, serviceName, barberName, sequence)
   return { html, attachments: [{ filename: 'reserva.ics', content: toBase64(ics), type: 'text/calendar' }] }
 }
 
