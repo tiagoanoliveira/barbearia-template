@@ -168,9 +168,15 @@ export default function ProfilePage() {
   const hasPassword = methods.includes('password')
   const hasSocial   = hasGoogle || hasFacebook
 
+  // DEPOIS
   const updateProfile = useMutation({
     mutationFn: (data: Partial<ProfileForm>) => api.put('/api/me', data),
     onSuccess: (res: any) => {
+      if (!res?.success) {
+        setFormError(res?.error ?? 'Erro ao guardar.')
+        return
+      }
+
       qc.invalidateQueries({ queryKey: ['me'] })
       setEditOpen(false)
       setFormError(null)
@@ -185,11 +191,25 @@ export default function ProfilePage() {
         })
       }
     },
-    onError:   (e: any) => setFormError(e?.message ?? 'Erro ao guardar.'),
+    onError: (e: any) => setFormError(e?.message ?? 'Erro ao guardar.'),
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError(null)
+
+    if (!form.name.trim()) {
+      setFormError('O nome não pode estar vazio.')
+      return
+    }
+    if (!form.phone.trim()) {
+      setFormError('O número de telemóvel não pode ser removido.')
+      return
+    }
+    if (!form.email.trim()) {
+      setFormError('O email não pode estar vazio.')
+      return
+    }
     if (form.new_password && form.new_password !== form.new_password_confirm) {
       setFormError('As passwords não coincidem.')
       return

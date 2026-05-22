@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { Eye, EyeOff, LogIn, AlertTriangle } from 'lucide-react'
+import { Eye, EyeOff, LogIn, AlertTriangle, Phone } from 'lucide-react'
 import { api } from '@/api/client'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { barberShopConfig } from '@/config/theme'
@@ -72,6 +72,12 @@ export default function PublicLoginPage() {
   const [phoneExistModal, setPhoneExistModal] = useState(false)
   const [pendingEmail, setPendingEmail] = useState('')
   const [pendingPhone, setPendingPhone] = useState('')
+
+  // Modal de telefone obrigatório (após login sem telefone)
+  const [showPhoneModal, setShowPhoneModal] = useState(false)
+  const [phoneModalValue, setPhoneModalValue] = useState('')
+  const [phoneModalError, setPhoneModalError] = useState('')
+  const [phoneModalSaving, setPhoneModalSaving] = useState(false)
 
   // Estado para aviso de telefone sem email (criado pelo admin)
   const [phoneNoEmailWarning, setPhoneNoEmailWarning] = useState<{ phone: string; supportUrl: string } | null>(null)
@@ -150,6 +156,10 @@ export default function PublicLoginPage() {
     if (mode === 'login') {
       localStorage.setItem('user_token', res.data.token)
       window.dispatchEvent(new Event('authchange'))
+      if ((res.data as any).phone_required) {
+        setShowPhoneModal(true)
+        return
+      }
       navigate(redirectTo)
       return
     }
@@ -172,6 +182,72 @@ export default function PublicLoginPage() {
     } else {
       setError(res.error ?? 'Erro ao processar pedido.')
     }
+  }
+
+  async function handleSavePhone(e: React.FormEvent) {
+    e.preventDefault()
+    setPhoneModalError('')
+    const cleaned = phoneModalValue.replace(/\s/g, '')
+    if (!cleaned || cleaned.length < 9) {
+      setPhoneModalError('Insere um número de telemóvel válido (mínimo 9 dígitos).')
+      return
+    }
+    setPhoneModalSaving(true)
+    const res = await api.put('/api/me', { phone: cleaned })
+    setPhoneModalSaving(false)
+    if (!res.success) {
+      setPhoneModalError((res as any).error ?? 'Erro ao guardar o contacto.')
+      return
+    }
+    navigate(redirectTo)
+  }
+
+  if (showPhoneModal) {
+    return (
+        <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-2xl p-8 flex flex-col gap-6">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-12 h-12 bg-brand-500 rounded-2xl flex items-center justify-center">
+                <Phone size={22} className="text-white" />
+              </div>
+              <h1 className="text-white text-xl font-semibold text-center">
+                Falta só o teu contacto
+              </h1>
+              <p className="text-gray-400 text-sm text-center">
+                Para poderes fazer reservas precisamos do teu número de telemóvel.
+              </p>
+            </div>
+            <form onSubmit={handleSavePhone} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="phone-modal" className="text-gray-300 text-sm font-medium">
+                  Telemóvel <span className="text-brand-400">*</span>
+                </label>
+                <input
+                    id="phone-modal"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="912 345 678"
+                    value={phoneModalValue}
+                    onChange={e => { setPhoneModalValue(e.target.value); setPhoneModalError('') }}
+                    autoFocus
+                    required
+                    className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition"
+                />
+                {phoneModalError && (
+                    <p className="text-red-400 text-xs mt-0.5">{phoneModalError}</p>
+                )}
+              </div>
+              <button
+                  type="submit"
+                  disabled={phoneModalSaving}
+                  className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition text-sm"
+              >
+                {phoneModalSaving ? 'A guardar…' : 'Guardar e continuar'}
+              </button>
+            </form>
+          </div>
+        </div>
+    )
   }
 
   return (
