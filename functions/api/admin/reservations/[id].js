@@ -53,27 +53,7 @@ export async function onRequest(context) {
 
   if (request.method === 'PATCH') {
     try {
-      // ── [DEBUG] Log do body raw ────────────────────────────────────────────────
-      let rawBody
-      try {
-        rawBody = await request.text()
-        console.log(`[DEBUG][reservations/${id}] Body raw recebido:`, rawBody)
-      } catch (e) {
-        console.error(`[DEBUG][reservations/${id}] Erro ao ler body:`, e?.message)
-        return serverError('Erro ao ler corpo do pedido')
-      }
-
-      let body
-      try {
-        body = JSON.parse(rawBody)
-      } catch (e) {
-        console.error(`[DEBUG][reservations/${id}] Body não é JSON válido:`, rawBody)
-        return badRequest('Body inválido — JSON esperado')
-      }
-
-      console.log(`[DEBUG][reservations/${id}] Body parsed:`, JSON.stringify(body))
-      console.log(`[DEBUG][reservations/${id}] Chaves recebidas:`, Object.keys(body).join(', '))
-
+      const body = await request.json()
       const {
         status,
         notes,
@@ -97,12 +77,8 @@ export async function onRequest(context) {
         reenviar_confirmacao,
       } = body
 
-      console.log(`[DEBUG][reservations/${id}] send_email=${JSON.stringify(send_email)}, reenviar_confirmacao=${JSON.stringify(reenviar_confirmacao)}`)
-      console.log(`[DEBUG][reservations/${id}] data_hora=${JSON.stringify(data_hora)}, barber_id=${JSON.stringify(barber_id)}, service_id=${JSON.stringify(service_id)}`)
-      console.log(`[DEBUG][reservations/${id}] cliente_email na BD: ${reservation.cliente_email ?? '(null/vazio)'}`)
-
+      // Normalizar: qualquer dos dois campos activa o reenvio
       const deveReenviarConfirmacao = !!(send_email || reenviar_confirmacao)
-      console.log(`[DEBUG][reservations/${id}] deveReenviarConfirmacao=${deveReenviarConfirmacao}`)
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
       if (barber_id   !== undefined && !isValidId(barber_id))   return badRequest('ID de barbeiro inválido')
@@ -179,9 +155,8 @@ export async function onRequest(context) {
         vals.push(oferta_tipo === null ? null : String(oferta_tipo).trim())
       }
 
+      // ── Histórico de edições ───────────────────────────────────────────────────────
       const changedRelevant = data_hora !== undefined || barber_id !== undefined || service_id !== undefined
-      console.log(`[DEBUG][reservations/${id}] changedRelevant=${changedRelevant}, updates antes de histórico:`, updates.join(', '))
-
       if (changedRelevant) {
         const historicoRaw = reservation.historico_edicoes ?? '[]'
         let historico = []
@@ -189,32 +164,28 @@ export async function onRequest(context) {
         if (!Array.isArray(historico)) historico = []
 
         historico.push({
-          ts:         new Date().toISOString(),
-          by:         auth.user?.role ?? 'admin',
-          data_hora:  data_hora   ?? null,
-          barbeiro_id: barber_id  ?? null,
-          servico_id:  service_id ?? null,
+          ts:          new Date().toISOString(),
+          by:          auth.user?.role ?? 'admin',
+          data_hora:   data_hora    ?? null,
+          barbeiro_id: barber_id   ?? null,
+          servico_id:  service_id  ?? null,
         })
 
         updates.push('historico_edicoes = ?')
         vals.push(JSON.stringify(historico))
       }
 
-      if (!updates.length) {
-        console.log(`[DEBUG][reservations/${id}] Nenhum update — a devolver badRequest`)
-        return badRequest('Nada para actualizar')
-      }
+      if (!updates.length) return badRequest('Nada para actualizar')
 
       updates.push('atualizado_em = CURRENT_TIMESTAMP')
 
-      console.log(`[DEBUG][reservations/${id}] A executar UPDATE com ${updates.length} campos`)
       await env.DB.prepare(
         `UPDATE reservas SET ${updates.join(', ')} WHERE id = ?`
       ).bind(...vals, id).run()
-      console.log(`[DEBUG][reservations/${id}] UPDATE concluído`)
 
-      // ── Pós-update ────────────────────────────────────────────────────────────
+      // ── Acções pós-update ────────────────────────────────────────────────
 
+      // 1. Cancelamento → cancelar lembrete agendado
       if (status === 'cancelada') {
         const lembreteId = reservation.resend_lembrete_id ?? null
         if (lembreteId) {
@@ -226,17 +197,15 @@ export async function onRequest(context) {
         }
       }
 
+      // 2. Alteração relevante → reagendar lembrete (+ confirmação se pedido)
+      // 3. Só reenvio de confirmação → enviar email directamente
       const notCancelled = status !== 'cancelada'
-      console.log(`[DEBUG][reservations/${id}] notCancelled=${notCancelled}, cliente_email=${reservation.cliente_email ?? '(null)'}, changedRelevant=${changedRelevant}, deveReenviarConfirmacao=${deveReenviarConfirmacao}`)
-      console.log(`[DEBUG][reservations/${id}] Condição de envio de email: ${notCancelled && !!reservation.cliente_email && (changedRelevant || deveReenviarConfirmacao)}`)
 
       if (notCancelled && reservation.cliente_email && (changedRelevant || deveReenviarConfirmacao)) {
         let newBarberName  = reservation.barbeiro_nome
         let newServiceName = reservation.servico_nome
         let newDuration    = reservation.service_duration
         let newDataHora    = data_hora ?? reservation.data_hora
-
-        console.log(`[DEBUG][reservations/${id}] Dados para email: barber=${newBarberName}, service=${newServiceName}, dataHora=${newDataHora}, duracao=${newDuration}`)
 
         if (barber_id !== undefined) {
           const b = await env.DB.prepare('SELECT nome FROM barbeiros WHERE id = ?').bind(barber_id).first()
@@ -255,10 +224,7 @@ export async function onRequest(context) {
         })()
         const sequence = historicoFinal.length + 1
 
-        console.log(`[DEBUG][reservations/${id}] sequence=${sequence}, changedRelevant=${changedRelevant}, deveReenviarConfirmacao=${deveReenviarConfirmacao}`)
-
         if (changedRelevant) {
-          console.log(`[DEBUG][reservations/${id}] A chamar rescheduleReminder (sendConfirmation=${deveReenviarConfirmacao})…`)
           context.waitUntil(
             rescheduleReminder(context, {
               reservaId:        reservation.id,
@@ -274,12 +240,9 @@ export async function onRequest(context) {
             })
           )
         } else {
-          // Só reenvio de confirmação sem alterar lembrete
-          console.log(`[DEBUG][reservations/${id}] A enviar email de confirmação directo (sem reschedule)…`)
           context.waitUntil(
             (async () => {
               try {
-                console.log(`[DEBUG][reservations/${id}] buildReservationConfirmationEmail com:`, { reservaId: reservation.id, clientName: reservation.cliente_nome, clientEmail: reservation.cliente_email, dataHora: newDataHora, serviceName: newServiceName, barberName: newBarberName, duracao: newDuration, sequence })
                 const { html, attachments } = buildReservationConfirmationEmail({
                   reservaId:   reservation.id,
                   clientName:  reservation.cliente_nome,
@@ -290,27 +253,23 @@ export async function onRequest(context) {
                   duracao:     newDuration,
                   sequence,
                 })
-                console.log(`[DEBUG][reservations/${id}] HTML gerado (${html?.length ?? 0} chars), attachments: ${attachments?.length ?? 0}`)
                 await sendEmail(context, {
                   to:          reservation.cliente_email,
                   subject:     `Reserva #${reservation.id} actualizada – ${SHOP.name}`,
                   html,
                   attachments,
                 })
-                console.log(`[DEBUG][reservations/${id}] sendEmail concluído com sucesso (sequence=${sequence})`)
               } catch (err) {
-                console.error(`[DEBUG][reservations/${id}] ERRO no sendEmail:`, err?.message || err, err?.stack)
+                console.error(`[reservations/${id}] Erro no reenvio de confirmação:`, err?.message || err)
               }
             })()
           )
         }
-      } else {
-        console.log(`[DEBUG][reservations/${id}] Email NÃO enviado. Razão: notCancelled=${notCancelled}, cliente_email=${reservation.cliente_email ?? '(null)'}, changedRelevant=${changedRelevant}, deveReenviarConfirmacao=${deveReenviarConfirmacao}`)
       }
 
       return ok({ message: 'Reserva actualizada' })
     } catch (e) {
-      console.error(`[reservations/${id}] Erro inesperado no PATCH:`, e?.message, e?.stack)
+      console.error(`[reservations/${id}] Erro inesperado no PATCH:`, e?.message)
       return serverError('Erro ao actualizar reserva', e.message)
     }
   }
