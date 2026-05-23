@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Scissors, Sparkles, Users, Plus, Pencil, Trash2, Eye, EyeOff, Check, X, Upload, Link as LinkIcon } from 'lucide-react'
+import { Scissors, Sparkles, Users, Plus, Pencil, Trash2, Eye, EyeOff, Check, X, Upload, Link as LinkIcon, ShoppingBag } from 'lucide-react'
 import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -12,11 +12,16 @@ interface AdminUser {
   criado_em: string; ultimo_login: string | null
 }
 
+interface Brand {
+  id: number; name: string; logo_url: string | null; website_url: string | null; ordem: number
+}
+
 export default function ConfiguracaoPage() {
   return (
       <div className="space-y-8">
         <ServicosSection />
         <BarbeirosSection />
+        <MarcasSection />
         <AdminUsersSection />
       </div>
   )
@@ -46,7 +51,7 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
   )
 }
 
-// ─── Upload de foto via proxy R2 ──────────────────────────────────────────────
+// ─── Upload de foto via proxy R2 ───────────────────────────────────────────────────
 async function uploadToR2(file: File, folder: string): Promise<string> {
   const ext = file.name.split('.').pop() ?? 'jpg'
   const key = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
@@ -55,7 +60,6 @@ async function uploadToR2(file: File, folder: string): Promise<string> {
   formData.append('file', file)
   formData.append('key', key)
 
-  // Chama o proxy com o token de admin no header Authorization
   const token = localStorage.getItem('admin_token') ?? ''
   const res = await fetch('/api/admin/upload-proxy', {
     method: 'POST',
@@ -118,7 +122,7 @@ function PhotoUploader({ value, onChange, folder }: { value: string; onChange: (
       )}
       {value && (
         <div className="flex items-center gap-2">
-          <img src={value} alt="preview" className="w-12 h-12 rounded-lg object-cover border border-gray-200" />
+          <img src={value} alt="preview" className="h-10 w-auto max-w-[120px] rounded-lg object-contain border border-gray-200 bg-gray-50 p-1" />
           <button type="button" onClick={() => onChange('')} className="text-xs text-red-400 hover:text-red-600">Remover foto</button>
         </div>
       )}
@@ -126,7 +130,7 @@ function PhotoUploader({ value, onChange, folder }: { value: string; onChange: (
   )
 }
 
-// ─── SERVIÇOS (preços guardados e exibidos directamente em euros) ─────────────
+// ─── SERVIÇOS (preços guardados e exibidos directamente em euros) ─────────────────
 interface ServiceForm { id?: number; name: string; duration: string; price: string; abreviacao: string; color: string }
 const emptyService = (): ServiceForm => ({ name: '', duration: '30', price: '0', abreviacao: '', color: '#0f7e44' })
 
@@ -247,7 +251,7 @@ function ServicosSection() {
   )
 }
 
-// ─── BARBEIROS ────────────────────────────────────────────────────────────────
+// ─── BARBEIROS ─────────────────────────────────────────────────────────────
 interface BarberForm { id?: number; name: string; especialidades: string; color: string; photo_url: string; active: number }
 const emptyBarber = (): BarberForm => ({ name: '', especialidades: '', color: '#d4a017', photo_url: '', active: 1 })
 
@@ -350,7 +354,7 @@ function BarbeirosSection() {
             </div>
             <div className="col-span-2">
               <label className="block text-xs text-gray-500 mb-1">Especialidades</label>
-              <input className="input text-sm w-full" placeholder="Ex.: Corte, Barba, Degradê" value={form.especialidades} onChange={e => setForm(f => f && ({ ...f, especialidades: e.target.value }))} />
+              <input className="input text-sm w-full" placeholder="Ex.: Corte, Barba, Degraê" value={form.especialidades} onChange={e => setForm(f => f && ({ ...f, especialidades: e.target.value }))} />
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Cor no calendário</label>
@@ -372,6 +376,153 @@ function BarbeirosSection() {
           <div className="flex gap-2">
             <button onClick={() => setForm(null)} className="btn-secondary text-xs">Cancelar</button>
             <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">{saving ? 'A guardar...' : 'Guardar'}</button>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ─── MARCAS PARCEIRAS ───────────────────────────────────────────────────────────
+interface BrandForm { id?: number; name: string; logo_url: string; website_url: string; ordem: string }
+const emptyBrand = (): BrandForm => ({ name: '', logo_url: '', website_url: '', ordem: '0' })
+
+function MarcasSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-brands'],
+    queryFn: () => adminApi.get<Brand[]>('/api/admin/brands'),
+  })
+  const brands: Brand[] = (data?.data as unknown as Brand[]) ?? []
+
+  const [form, setForm]         = useState<BrandForm | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [saving, setSaving]     = useState(false)
+  const [err, setErr]           = useState<string | null>(null)
+
+  const openNew  = () => { setForm(emptyBrand()); setErr(null) }
+  const openEdit = (b: Brand) => {
+    setForm({ id: b.id, name: b.name, logo_url: b.logo_url ?? '', website_url: b.website_url ?? '', ordem: String(b.ordem) })
+    setErr(null)
+  }
+  const save = async () => {
+    if (!form) return
+    if (!form.name.trim()) { setErr('Nome é obrigatório'); return }
+    setSaving(true); setErr(null)
+    try {
+      const body = { name: form.name.trim(), logo_url: form.logo_url || null, website_url: form.website_url || null, ordem: parseInt(form.ordem) || 0 }
+      if (form.id) await adminApi.put(`/api/admin/brands/${form.id}`, body)
+      else         await adminApi.post('/api/admin/brands', body)
+      qc.invalidateQueries({ queryKey: ['admin-brands'] })
+      qc.invalidateQueries({ queryKey: ['public-brands'] })
+      setForm(null)
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
+    finally { setSaving(false) }
+  }
+  const del = async (id: number) => {
+    try {
+      await adminApi.delete(`/api/admin/brands/${id}`)
+      qc.invalidateQueries({ queryKey: ['admin-brands'] })
+      qc.invalidateQueries({ queryKey: ['public-brands'] })
+    } catch {}
+    setDeleteId(null)
+  }
+
+  return (
+    <Card>
+      <SectionHeader
+        icon={ShoppingBag}
+        title="Marcas Parceiras"
+        subtitle="Logos exibidos no carrossel da homepage entre a secção Sobre e os Serviços"
+      />
+      {isLoading ? <LoadingSpinner size="sm" /> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs text-gray-500">
+                <th className="text-left py-2 pr-3 font-medium">Logo</th>
+                <th className="text-left py-2 pr-3 font-medium">Nome</th>
+                <th className="text-left py-2 pr-3 font-medium">Website</th>
+                <th className="text-left py-2 font-medium">Ordem</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {brands.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-gray-400 text-sm">
+                    Nenhuma marca adicionada ainda.
+                  </td>
+                </tr>
+              )}
+              {brands.map(b => (
+                <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="py-2.5 pr-3">
+                    {b.logo_url
+                      ? <img src={b.logo_url} alt={b.name} className="h-8 w-auto max-w-[80px] object-contain bg-gray-50 rounded border border-gray-100 p-0.5" />
+                      : <span className="text-gray-300 text-xs italic">sem logo</span>
+                    }
+                  </td>
+                  <td className="py-2.5 pr-3 font-medium">{b.name}</td>
+                  <td className="py-2.5 pr-3 text-gray-500 text-xs max-w-[160px] truncate">
+                    {b.website_url
+                      ? <a href={b.website_url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">{b.website_url}</a>
+                      : '—'
+                    }
+                  </td>
+                  <td className="py-2.5 text-gray-500">{b.ordem}</td>
+                  <td className="py-2.5 pl-3 whitespace-nowrap">
+                    {deleteId === b.id
+                      ? <ConfirmDelete onConfirm={() => del(b.id)} onCancel={() => setDeleteId(null)} />
+                      : <span className="flex items-center gap-1">
+                          <button onClick={() => openEdit(b)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil size={14} /></button>
+                          <button onClick={() => setDeleteId(b.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                        </span>
+                    }
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button onClick={openNew} className="mt-4 flex items-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium">
+            <Plus size={16} /> Adicionar marca
+          </button>
+        </div>
+      )}
+      {form && (
+        <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar marca' : 'Nova marca'}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-gray-500 mb-1">Nome *</label>
+              <input className="input text-sm w-full" placeholder="Ex: Babyliss, Wahl, Andis"
+                value={form.name} onChange={e => setForm(f => f && ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-gray-500 mb-1">Website (opcional)</label>
+              <input type="url" className="input text-sm w-full" placeholder="https://..."
+                value={form.website_url} onChange={e => setForm(f => f && ({ ...f, website_url: e.target.value }))} />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-gray-500 mb-1">Ordem (menor = primeiro)</label>
+              <input type="number" min={0} className="input text-sm w-full"
+                value={form.ordem} onChange={e => setForm(f => f && ({ ...f, ordem: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">Logo da marca</label>
+              <PhotoUploader
+                value={form.logo_url}
+                onChange={url => setForm(f => f && ({ ...f, logo_url: url }))}
+                folder="marcas"
+              />
+            </div>
+          </div>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => setForm(null)} className="btn-secondary text-xs">Cancelar</button>
+            <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">
+              {saving ? 'A guardar...' : 'Guardar'}
+            </button>
           </div>
         </div>
       )}

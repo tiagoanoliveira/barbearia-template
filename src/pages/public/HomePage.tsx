@@ -5,11 +5,12 @@ import { MapPin, Clock, Phone, ChevronDown, ArrowRight, ChevronLeft, ChevronRigh
 import { api } from '@/api/client'
 import { barberShopConfig, groupWorkingHours } from '@/config/theme'
 import { ROUTES } from '@/config/routes'
+import BrandsCarousel from '@/components/ui/BrandsCarousel'
 import type { Service, Barber } from '@/types'
 
 const { heroVideo, aboutImage, gallery: galleryImages } = barberShopConfig.media
 
-// ── Galeria: grelha em desktop, slideshow em mobile ──────────────────────
+// ── Galeria: grelha em desktop, slideshow em mobile ────────────────────────────────────
 function Gallery() {
   const [current, setCurrent] = useState(0)
   const count = galleryImages.length
@@ -64,7 +65,7 @@ function Gallery() {
   )
 }
 
-// ── Card de serviço com hover "Reservar" ─────────────────────────────────
+// ── Card de serviço com hover “Reservar” ─────────────────────────────────────────
 function ServiceCard({ service }: { service: Service }) {
   const navigate = useNavigate()
   const goBook = () => navigate(`${ROUTES.BOOKING}?service_id=${service.id}`)
@@ -77,7 +78,7 @@ function ServiceCard({ service }: { service: Service }) {
                  hover:border-primary-300 hover:bg-primary-50/40 transition-all duration-300
                  hover:-translate-y-1 cursor-pointer overflow-hidden"
     >
-      {/* Overlay "Reservar" ao hover */}
+      {/* Overlay “Reservar” ao hover */}
       <div className="absolute inset-0 bg-primary-600/90 rounded-2xl flex items-center justify-end
                       opacity-0 group-hover:opacity-100 transition-opacity duration-250">
         <span className="flex items-center gap-2 text-primary-600 font-bold text-lg px-4">
@@ -119,7 +120,7 @@ export default function HomePage() {
   return (
     <div>
 
-      {/* ── HERO ────────────────────────────────────────────────────────── */}
+      {/* ── HERO ────────────────────────────────────────────────────────────────── */}
       <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-black">
         <div aria-hidden="true" className="hidden md:flex absolute inset-0 w-full h-full">
           <div className="flex-1 overflow-hidden">
@@ -154,7 +155,7 @@ export default function HomePage() {
         </a>
       </section>
 
-      {/* ── SOBRE ───────────────────────────────────────────── */}
+      {/* ── SOBRE ────────────────────────────────────────── */}
       <section id="about" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
@@ -198,7 +199,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── SERVIÇOS ────────────────────────────────────── */}
+      {/* ── MARCAS (carrossel) ──────────────────────────────────── */}
+      <BrandsCarousel />
+
+      {/* ── SERVIÇOS ────────────────────────────────────────── */}
       <section id="servicos" className={`py-12 ${barberShopConfig.theme.sectionLight}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-8">
@@ -210,7 +214,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── EQUIPA — só visível com mais de 1 barbeiro ─────────────── */}
+      {/* ── EQUIPA — só visível com mais de 1 barbeiro ─────────────────────── */}
       {showTeamSection && (
         <section id="equipa" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
@@ -236,7 +240,7 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* ── GALERIA ────────────────────────────────────── */}
+      {/* ── GALERIA ────────────────────────────────────────── */}
       <section id="galeria" className={`py-12 ${barberShopConfig.theme.sectionLight}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-8">
@@ -247,7 +251,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── CONTACTO ─────────────────────────────────────── */}
+      {/* ── CONTACTO ──────────────────────────────────────────── */}
       <section id="contacto" className={`py-12 ${barberShopConfig.theme.sectionDark}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
