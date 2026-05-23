@@ -58,7 +58,7 @@ export default {
         },
         'brands-scroll': {
           '0%':   { transform: 'translateX(0)' },
-          '100%': { transform: 'translateX(-12.5%)' },
+          '100%': { transform: 'translateX(-100%)' },
         },
       },
       animation: {
