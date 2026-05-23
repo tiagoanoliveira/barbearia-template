@@ -81,7 +81,7 @@ function BrandItem({ brand }: { brand: Brand }) {
         <img
           src={brand.logo_url}
           alt={brand.name}
-          className="h-14 w-auto max-w-[50px] object-contain"
+          className="h-14 w-auto max-w-[100px] object-contain"
           loading="lazy"
         />
       ) : (
