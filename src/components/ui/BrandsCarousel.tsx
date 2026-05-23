@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
 
 interface Brand {
@@ -8,9 +9,10 @@ interface Brand {
   website_url: string | null
 }
 
-// Quantas cópias do array garantem que o conteúdo é sempre maior que qualquer ecrã.
-// Com poucas marcas (ex: 3) precisamos de mais repetições.
-const MIN_COPIES = 8
+// Velocidade: píxeis por segundo
+const SPEED_PX_PER_SEC = 60
+// Espaçamento horizontal entre cada logo (px)
+const ITEM_GAP = 64
 
 export default function BrandsCarousel() {
   const { data } = useQuery({
@@ -22,11 +24,47 @@ export default function BrandsCarousel() {
   const brands: Brand[] = data?.data ?? []
   if (brands.length === 0) return null
 
-  // Garante sempre pelo menos MIN_COPIES repetições, mesmo com 1-2 marcas
-  const copies = Math.ceil(MIN_COPIES / brands.length)
-  // "Uma faixa" = brands * copies. Usamos DUAS faixas idênticas lado a lado.
-  // A animação move -100% da primeira faixa, ficando invisível o "salto".
-  const track = Array.from({ length: copies }, () => brands).flat()
+  return <Marquee brands={brands} />
+}
+
+// Componente separado para poder usar hooks após o early return
+function Marquee({ brands }: { brands: Brand[] }) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [trackWidth, setTrackWidth] = useState<number | null>(null)
+
+  // Mede a largura real de UMA faixa após render
+  useEffect(() => {
+    if (!trackRef.current) return
+    const measure = () => setTrackWidth(trackRef.current!.scrollWidth)
+    measure()
+    // Re-mede se o viewport mudar (logos redimensionados)
+    const ro = new ResizeObserver(measure)
+    ro.observe(trackRef.current)
+    return () => ro.disconnect()
+  }, [brands])
+
+  // Duração da animação em segundos, proporcional à largura real
+  const duration = trackWidth ? trackWidth / SPEED_PX_PER_SEC : 0
+
+  /*
+    Estrutura:
+      <overflow:hidden>
+        <wrapper style="translateX(animation)">   ← move -trackWidth px e volta a 0
+          <track ref>  (cópia A — medida)
+          <track>      (cópia B — idêntica, colada a A)
+        </wrapper>
+      </overflow:hidden>
+
+    O gap entre o último item de A e o primeiro de B é garantido por
+    "paddingLeft" em cada item (metade do gap de cada lado), de forma que
+    qualquer par de items adjacentes — dentro de A, dentro de B, ou na
+    junção A→B — tem sempre exactamente ITEM_GAP px entre si.
+
+    Quando o wrapper chega a -trackWidth px, a cópia B está exactamente
+    onde A estava no início. A animação salta invisívelmente de volta a 0.
+  */
+
+  const trackItems = brands
 
   return (
     <section className="py-4 bg-white border-y border-gray-100 overflow-hidden">
@@ -37,51 +75,64 @@ export default function BrandsCarousel() {
         <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-24 z-10
                         bg-gradient-to-l from-white to-transparent" />
 
-        {/*
-          Estrutura:  [ wrapper ]
-                        [ track-1 ] [ track-2 ]
-          - wrapper: flex, nowrap, width: max-content (envolve as duas faixas)
-          - cada track: flex, nowrap, gap igual
-          - a animação move o wrapper -50% (= largura de uma faixa) com linear infinite
-          - como as duas faixas são idênticas, ao voltar ao 0% o visual é exactamente
-            o mesmo → loop perfeitamente invisível
-          - o gap entre o último item de track-1 e o primeiro de track-2 é tratado
-            com padding-right em cada item em vez de gap no container, para que o
-            espaçamento seja sempre uniforme (gap só funciona entre irmãos directos).
-        */}
-        <div className="flex w-max animate-brands-scroll">
-          {[0, 1].map(trackIdx => (
-            <div
-              key={trackIdx}
-              aria-hidden={trackIdx === 1 ? true : undefined}
-              className="flex gap-12"
-            >
-              {track.map((brand, i) => (
-                <BrandItem key={`t${trackIdx}-${brand.id}-${i}`} brand={brand} />
-              ))}
-            </div>
-          ))}
+        {/* Wrapper animado */}
+        <div
+          className="flex"
+          style={{
+            // Apenas anima quando a largura está medida
+            animation: duration > 0
+              ? `marquee-scroll ${duration}s linear infinite`
+              : undefined,
+            // A variável CSS é usada dentro do @keyframes inline abaixo
+            ['--track-w' as string]: trackWidth ? `${trackWidth}px` : '0px',
+            willChange: 'transform',
+          }}
+        >
+          {/* Cópia A — usada para medir */}
+          <div ref={trackRef} className="flex flex-shrink-0">
+            {trackItems.map((brand, i) => (
+              <BrandItem key={`a-${brand.id}-${i}`} brand={brand} />
+            ))}
+          </div>
+          {/* Cópia B — idêntica, colocada imediatamente a seguir */}
+          <div className="flex flex-shrink-0" aria-hidden>
+            {trackItems.map((brand, i) => (
+              <BrandItem key={`b-${brand.id}-${i}`} brand={brand} />
+            ))}
+          </div>
         </div>
+
+        {/* @keyframes inline com a variável CSS da largura real */}
+        {trackWidth && (
+          <style>{`
+            @keyframes marquee-scroll {
+              0%   { transform: translateX(0); }
+              100% { transform: translateX(-${trackWidth}px); }
+            }
+          `}</style>
+        )}
       </div>
     </section>
   )
 }
 
 function BrandItem({ brand }: { brand: Brand }) {
-  /*
-    O espaçamento entre items é feito com px-8 (padding horizontal) em cada item.
-    Assim o "gap" entre o último item da faixa 1 e o primeiro da faixa 2 é
-    exactamente igual ao gap entre quaisquer outros dois items — o loop fica invisível.
-  */
+  // Padding horizontal em vez de gap: garante espaçamento uniforme
+  // mesmo na junção entre a cópia A e a cópia B.
+  const style = { paddingLeft: ITEM_GAP / 2, paddingRight: ITEM_GAP / 2 }
+
   const inner = (
-    <div className="flex-shrink-0 flex items-center justify-center h-14
-                    opacity-60 hover:opacity-100 transition-opacity duration-300
-                    grayscale hover:grayscale-0">
+    <div
+      className="flex-shrink-0 flex items-center justify-center h-14
+                 opacity-60 hover:opacity-100 transition-opacity duration-300
+                 grayscale hover:grayscale-0"
+      style={style}
+    >
       {brand.logo_url ? (
         <img
           src={brand.logo_url}
           alt={brand.name}
-          className="h-14 w-auto max-w-[100px] object-contain"
+          className="h-10 w-auto max-w-[120px] object-contain"
           loading="lazy"
         />
       ) : (
@@ -99,5 +150,5 @@ function BrandItem({ brand }: { brand: Brand }) {
       </a>
     )
   }
-  return inner
+  return <div className="flex-shrink-0">{inner}</div>
 }
