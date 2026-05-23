@@ -18,6 +18,9 @@ import gallery3Src  from '@/media/images/brooklyn/Sinuca.jpg'
 export const LOGO_URL    = logoSrc
 export const FAVICON_URL = faviconSrc
 
+// Tipo explícito para o rating — permite null para ocultar o badge
+type Rating = { score: string; label: string } | null
+
 export const barberShopConfig = {
   // Identidade
   name:        'Brooklyn Barbearia',
@@ -77,11 +80,12 @@ export const barberShopConfig = {
       'Desde 2018 no coração do Porto, a <strong>Brooklyn Barbearia</strong> oferece uma experiência única de cuidado masculino. Combinamos técnicas clássicas com as tendências mais modernas.',
       'Os nossos barbeiros estão prontos para proporcionar o melhor serviço, num ambiente acolhedor e autêntico.',
     ],
-    // null para ocultar o badge de avaliação
+    // null → oculta o badge de avaliação na HomePage
+    // { score, label } → mostra o badge
     rating: {
       score: '4,8 / 5,0',
       label: '+ 300 avaliações',
-    } as { score: string; label: string } | null,
+    } as Rating,
   },
 
   // Horário
