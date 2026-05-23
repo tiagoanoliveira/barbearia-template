@@ -34,7 +34,7 @@ export default function BrandsCarousel() {
                         bg-gradient-to-l from-white to-transparent" />
 
         {/* Carrossel */}
-        <div className="flex gap-16 animate-brands-scroll">
+        <div className="flex gap-12 animate-brands-scroll">
           {items.map((brand, i) => (
             <BrandItem key={`${brand.id}-${i}`} brand={brand} />
           ))}
