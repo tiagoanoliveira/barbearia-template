@@ -63,7 +63,7 @@ export default {
       },
       animation: {
         'slide-in': 'slide-in 0.25s ease-out',
-        'brands-scroll': 'brands-scroll 10s linear infinite',
+        'brands-scroll': 'brands-scroll 5s linear infinite',
       },
     },
   },
