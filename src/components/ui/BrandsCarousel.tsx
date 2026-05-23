@@ -54,7 +54,7 @@ export default function BrandsCarousel() {
             <div
               key={trackIdx}
               aria-hidden={trackIdx === 1 ? true : undefined}
-              className="flex"
+              className="flex gap-12"
             >
               {track.map((brand, i) => (
                 <BrandItem key={`t${trackIdx}-${brand.id}-${i}`} brand={brand} />
@@ -74,14 +74,14 @@ function BrandItem({ brand }: { brand: Brand }) {
     exactamente igual ao gap entre quaisquer outros dois items — o loop fica invisível.
   */
   const inner = (
-    <div className="flex-shrink-0 flex items-center justify-center h-16 px-8
+    <div className="flex-shrink-0 flex items-center justify-center h-14
                     opacity-60 hover:opacity-100 transition-opacity duration-300
                     grayscale hover:grayscale-0">
       {brand.logo_url ? (
         <img
           src={brand.logo_url}
           alt={brand.name}
-          className="h-10 w-auto max-w-[120px] object-contain"
+          className="h-14 w-auto max-w-[50px] object-contain"
           loading="lazy"
         />
       ) : (
