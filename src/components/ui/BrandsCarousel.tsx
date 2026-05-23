@@ -22,10 +22,10 @@ export default function BrandsCarousel() {
   if (brands.length === 0) return null
 
   // Duplica para loop contínuo sem salto
-  const items = [...brands, ...brands, ...brands]
+  const items = [...brands, ...brands, ...brands, ...brands, ...brands, ...brands, ...brands, ...brands]
 
   return (
-    <section className="py-8 bg-white border-y border-gray-100 overflow-hidden">
+    <section className="py-4 bg-white border-y border-gray-100 overflow-hidden">
       <div className="relative w-full">
         {/* Fade nas bordas */}
         <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-24 z-10
@@ -34,7 +34,7 @@ export default function BrandsCarousel() {
                         bg-gradient-to-l from-white to-transparent" />
 
         {/* Carrossel */}
-        <div className="flex gap-12 animate-brands-scroll">
+        <div className="flex gap-16 animate-brands-scroll">
           {items.map((brand, i) => (
             <BrandItem key={`${brand.id}-${i}`} brand={brand} />
           ))}
@@ -46,13 +46,13 @@ export default function BrandsCarousel() {
 
 function BrandItem({ brand }: { brand: Brand }) {
   const content = (
-    <div className="flex-shrink-0 flex items-center justify-center h-12 px-4
+    <div className="flex-shrink-0 flex items-center justify-center h-16
                     opacity-60 hover:opacity-100 transition-opacity duration-300 grayscale hover:grayscale-0">
       {brand.logo_url ? (
         <img
           src={brand.logo_url}
           alt={brand.name}
-          className="h-10 w-auto max-w-[120px] object-contain"
+          className="h-16 w-auto max-w-[120px] object-contain"
           loading="lazy"
         />
       ) : (
