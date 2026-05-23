@@ -12,7 +12,7 @@ interface Brand {
 // Velocidade: píxeis por segundo
 const SPEED_PX_PER_SEC = 60
 // Espaçamento horizontal entre cada logo (px)
-const ITEM_GAP = 64
+const ITEM_GAP = 40
 
 export default function BrandsCarousel() {
   const { data } = useQuery({
@@ -100,6 +100,24 @@ function Marquee({ brands }: { brands: Brand[] }) {
               <BrandItem key={`b-${brand.id}-${i}`} brand={brand} />
             ))}
           </div>
+          {/* Cópia B — idêntica, colocada imediatamente a seguir */}
+          <div className="flex flex-shrink-0" aria-hidden>
+            {trackItems.map((brand, i) => (
+                <BrandItem key={`b-${brand.id}-${i}`} brand={brand} />
+            ))}
+          </div>
+          {/* Cópia C — idêntica, colocada imediatamente a seguir */}
+          <div className="flex flex-shrink-0" aria-hidden>
+            {trackItems.map((brand, i) => (
+                <BrandItem key={`b-${brand.id}-${i}`} brand={brand} />
+            ))}
+          </div>
+          {/* Cópia D — idêntica, colocada imediatamente a seguir */}
+          <div className="flex flex-shrink-0" aria-hidden>
+            {trackItems.map((brand, i) => (
+                <BrandItem key={`b-${brand.id}-${i}`} brand={brand} />
+            ))}
+          </div>
         </div>
 
         {/* @keyframes inline com a variável CSS da largura real */}
@@ -132,7 +150,7 @@ function BrandItem({ brand }: { brand: Brand }) {
         <img
           src={brand.logo_url}
           alt={brand.name}
-          className="h-10 w-auto max-w-[120px] object-contain"
+          className="h-14 w-auto max-w-[120px] object-contain"
           loading="lazy"
         />
       ) : (
