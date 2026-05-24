@@ -41,7 +41,7 @@ export const SHOP = {
    * null → o email de pedido de avaliação NÃO é enviado quando a reserva
    *        é marcada como concluída.
    */
-  googleReviewUrl: 'https://g.page/r/Cfn0HyULMI3oEBM/review',
+  googleReviewUrl: null,
 }
 
 /** URL completa do logo (usada nos emails) */
