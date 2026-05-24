@@ -33,6 +33,15 @@ export const SHOP = {
 
   // URL do logo (relativo ao baseUrl, servido do R2 ou directamente)
   logoPath:     '/icons/logo-512px.png',
+
+  /**
+   * Link directo para a página de avaliação no Google Maps.
+   * Formato: 'https://g.page/r/<CID>/review'
+   *
+   * null → o email de pedido de avaliação NÃO é enviado quando a reserva
+   *        é marcada como concluída.
+   */
+  googleReviewUrl: 'https://g.page/r/Cfn0HyULMI3oEBM/review',
 }
 
 /** URL completa do logo (usada nos emails) */
@@ -174,4 +183,5 @@ export const EMAIL_SUBJECTS = {
   newEmail:      `Confirme o novo email – ${SHOP.name}`,
   reservation:   `Reserva confirmada – ${SHOP.name}`,
   cancellation:  `Reserva cancelada – ${SHOP.name}`,
+  reviewRequest: `Obrigado pela visita – avalie-nos no Google! – ${SHOP.name}`,
 }

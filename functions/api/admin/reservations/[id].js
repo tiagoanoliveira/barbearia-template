@@ -4,6 +4,7 @@ import { ok, unauthorized, notFound, badRequest, serverError, corsOptions } from
 import { sanitize, isValidDate, isValidTime, isValidId } from '../../../utils/validators.js'
 import {
   sendReservationCancellation,
+  sendReviewRequest,
   cancelScheduledReminder,
   rescheduleReminder,
 } from '../../../utils/reservationEmails.js'
@@ -197,8 +198,19 @@ export async function onRequest(context) {
         }
       }
 
-      // 2. Alteração relevante → reagendar lembrete (+ confirmação se pedido)
-      // 3. Só reenvio de confirmação → enviar email directamente
+      // 2. Conclusão → enviar pedido de avaliação Google (se configurado)
+      //    Só enviado quando a reserva PASSA a 'concluida' (não se já estava).
+      if (status === 'concluida' && reservation.status !== 'concluida' && reservation.cliente_email) {
+        sendReviewRequest(context, {
+          reservaId:   reservation.id,
+          clientEmail: reservation.cliente_email,
+          clientName:  reservation.cliente_nome,
+          serviceName: reservation.servico_nome,
+        })
+      }
+
+      // 3. Alteração relevante → reagendar lembrete (+ confirmação se pedido)
+      // 4. Só reenvio de confirmação → enviar email directamente
       const notCancelled = status !== 'cancelada'
 
       if (notCancelled && reservation.cliente_email && (changedRelevant || deveReenviarConfirmacao)) {

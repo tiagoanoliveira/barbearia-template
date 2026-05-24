@@ -1,9 +1,10 @@
 /**
  * Serviço centralizado de emails de reserva.
  *
- * Expõe 4 funções públicas:
+ * Expõe 5 funções públicas:
  *   sendReservationConfirmation  – envia email de confirmação e agenda lembrete 24h antes
  *   sendReservationCancellation  – envia email de cancelamento e cancela lembrete agendado
+ *   sendReviewRequest            – envia email a pedir avaliação no Google (só se SHOP.googleReviewUrl != null)
  *   cancelScheduledReminder      – cancela um email agendado na Resend
  *   rescheduleReminder           – cancela o lembrete antigo e agenda um novo (usado em edições);
  *                                  opcionalmente envia também email de confirmação actualizada
@@ -17,6 +18,7 @@ import {
   buildReservationConfirmationEmail,
   buildReservationCancellationEmail,
   buildReminderEmail,
+  buildReviewRequestEmail,
   isPlaceholderEmail,
 } from './email.js'
 import { SHOP, EMAIL_SUBJECTS } from './site-config.js'
@@ -252,7 +254,62 @@ export function sendReservationCancellation(context, params) {
   )
 }
 
-// ── 5. Reagendar lembrete (usado em edições) ──────────────────────────────────────────────────────────────
+// ── 5. Enviar pedido de avaliação Google ─────────────────────────────────────────────────────
+/**
+ * Chamada quando uma reserva é marcada como 'concluida'.
+ * Não envia nada se:
+ *   – SHOP.googleReviewUrl for null/falsy
+ *   – o cliente não tiver email
+ *   – o email for um placeholder
+ *
+ * @param {object} context  - Contexto do Cloudflare Worker
+ * @param {object} params
+ * @param {number} params.reservaId
+ * @param {string} params.clientEmail
+ * @param {string} params.clientName
+ * @param {string} params.serviceName
+ */
+export function sendReviewRequest(context, { reservaId, clientEmail, clientName, serviceName }) {
+  // Guard: link não configurado → não enviar
+  if (!SHOP.googleReviewUrl) {
+    console.log(`[sendReviewRequest] Reserva #${reservaId}: SHOP.googleReviewUrl não configurado — email não enviado.`)
+    return
+  }
+
+  if (!clientEmail) {
+    console.warn(`[sendReviewRequest] Reserva #${reservaId}: sem email — pedido de avaliação não enviado.`)
+    return
+  }
+
+  if (isPlaceholderEmail(clientEmail)) {
+    console.log(`[sendReviewRequest] Reserva #${reservaId}: email placeholder — pedido de avaliação não enviado.`)
+    return
+  }
+
+  console.log(`[sendReviewRequest] Reserva #${reservaId}: a enviar pedido de avaliação para ${clientEmail}`)
+
+  context.waitUntil(
+    (async () => {
+      try {
+        const { html } = buildReviewRequestEmail({
+          clientName,
+          serviceName,
+          reviewUrl: SHOP.googleReviewUrl,
+        })
+        await sendEmail(context, {
+          to:      clientEmail,
+          subject: EMAIL_SUBJECTS.reviewRequest,
+          html,
+        })
+        console.log(`[sendReviewRequest] Reserva #${reservaId}: email de avaliação enviado para ${clientEmail}.`)
+      } catch (err) {
+        console.error(`[sendReviewRequest] Reserva #${reservaId}: falha no envio:`, err?.message || err)
+      }
+    })()
+  )
+}
+
+// ── 6. Reagendar lembrete (usado em edições) ──────────────────────────────────────────────────────────────
 /**
  * Cancela o lembrete anterior e agenda um novo.
  * Se sendConfirmation=true, envia também um email de confirmação actualizada

@@ -75,6 +75,7 @@ function emailCSS() {
          color:#fff!important;text-decoration:none;padding:10px 15px;
          border-radius:8px;font-weight:600;font-size:15px;
          box-shadow:0 4px 12px ${C.btnShadow}}
+    .stars{font-size:28px;letter-spacing:4px;margin-bottom:12px}
     .contact-sec{margin-top:15px;text-align:center}
     .contact-link{display:inline-flex;align-items:center;color:${C.contactLinkText};
                   text-decoration:none;font-weight:600;font-size:15px;
@@ -460,6 +461,29 @@ export function buildReminderEmail({ clientName, data, hora, serviceName, barber
       <p class="cta-text amber">Precisa de cancelar ou reagendar?</p>
       <a href="${SHOP.baseUrl}/reservations" class="btn">Gerir a minha reserva</a>
     </div>
+  `)
+  return { html }
+}
+
+// ─── 7. Pedido de avaliação Google ─────────────────────────────────────────────────────────
+/**
+ * Enviado quando uma reserva é marcada como concluída e SHOP.googleReviewUrl !== null.
+ *
+ * @param {object} params
+ * @param {string} params.clientName   - Nome do cliente
+ * @param {string} params.serviceName  - Nome do serviço realizado
+ * @param {string} params.reviewUrl    - URL directo para o formulário de avaliação no Google
+ */
+export function buildReviewRequestEmail({ clientName, serviceName, reviewUrl }) {
+  const html = shell('header-gold', '&#11088; Como foi a sua visita?', `
+    <p>Olá <strong>${clientName}</strong>,</p>
+    <p>Obrigado por nos visitar! Esperamos que tenha ficado satisfeito com o seu <strong>${serviceName}</strong>.</p>
+    <p>A sua opinião é muito importante para nós e ajuda outros clientes a encontrar-nos. Levaria apenas <strong>30 segundos</strong>:</p>
+    <div class="cta-sec" style="margin-top:20px">
+      <div class="stars">&#11088;&#11088;&#11088;&#11088;&#11088;</div>
+      <a href="${reviewUrl}" class="btn">Avaliar no Google</a>
+    </div>
+    <p style="font-size:13px;color:#999;text-align:center;margin-top:16px">Clique no botão acima para deixar a sua avaliação.<br>Obrigado pela confiança na ${SHOP.name}!</p>
   `)
   return { html }
 }
