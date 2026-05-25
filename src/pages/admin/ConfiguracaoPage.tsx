@@ -418,8 +418,8 @@ function ServicosSection() {
 }
 
 // ─── BARBEIROS ─────────────────────────────────────────────────────────────
-interface BarberForm { id?: number; name: string; especialidades: string; color: string; photo_url: string; active: number }
-const emptyBarber = (): BarberForm => ({ name: '', especialidades: '', color: '#d4a017', photo_url: '', active: 1 })
+interface BarberForm { id?: number; name: string; especialidades: string; color: string; foto: string; active: number }
+const emptyBarber = (): BarberForm => ({ name: '', especialidades: '', color: '#d4a017', foto: '', active: 1 })
 
 function BarbeirosSection() {
   const qc = useQueryClient()
@@ -433,7 +433,7 @@ function BarbeirosSection() {
 
   const openNew  = () => { setForm(emptyBarber()); setErr(null) }
   const openEdit = (b: Barber) => {
-    setForm({ id: b.id, name: b.name, especialidades: (b as unknown as { especialidades?: string }).especialidades ?? '', color: b.color ?? '#d4a017', photo_url: b.photo_url ?? '', active: (b as unknown as { active?: number }).active ?? 1 })
+    setForm({ id: b.id, name: b.name, especialidades: (b as unknown as { especialidades?: string }).especialidades ?? '', color: b.color ?? '#d4a017', foto: b.foto ?? '', active: (b as unknown as { active?: number }).active ?? 1 })
     setErr(null)
   }
   const save = async () => {
@@ -441,7 +441,7 @@ function BarbeirosSection() {
     if (!form.name) { setErr('Nome é obrigatório'); return }
     setSaving(true); setErr(null)
     try {
-      const body = { name: form.name, especialidades: form.especialidades, color: form.color, photo_url: form.photo_url || null, active: form.active }
+      const body = { name: form.name, especialidades: form.especialidades, color: form.color, foto: form.foto || null, active: form.active }
       if (form.id) await adminApi.put(`/api/admin/barbers/${form.id}`, body)
       else         await adminApi.post('/api/admin/barbers', body)
       qc.invalidateQueries({ queryKey: ['admin-barbers-cfg'] })
@@ -479,8 +479,8 @@ function BarbeirosSection() {
                 <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                   <td className="py-2.5 pr-3 font-medium">
                     <div className="flex items-center gap-2">
-                      {b.photo_url
-                        ? <img src={b.photo_url} alt={b.name} className="w-7 h-7 rounded-full object-cover" />
+                      {b.foto
+                        ? <img src={b.foto} alt={b.name} className="w-7 h-7 rounded-full object-cover" />
                         : <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: b.color ?? '#888' }}>{b.name[0]}</div>
                       }
                       {b.name}
@@ -535,7 +535,7 @@ function BarbeirosSection() {
             </div>
             <div className="col-span-2">
               <label className="block text-xs text-gray-500 mb-1">Foto do barbeiro</label>
-              <PhotoUploader value={form.photo_url} onChange={url => setForm(f => f && ({ ...f, photo_url: url }))} folder="barbeiros" />
+              <PhotoUploader value={form.foto} onChange={url => setForm(f => f && ({ ...f, foto: url }))} folder="barbeiros" />
             </div>
           </div>
           {err && <p className="text-xs text-red-500">{err}</p>}

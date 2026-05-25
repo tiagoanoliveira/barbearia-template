@@ -12,13 +12,13 @@ export async function onRequest(context) {
   const id = parseInt(params.id)
 
   if (request.method === 'PUT') {
-    const { name, especialidades, photo_url, color, active } = await request.json()
+    const { name, especialidades, foto, color, active } = await request.json()
     await env.DB.prepare(
       'UPDATE barbeiros SET nome = ?, especialidades = ?, foto = ?, color = ?, ativo = ? WHERE id = ?'
     ).bind(
       sanitize(name, 100),
       sanitize(especialidades ?? '', 200),
-      photo_url ?? null,
+      foto ?? null,
       color ?? '#ffffff',
       active ? 1 : 0,
       id

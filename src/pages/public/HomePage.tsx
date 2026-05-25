@@ -231,8 +231,8 @@ export default function HomePage() {
                 <div key={b.id} className="text-center">
                   <div className="w-24 h-24 mx-auto mb-3 rounded-full overflow-hidden border-2 border-white shadow"
                        style={{ background: `${b.color ?? '#d4a017'}22` }}>
-                    {b.photo_url
-                      ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
+                    {b.foto
+                      ? <img src={b.foto} alt={b.name} className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-3xl font-black"
                              style={{ color: b.color ?? '#d4a017' }}>{b.name[0]}</div>
                     }

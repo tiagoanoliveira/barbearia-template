@@ -383,8 +383,8 @@ export default function BookingPage() {
                                             : 'bg-white/5 border-white/10 hover:bg-white/10'
                                     }`}>
                               <div className="w-12 h-12 rounded-2xl bg-gray-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                {b.photo_url
-                                    ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
+                                {b.foto
+                                    ? <img src={b.foto} alt={b.name} className="w-full h-full object-cover" />
                                     : <span className="text-white font-bold">{b.name.charAt(0)}</span>}
                               </div>
                               <div>

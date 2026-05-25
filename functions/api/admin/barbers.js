@@ -19,8 +19,8 @@ export async function onRequest(context) {
     const url = new URL(request.url)
     const includeInactive = url.searchParams.get('include_inactive') === '1'
     const { results } = await env.DB.prepare(
-      // foto (não foto_url), especialidades, color — schema original
-      `SELECT id, nome AS name, foto AS photo_url, especialidades, color, ativo AS active
+      // foto, especialidades, color — schema original
+      `SELECT id, nome AS name, foto, especialidades, color, ativo AS active
        FROM barbeiros
        ${includeInactive ? '' : 'WHERE ativo = 1'}
        ORDER BY id`
@@ -29,14 +29,14 @@ export async function onRequest(context) {
   }
 
   if (request.method === 'POST') {
-    const { name, especialidades, photo_url, color } = await request.json()
+    const { name, especialidades, foto, color } = await request.json()
     if (!name) return badRequest('Nome é obrigatório')
     const r = await env.DB.prepare(
       'INSERT INTO barbeiros (nome, especialidades, foto, color, ativo) VALUES (?, ?, ?, ?, 1)'
     ).bind(
       sanitize(name, 100),
       sanitize(especialidades ?? '', 200),
-      photo_url ?? null,
+      foto ?? null,
       color ?? '#ffffff'
     ).run()
     return created({ id: r.meta.last_row_id })
