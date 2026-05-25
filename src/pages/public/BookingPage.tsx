@@ -394,7 +394,6 @@ export default function BookingPage() {
                                   {hasPriceVar && (
                                       <p className="text-secondary-400 font-bold text-sm">{b.price}€</p>
                                   )}
-                                  <p className="text-xs text-gray-500">{b.duration} min</p>
                                 </div>
                               </button>
                           )
