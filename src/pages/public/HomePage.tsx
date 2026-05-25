@@ -68,9 +68,12 @@ function Gallery() {
 // ── Card de serviço com hover “Reservar” ─────────────────────────────────────────
 function ServiceCard({ service }: { service: Service }) {
   const navigate = useNavigate()
-  const goBook = () => navigate(`${ROUTES.BOOKING}?service_id=${service.id}`)
-  const hasPriceVar = (service as unknown as { has_price_variation?: boolean }).has_price_variation
-  const minPrice    = (service as unknown as { min_price?: number }).min_price ?? service.price
+  const goBook   = () => navigate(`${ROUTES.BOOKING}?service_id=${service.id}`)
+
+  const hasPriceVar    = service.has_price_variation
+  const minPrice       = service.min_price    ?? service.price
+  const hasDurationVar = service.has_duration_variation
+  const minDuration    = service.min_duration ?? service.duration
 
   return (
       <div
@@ -87,7 +90,14 @@ function ServiceCard({ service }: { service: Service }) {
         </div>
 
         <h3 className="text-gray-900 font-bold text-lg mb-1">{service.name}</h3>
-        <p className="text-gray-500 text-sm mb-4">{service.duration} min</p>
+
+        <p className="text-gray-500 text-sm mb-4">
+          {hasDurationVar
+              ? <><span className="font-normal">desde </span>{minDuration} min</>
+              : <>{service.duration} min</>
+          }
+        </p>
+
         <p className="font-black text-2xl text-primary-700">
           {hasPriceVar
               ? <><span className="text-base font-semibold">desde </span>{minPrice}€</>

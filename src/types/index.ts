@@ -15,6 +15,9 @@ export interface Service {
   duration: number
   price: number
   min_price?: number | null
+  has_price_variation?: boolean
+  min_duration?: number | null
+  has_duration_variation?: boolean
   barber_overrides?: BarberServiceOverride[]
   svg?: string
   abreviacao?: string

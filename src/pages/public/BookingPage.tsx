@@ -333,7 +333,11 @@ export default function BookingPage() {
                                 <div>
                                   <p className="font-semibold">{s.name}</p>
                                   <p className="text-sm text-gray-500 mt-0.5">
-                                    <Clock size={12} className="inline mr-1" />{s.duration} min
+                                    <Clock size={12} className="inline mr-1" />
+                                    {s.has_duration_variation
+                                        ? <>desde {s.min_duration ?? s.duration} min</>
+                                        : <>{s.duration} min</>
+                                    }
                                   </p>
                                   {restriction && (
                                       <p className="text-xs text-secondary-400 mt-1 flex items-center gap-1">

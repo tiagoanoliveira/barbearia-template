@@ -9,15 +9,15 @@ export async function onRequest(context) {
         'SELECT id, nome AS name, duracao AS duration, preco AS price, svg, abreviacao, color FROM servicos ORDER BY id'
     ).all()
 
-    // Apenas overrides com preco explícito (não NULL) e activos
-    // Barbeiros sem override ou com preco=NULL praticam o preço base
+    // Overrides activos com valores explícitos (não NULL)
     const { results: overrides } = await env.DB.prepare(
         `SELECT sb.servico_id,
-                MIN(sb.preco) AS min_override,
-                MAX(sb.preco) AS max_override
+                MIN(sb.preco)   AS min_override_price,
+                MAX(sb.preco)   AS max_override_price,
+                MIN(sb.duracao) AS min_override_duration,
+                MAX(sb.duracao) AS max_override_duration
          FROM servico_barbeiro sb
          WHERE sb.ativo = 1
-           AND sb.preco IS NOT NULL
          GROUP BY sb.servico_id`
     ).all()
 
@@ -28,19 +28,40 @@ export async function onRequest(context) {
       const ov = overrideMap[s.id]
 
       if (!ov) {
-        // Nenhum barbeiro tem preço personalizado → sem variação
-        return { ...s, min_price: s.price, has_price_variation: false }
+        return {
+          ...s,
+          min_price:             s.price,
+          has_price_variation:   false,
+          min_duration:          s.duration,
+          has_duration_variation: false,
+        }
       }
 
-      // Preço mínimo efectivo = menor entre overrides explícitos E preço base
-      // (os barbeiros sem override praticam o preço base)
-      const minPrice = Math.min(ov.min_override, s.price)
-      const maxPrice = Math.max(ov.max_override, s.price)
-
-      // Só há variação se min e max efectivos forem diferentes
+      // ── Preço ────────────────────────────────────────────────────────────
+      const minPrice = ov.min_override_price != null
+          ? Math.min(ov.min_override_price, s.price)
+          : s.price
+      const maxPrice = ov.max_override_price != null
+          ? Math.max(ov.max_override_price, s.price)
+          : s.price
       const hasPriceVariation = minPrice !== maxPrice
 
-      return { ...s, min_price: minPrice, has_price_variation: hasPriceVariation }
+      // ── Duração ───────────────────────────────────────────────────────────
+      const minDuration = ov.min_override_duration != null
+          ? Math.min(ov.min_override_duration, s.duration)
+          : s.duration
+      const maxDuration = ov.max_override_duration != null
+          ? Math.max(ov.max_override_duration, s.duration)
+          : s.duration
+      const hasDurationVariation = minDuration !== maxDuration
+
+      return {
+        ...s,
+        min_price:              minPrice,
+        has_price_variation:    hasPriceVariation,
+        min_duration:           minDuration,
+        has_duration_variation: hasDurationVariation,
+      }
     }))
   } catch (e) {
     return serverError('Erro ao carregar serviços', e.message)

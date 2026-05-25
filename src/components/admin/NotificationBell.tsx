@@ -34,7 +34,12 @@ function isoToLocalDateStr(iso: string): string {
 }
 
 const SEEN_IDS_KEY = 'notif_seen_ids'
-const VAPID_PUBLIC_KEY = 'BLZgq4JhJQEiLs3bJv2gwU3u4W6E2MN7rC-rKDjkZBdvH_JQrYZQ9nCiRvuD_0JUmjpVZe10suA0rHxQFM_Rsw0'
+async function fetchVapidPublicKey(): Promise<string> {
+  const res = await fetch('/api/admin/notifications/vapid')
+  const json = await res.json()
+  if (!json?.data?.vapidPublicKey) throw new Error('VAPID public key não disponível')
+  return json.data.vapidPublicKey
+}
 
 function loadSeenIds(): Set<number> {
   try {
@@ -82,10 +87,11 @@ function usePushSubscription() {
   const subscribe = useCallback(async () => {
     setState('loading')
     try {
+      const vapidPublicKey = await fetchVapidPublicKey()
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
       })
       await adminApi.post('/api/admin/push-subscription', sub.toJSON())
       setState('subscribed')
