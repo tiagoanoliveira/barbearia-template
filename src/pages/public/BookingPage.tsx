@@ -96,6 +96,17 @@ export default function BookingPage() {
   })
   const barbersForService = barbersForServiceRes?.data ?? []
 
+  // Quando há exactamente 1 barbeiro, saltamos o passo de selecção
+  const singleBarber: BarberForService | null = barbersForService.length === 1 ? barbersForService[0]! : null
+
+  useEffect(() => {
+    if (!singleBarber) return
+    setBooking(b => {
+      if (!b.anyBarber && b.barber?.id === singleBarber.id) return b
+      return { ...b, barber: singleBarber, anyBarber: false }
+    })
+  }, [singleBarber])
+
   // ── Restaurar draft ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!services.length || !storage) return
@@ -209,7 +220,6 @@ export default function BookingPage() {
   const handleSelectService = (s: Service) => {
     // Ao mudar serviço, limpar barbeiro, data e hora
     setBooking(bk => ({ ...bk, service: s, barber: null, anyBarber: false, date: '', time: '' }))
-    setTimeout(() => goToStep(2), 200)
   }
 
   const handleSelectBarber = (barber: BarberForService | null, anyBarber: boolean) => {
@@ -234,8 +244,15 @@ export default function BookingPage() {
       (step === 4 && tosChecked)
   )
 
-  const goNext = useCallback(() => goToStep((step + 1) as Step), [step])
-  const goPrev = useCallback(() => goToStep((step - 1) as Step), [step])
+  const goNext = useCallback(() => {
+    const next: Step = step === 1 && singleBarber ? 3 : (step + 1) as Step
+    goToStep(next)
+  }, [step, singleBarber])
+
+  const goPrev = useCallback(() => {
+    const prev: Step = step === 3 && singleBarber ? 1 : (step - 1) as Step
+    goToStep(prev)
+  }, [step, singleBarber])
 
   const showLoginGate = step === 4 && !isLoggedIn
   const serviceRestriction = booking.service ? serviceRestrictions[booking.service.id] : null
@@ -245,12 +262,18 @@ export default function BookingPage() {
       ? booking.service?.min_price ?? booking.service?.price
       : booking.barber?.price ?? booking.service?.price
 
-  const steps: { n: Step; label: string }[] = [
-    { n: 1, label: 'Serviço' },
-    { n: 2, label: 'Barbeiro' },
-    { n: 3, label: 'Data & Hora' },
-    { n: 4, label: 'Confirmar' },
-  ]
+  const steps: { n: Step; label: string }[] = singleBarber
+      ? [
+        { n: 1, label: 'Serviço' },
+        { n: 3, label: 'Data & Hora' },
+        { n: 4, label: 'Confirmar' },
+      ]
+      : [
+        { n: 1, label: 'Serviço' },
+        { n: 2, label: 'Barbeiro' },
+        { n: 3, label: 'Data & Hora' },
+        { n: 4, label: 'Confirmar' },
+      ]
 
   return (
       <div className="min-h-screen relative flex items-start justify-center pt-24 pb-16 px-4">
@@ -274,7 +297,7 @@ export default function BookingPage() {
                                     : active  ? 'bg-white text-gray-900 cursor-default'
                                         : 'bg-white/10 text-gray-400 cursor-not-allowed'
                             }`}>
-                      {completed ? <Check size={14} /> : i + 1}
+                      {completed ? <Check size={14} /> : steps.indexOf(steps[i]!) + 1}
                     </button>
                     <span className={`text-sm hidden sm:block ${
                         active ? 'text-white font-semibold' : completed ? 'text-gray-400 cursor-pointer' : 'text-gray-500'
