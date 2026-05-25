@@ -209,6 +209,16 @@ CREATE INDEX IF NOT EXISTS idx_notifications_barber      ON notifications(barber
 CREATE INDEX IF NOT EXISTS idx_notifications_unread      ON notifications(is_read, created_at);
 CREATE INDEX IF NOT EXISTS idx_notifications_reservation ON notifications(reservation_id, created_at);
 
+CREATE TABLE push_subscriptions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_user_id INTEGER NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+    endpoint      TEXT    NOT NULL UNIQUE,
+    p256dh        TEXT    NOT NULL,
+    auth          TEXT    NOT NULL,
+    user_agent    TEXT,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+)
+
 -- ================================================
 -- ESTATÍSTICAS DIÁRIAS (cache de stats por barbeiro/dia)
 -- ================================================

@@ -9,14 +9,15 @@ export async function onRequest(context) {
         'SELECT id, nome AS name, duracao AS duration, preco AS price, svg, abreviacao, color FROM servicos ORDER BY id'
     ).all()
 
-    // Para cada serviço: preço mínimo e máximo entre os barbeiros activos com override
+    // Apenas overrides com preco explícito (não NULL) e activos
+    // Barbeiros sem override ou com preco=NULL praticam o preço base
     const { results: overrides } = await env.DB.prepare(
         `SELECT sb.servico_id,
-                MIN(COALESCE(sb.preco, s.preco)) AS min_price,
-                MAX(COALESCE(sb.preco, s.preco)) AS max_price
+                MIN(sb.preco) AS min_override,
+                MAX(sb.preco) AS max_override
          FROM servico_barbeiro sb
-                JOIN servicos s ON s.id = sb.servico_id
          WHERE sb.ativo = 1
+           AND sb.preco IS NOT NULL
          GROUP BY sb.servico_id`
     ).all()
 
@@ -25,13 +26,21 @@ export async function onRequest(context) {
 
     return ok(services.map(s => {
       const ov = overrideMap[s.id]
-      const minPrice = ov ? ov.min_price : s.price
-      const hasPriceVariation = ov ? ov.min_price < ov.max_price || ov.min_price < s.price || ov.max_price < s.price : false
-      return {
-        ...s,
-        min_price: minPrice,
-        has_price_variation: hasPriceVariation,
+
+      if (!ov) {
+        // Nenhum barbeiro tem preço personalizado → sem variação
+        return { ...s, min_price: s.price, has_price_variation: false }
       }
+
+      // Preço mínimo efectivo = menor entre overrides explícitos E preço base
+      // (os barbeiros sem override praticam o preço base)
+      const minPrice = Math.min(ov.min_override, s.price)
+      const maxPrice = Math.max(ov.max_override, s.price)
+
+      // Só há variação se min e max efectivos forem diferentes
+      const hasPriceVariation = minPrice !== maxPrice
+
+      return { ...s, min_price: minPrice, has_price_variation: hasPriceVariation }
     }))
   } catch (e) {
     return serverError('Erro ao carregar serviços', e.message)
