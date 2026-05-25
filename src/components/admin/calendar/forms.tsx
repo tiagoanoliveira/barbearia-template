@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-
+import { adminApi } from '@/api/client'
 import { clientsApi } from '@/api/clients'
 import { reservationsApi } from '@/api/reservations'
 import type { Barber, Reservation, Service } from '@/types'
@@ -300,6 +300,15 @@ export function NewReservationForm({
   // Estado do modal de email placeholder
   const [showEmailModal, setShowEmailModal] = useState(false)
 
+  // Serviços disponíveis para o barbeiro seleccionado (preço e duração já correctos)
+  const selectedBarberId = (form.barber_id ?? barberId) as number
+  const { data: barberSvcRes } = useQuery({
+    queryKey: ['barber-services-new', selectedBarberId],
+    queryFn:  () => adminApi.get<Service[]>(`/api/barbers/${selectedBarberId}/services`),
+    enabled:  !!selectedBarberId,
+  })
+  const barberServices = (barberSvcRes?.data as unknown as Service[]) ?? services
+
   const canCreateNewClient = newClientName.trim().length > 0 && newClientPhone.trim().length > 0
   const selectedService = services.find(s => s.id === (form.service_id ?? 0))
 
@@ -424,24 +433,37 @@ export function NewReservationForm({
 
         <div>
           <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
-          <select value={form.barber_id ?? barberId} onChange={e => onChange('barber_id', Number(e.target.value))} className="input text-sm w-full">
+          <select
+              value={selectedBarberId}
+              onChange={e => {
+                const newBarberId = Number(e.target.value)
+                onChange('barber_id', newBarberId)
+                // Limpar serviço seleccionado ao mudar barbeiro
+                onChange('service_id', undefined)
+                onChange('service_duration', undefined)
+              }}
+              className="input text-sm w-full"
+          >
             {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Serviço <span className="text-red-400">*</span></label>
           <select
-            value={form.service_id ?? ''}
-            onChange={e => {
-              const serviceId = Number(e.target.value)
-              const service = services.find(s => s.id === serviceId)
-              onChange('service_id', serviceId)
-              if (service?.duration) onChange('service_duration', service.duration)
-            }}
-            className="input text-sm w-full"
+              value={form.service_id ?? ''}
+              onChange={e => {
+                const serviceId = Number(e.target.value)
+                const service = barberServices.find(s => s.id === serviceId)
+                onChange('service_id', serviceId)
+                // duration e price já vêm correctos do endpoint /api/barbers/:id/services
+                if (service) onChange('service_duration', service.duration)
+              }}
+              className="input text-sm w-full"
           >
             <option value="">Selecionar serviço</option>
-            {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
+            {barberServices.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>
+            ))}
           </select>
         </div>
         <div>

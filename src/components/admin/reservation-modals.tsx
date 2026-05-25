@@ -151,8 +151,14 @@ export function ReservationEditModal({
   const barberServices = (barberServicesRes2?.data as unknown as Service[]) ?? services
 
   const handleServiceChange = (serviceId: number) => {
-    const service = services.find(s => s.id === serviceId)
-    setForm(f => ({ ...f, service_id: serviceId, service_duration: service?.duration ?? f.service_duration, service_price: service?.price ?? f.service_price, }))
+    // barberServices já tem duration e price correctos para este barbeiro
+    const service = barberServices.find(s => s.id === serviceId)
+    setForm(f => ({
+      ...f,
+      service_id:       serviceId,
+      service_duration: service?.duration ?? f.service_duration,
+      service_price:    service?.price    ?? f.service_price,
+    }))
   }
 
   const handleStatusChange = (value: string) => {
@@ -352,7 +358,7 @@ export function CheckoutModal({
   pendingEditForm?: Partial<Reservation & { sendEmail: boolean }>
 }) {
   const qc = useQueryClient()
-  const precoServico   = reservation.service_price ?? 0
+  const precoServico = pendingEditForm?.service_price ?? reservation.service_price ?? 0
   const freeReservations = reservation.client_free_reservations ?? 0
   const hadOferta      = !!reservation.oferta_tipo
 

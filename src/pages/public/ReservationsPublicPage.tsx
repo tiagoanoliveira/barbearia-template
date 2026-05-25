@@ -44,6 +44,9 @@ export default function ReservationsPublicPage() {
     queryFn:  () => api.get<Barber[]>('/api/barbers'),
   })
 
+  const services = servicesRes?.data ?? []
+  const barbers  = barbersRes?.data ?? []
+
   const { data: editBarberServicesRes } = useQuery({
     queryKey: ['barber-services-edit', editBarberId],
     queryFn:  () => editBarberId
@@ -52,6 +55,16 @@ export default function ReservationsPublicPage() {
     enabled: !!editing,
   })
   const editServices = editBarberServicesRes?.data ?? []
+
+  // Barbeiros que fazem o serviço seleccionado (preço e duração correctos)
+  const { data: serviceBarberRes } = useQuery({
+    queryKey: ['service-barbers-edit', editServiceId],
+    queryFn:  () => editServiceId
+        ? api.get<Barber[]>(`/api/services/${editServiceId}/barbers`)
+        : api.get<Barber[]>('/api/barbers'),
+    enabled: !!editing,
+  })
+  const editBarbers = serviceBarberRes?.data ?? barbers
 
   const { data: slotsRes } = useQuery({
     queryKey: ['edit-slots', editBarberId, editDate, editServiceId],
@@ -62,8 +75,6 @@ export default function ReservationsPublicPage() {
     enabled: !!editing && !!editBarberId && !!editDate && !!editServiceId,
   })
 
-  const services = servicesRes?.data ?? []
-  const barbers  = barbersRes?.data ?? []
   const slots    = slotsRes?.data ?? []
 
   const cancel = useMutation({
@@ -248,14 +259,14 @@ export default function ReservationsPublicPage() {
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Barbeiro</label>
                 <select
-                  value={editBarberId ?? ''}
-                  onChange={e => { setEditBarberId(Number(e.target.value) || null); setEditServiceId(null); setEditTime('') }}
-                  className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-sm
+                    value={editBarberId ?? ''}
+                    onChange={e => { setEditBarberId(Number(e.target.value) || null); setEditServiceId(null); setEditTime('') }}
+                    className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Selecionar barbeiro</option>
-                  {barbers.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
+                  {editBarbers.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
