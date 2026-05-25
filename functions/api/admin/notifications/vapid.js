@@ -1,4 +1,4 @@
-import { ok, serverError, corsOptions } from '../utils/response.js'
+import { ok, serverError, corsOptions } from '../../../utils/response.js'
 
 export async function onRequest(context) {
     const { env } = context
