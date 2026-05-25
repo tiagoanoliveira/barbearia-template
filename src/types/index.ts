@@ -2,7 +2,7 @@
 export interface Barber {
   id: number
   name: string
-  photo_url?: string
+  foto?: string
   especialidades?: string
   color?: string
   active: boolean

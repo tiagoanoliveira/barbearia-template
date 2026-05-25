@@ -16,7 +16,7 @@ export async function onRequest(context) {
             `SELECT
          b.id,
          b.nome           AS name,
-         b.photo_url,
+         b.foto,
          b.color,
          COALESCE(sb.preco,   s.preco)   AS price,
          COALESCE(sb.duracao, s.duracao) AS duration,
