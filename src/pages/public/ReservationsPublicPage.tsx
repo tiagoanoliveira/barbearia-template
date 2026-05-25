@@ -167,7 +167,7 @@ export default function ReservationsPublicPage() {
         <div>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Próximas</h2>
           {upcoming.length === 0 ? (
-            <div className="bg-white/5 rounded-2xl p-8 text-center">
+            <div className="bg-gray-800 rounded-2xl p-8 text-center">
               <Calendar size={32} className="text-gray-600 mx-auto mb-3" />
               <p className="text-gray-500 mb-4">Ainda não tens reservas futuras.</p>
               <Link
@@ -236,7 +236,7 @@ export default function ReservationsPublicPage() {
                 <select
                   value={editServiceId ?? ''}
                   onChange={e => { setEditServiceId(Number(e.target.value) || null); setEditTime('') }}
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                  className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Selecionar serviço</option>
@@ -250,7 +250,7 @@ export default function ReservationsPublicPage() {
                 <select
                   value={editBarberId ?? ''}
                   onChange={e => { setEditBarberId(Number(e.target.value) || null); setEditServiceId(null); setEditTime('') }}
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                  className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Selecionar barbeiro</option>
@@ -265,7 +265,7 @@ export default function ReservationsPublicPage() {
                   type="date"
                   value={editDate}
                   onChange={e => { setEditDate(e.target.value); setEditTime('') }}
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                  className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
@@ -285,7 +285,7 @@ export default function ReservationsPublicPage() {
                         className={`py-2 rounded-xl text-xs font-medium transition-all ${
                           editTime === slot
                             ? 'bg-brand-500 text-white'
-                            : 'bg-white/5 text-gray-300 hover:bg-white/10'
+                            : 'bg-gray-800 text-gray-300 hover:bg-white/10'
                         }`}
                       >
                         {slot}
@@ -300,7 +300,7 @@ export default function ReservationsPublicPage() {
                   rows={3}
                   value={editNotes}
                   onChange={e => setEditNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
+                  className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
                 />
               </div>
@@ -336,7 +336,7 @@ export default function ReservationsPublicPage() {
                   type="button"
                   onClick={closeEdit}
                   disabled={edit.isPending}
-                  className="px-4 py-2 text-xs text-gray-300 bg-white/5 rounded-xl
+                  className="px-4 py-2 text-xs text-gray-300 bg-gray-800 rounded-xl
                              hover:bg-white/10 transition-colors disabled:opacity-50"
                 >
                   Fechar
@@ -377,7 +377,7 @@ function ReservationCard({ r, onEdit }: { r: Reservation; onEdit?: () => void })
   const dt = parseISO(r.data_hora)
 
   return (
-    <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-4">
+    <div className="flex items-center gap-4 bg-gray-800 border border-white/10 rounded-2xl p-4">
       <div className="flex-shrink-0 w-12 h-12 bg-brand-500/20 rounded-2xl flex flex-col
                       items-center justify-center">
         <span className="text-brand-400 font-black text-lg leading-none">{dt.getDate()}</span>
