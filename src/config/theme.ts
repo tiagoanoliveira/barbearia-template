@@ -35,6 +35,12 @@ export const barberShopConfig = {
   // ─ Cloudflare Turnstile ─────────────────────────────────────────────────
   turnstileSiteKey: '0x4AAAAAACob-aLDgwmHRXUO',
 
+  // ─ Web Push (VAPID) ──────────────────────────────────────────────────────
+// Chave pública VAPID — gerada com `npx web-push generate-vapid-keys`
+// A chave privada correspondente deve estar em VAPID_PRIVATE_KEY nas
+// variáveis de ambiente do Cloudflare (nunca expor no frontend).
+  vapidPublicKey:'BLZgq4JhJQEiLs3bJv2gwU3u4W6E2MN7rC-rKDjkZBdvH_JQrYZQ9nCiRvuD_0JUmjpVZe10suA0rHxQFM_Rsw0',
+
   // ─ OAuth social ──────────────────────────────────────────────────────────
   // O botão do Facebook fica oculto e o do Google ocupa a linha toda.
   facebookEnabled: true,

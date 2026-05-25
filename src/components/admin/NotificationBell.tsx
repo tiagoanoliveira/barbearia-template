@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { adminApi } from '@/api/client'
 import type { ApiResponse } from '@/types'
 import { useAdminUser } from '@/hooks/useAdminUser'
+import { barberShopConfig } from '@/config/theme'
 
 interface NotificationDto {
   id: number
@@ -34,12 +35,6 @@ function isoToLocalDateStr(iso: string): string {
 }
 
 const SEEN_IDS_KEY = 'notif_seen_ids'
-async function fetchVapidPublicKey(): Promise<string> {
-  const res = await fetch('/api/admin/notifications/vapid')
-  const json = await res.json()
-  if (!json?.data?.vapidPublicKey) throw new Error('VAPID public key não disponível')
-  return json.data.vapidPublicKey
-}
 
 function loadSeenIds(): Set<number> {
   try {
@@ -87,11 +82,10 @@ function usePushSubscription() {
   const subscribe = useCallback(async () => {
     setState('loading')
     try {
-      const vapidPublicKey = await fetchVapidPublicKey()
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        applicationServerKey: urlBase64ToUint8Array(barberShopConfig.vapidPublicKey),
       })
       await adminApi.post('/api/admin/push-subscription', sub.toJSON())
       setState('subscribed')
