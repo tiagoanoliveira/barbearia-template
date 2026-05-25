@@ -375,26 +375,30 @@ export default function BookingPage() {
                           </div>
                         </button>
 
-                        {barbersForService.map(b => (
-                            <button key={b.id} onClick={() => handleSelectBarber(b, false)}
-                                    className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
-                                        !booking.anyBarber && booking.barber?.id === b.id
-                                            ? 'bg-primary-500/20 border-primary-500'
-                                            : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                    }`}>
-                              <div className="w-12 h-12 rounded-2xl bg-gray-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                {b.foto
-                                    ? <img src={b.foto} alt={b.name} className="w-full h-full object-cover" />
-                                    : <span className="text-white font-bold">{b.name.charAt(0)}</span>}
-                              </div>
-                              <div>
-                                <p className="text-white font-semibold">{b.name}</p>
-                                {/* Preço exacto deste barbeiro para este serviço */}
-                                <p className="text-secondary-400 font-bold text-sm">{b.price}€</p>
-                                <p className="text-xs text-gray-500">{b.duration} min</p>
-                              </div>
-                            </button>
-                        ))}
+                        {barbersForService.map(b => {
+                          const hasPriceVar = (booking.service as Service & { has_price_variation?: boolean })?.has_price_variation
+                          return (
+                              <button key={b.id} onClick={() => handleSelectBarber(b, false)}
+                                      className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
+                                          !booking.anyBarber && booking.barber?.id === b.id
+                                              ? 'bg-primary-500/20 border-primary-500'
+                                              : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                      }`}>
+                                <div className="w-12 h-12 rounded-2xl bg-gray-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                  {b.foto
+                                      ? <img src={b.foto} alt={b.name} className="w-full h-full object-cover" />
+                                      : <span className="text-white font-bold">{b.name.charAt(0)}</span>}
+                                </div>
+                                <div>
+                                  <p className="text-white font-semibold">{b.name}</p>
+                                  {hasPriceVar && (
+                                      <p className="text-secondary-400 font-bold text-sm">{b.price}€</p>
+                                  )}
+                                  <p className="text-xs text-gray-500">{b.duration} min</p>
+                                </div>
+                              </button>
+                          )
+                        })}
                       </div>
                   )}
 
