@@ -141,9 +141,18 @@ export function ReservationEditModal({
   const barbers  = barbersRes?.data ?? []
   const services = (servicesRes?.data as unknown as Service[]) ?? []
 
+  const { data: barberServicesRes2 } = useQuery({
+    queryKey: ['barber-services-modal', form.barber_id],
+    queryFn:  () => form.barber_id
+        ? adminApi.get<Service[]>(`/api/barbers/${form.barber_id}/services`)
+        : adminApi.get<Service[]>('/api/admin/services'),
+    enabled: !!form.barber_id,
+  })
+  const barberServices = (barberServicesRes2?.data as unknown as Service[]) ?? services
+
   const handleServiceChange = (serviceId: number) => {
     const service = services.find(s => s.id === serviceId)
-    setForm(f => ({ ...f, service_id: serviceId, service_duration: service?.duration ?? f.service_duration }))
+    setForm(f => ({ ...f, service_id: serviceId, service_duration: service?.duration ?? f.service_duration, service_price: service?.price ?? f.service_price, }))
   }
 
   const handleStatusChange = (value: string) => {
@@ -211,7 +220,10 @@ export function ReservationEditModal({
           <div>
             <label className="block text-xs text-gray-500 mb-1">Barbeiro</label>
             <select className="input text-sm w-full" value={form.barber_id ?? ''}
-              onChange={e => upd('barber_id', Number(e.target.value))}>
+              onChange={e => {
+                upd('barber_id', Number(e.target.value))
+                upd('service_id', undefined)  // força re-selecção do serviço
+              }}>
               {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
@@ -229,7 +241,7 @@ export function ReservationEditModal({
             <label className="block text-xs text-gray-500 mb-1">Serviço</label>
             <select className="input text-sm w-full bg-white text-gray-900" value={form.service_id ?? ''}
               onChange={e => handleServiceChange(Number(e.target.value))}>
-              {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min)</option>)}
+              {barberServices.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration} min) — {s.price}€</option>)}
             </select>
           </div>
           <div>

@@ -14,9 +14,20 @@ export interface Service {
   name: string
   duration: number
   price: number
+  min_price?: number | null
+  barber_overrides?: BarberServiceOverride[]
   svg?: string
   abreviacao?: string
   color?: string
+}
+
+
+interface BarberServiceOverride {
+  barbeiro_id: number
+  barber_name: string
+  preco:       number | null
+  duracao:     number | null
+  ativo:       boolean
 }
 
 // ─── Cliente ─────────────────────────────────────────────────────────────────

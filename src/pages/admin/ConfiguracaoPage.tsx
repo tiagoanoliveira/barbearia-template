@@ -130,31 +130,116 @@ function PhotoUploader({ value, onChange, folder }: { value: string; onChange: (
   )
 }
 
-// ─── SERVIÇOS (preços guardados e exibidos directamente em euros) ─────────────────
-interface ServiceForm { id?: number; name: string; duration: string; price: string; abreviacao: string; color: string }
-const emptyService = (): ServiceForm => ({ name: '', duration: '30', price: '0', abreviacao: '', color: '#0f7e44' })
+// ─── SERVIÇOS ─────────────────────────────────────────────────────────────────
+interface BarberOverride {
+  barbeiro_id: number
+  barber_name: string
+  preco:       number | null
+  duracao:     number | null
+  ativo:       boolean
+}
+
+interface ServiceForm {
+  id?:              number
+  name:             string
+  duration:         string
+  price:            string
+  abreviacao:       string
+  color:            string
+  barber_overrides: BarberOverride[]
+}
+
+const emptyService = (): ServiceForm => ({
+  name: '', duration: '30', price: '0', abreviacao: '', color: '#0f7e44', barber_overrides: [],
+})
 
 function ServicosSection() {
   const qc = useQueryClient()
-  const { data, isLoading } = useQuery({ queryKey: ['admin-services'], queryFn: () => adminApi.get<Service[]>('/api/admin/services') })
-  const services: Service[] = (data?.data as unknown as Service[]) ?? []
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-services'],
+    queryFn:  () => adminApi.get<Service[]>('/api/admin/services'),
+  })
+  const services: (Service & { barber_overrides?: BarberOverride[] })[] =
+      (data?.data as unknown as (Service & { barber_overrides?: BarberOverride[] })[]) ?? []
+
+  // Buscar barbeiros para o formulário de overrides
+  const { data: barbersData } = useQuery({
+    queryKey: ['admin-barbers-cfg'],
+    queryFn:  () => adminApi.get<Barber[]>('/api/admin/barbers?include_inactive=1'),
+  })
+  const barbers: Barber[] = (barbersData?.data as unknown as Barber[]) ?? []
 
   const [form, setForm]         = useState<ServiceForm | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [saving, setSaving]     = useState(false)
   const [err, setErr]           = useState<string | null>(null)
+  const [showOverrides, setShowOverrides] = useState(false)
 
-  const openNew  = () => { setForm(emptyService()); setErr(null) }
-  const openEdit = (s: Service) => {
-    setForm({ id: s.id, name: s.name, duration: String(s.duration), price: String(s.price), abreviacao: (s as unknown as { abreviacao?: string }).abreviacao ?? '', color: (s as unknown as { color?: string }).color ?? '#0f7e44' })
+  const openNew = () => {
+    // Inicializar overrides com todos os barbeiros activos (ativo=true, preco/duracao null → herda base)
+    const overrides: BarberOverride[] = barbers
+        .filter(b => (b as unknown as { active?: number }).active !== 0)
+        .map(b => ({ barbeiro_id: b.id, barber_name: b.name, preco: null, duracao: null, ativo: true }))
+    setForm({ ...emptyService(), barber_overrides: overrides })
+    setShowOverrides(false)
     setErr(null)
   }
+
+  const openEdit = (s: Service & { barber_overrides?: BarberOverride[] }) => {
+    // Merge: barbeiros que já têm override + barbeiros sem override (herdam base)
+    const existingMap: Record<number, BarberOverride> = {}
+    for (const ov of s.barber_overrides ?? []) existingMap[ov.barbeiro_id] = ov
+
+    const overrides: BarberOverride[] = barbers
+        .filter(b => (b as unknown as { active?: number }).active !== 0)
+        .map(b => existingMap[b.id] ?? {
+          barbeiro_id: b.id, barber_name: b.name, preco: null, duracao: null, ativo: true,
+        })
+
+    setForm({
+      id:               s.id,
+      name:             s.name,
+      duration:         String(s.duration),
+      price:            String(s.price),
+      abreviacao:       (s as unknown as { abreviacao?: string }).abreviacao ?? '',
+      color:            (s as unknown as { color?: string }).color ?? '#0f7e44',
+      barber_overrides: overrides,
+    })
+    setShowOverrides(false)
+    setErr(null)
+  }
+
+  const updateOverride = (barberId: number, field: keyof Omit<BarberOverride, 'barbeiro_id' | 'barber_name'>, value: unknown) => {
+    setForm(f => f ? {
+      ...f,
+      barber_overrides: f.barber_overrides.map(ov =>
+          ov.barbeiro_id === barberId ? { ...ov, [field]: value } : ov
+      ),
+    } : f)
+  }
+
   const save = async () => {
     if (!form) return
     if (!form.name || !form.duration || form.price === '') { setErr('Nome, duração e preço são obrigatórios'); return }
     setSaving(true); setErr(null)
     try {
-      const body = { name: form.name, duration: parseInt(form.duration), price: parseInt(form.price), abreviacao: form.abreviacao, color: form.color }
+      const body = {
+        name:     form.name,
+        duration: parseInt(form.duration),
+        price:    parseInt(form.price),
+        abreviacao: form.abreviacao,
+        color:    form.color,
+        // Só enviar overrides que difiram da base ou que estejam inactivos
+        barber_overrides: form.barber_overrides
+            .filter(ov => !ov.ativo || ov.preco !== null || ov.duracao !== null)
+            .map(ov => ({
+              barbeiro_id: ov.barbeiro_id,
+              preco:       ov.preco   !== null ? parseInt(String(ov.preco))   : null,
+              duracao:     ov.duracao !== null ? parseInt(String(ov.duracao)) : null,
+              ativo:       ov.ativo,
+            })),
+      }
       if (form.id) await adminApi.put(`/api/admin/services/${form.id}`, body)
       else         await adminApi.post('/api/admin/services', body)
       qc.invalidateQueries({ queryKey: ['admin-services'] })
@@ -163,6 +248,7 @@ function ServicosSection() {
     } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
     finally { setSaving(false) }
   }
+
   const del = async (id: number) => {
     try {
       await adminApi.delete(`/api/admin/services/${id}`)
@@ -173,81 +259,161 @@ function ServicosSection() {
   }
 
   return (
-    <Card>
-      <SectionHeader icon={Sparkles} title="Serviços" subtitle="Preços em euros sem multiplicação — o valor inserido é o exibido" />
-      {isLoading ? <LoadingSpinner size="sm" /> : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-xs text-gray-500">
-                <th className="text-left py-2 pr-3 font-medium">Nome</th>
-                <th className="text-left py-2 pr-3 font-medium">Dur.</th>
-                <th className="text-left py-2 pr-3 font-medium">Preço</th>
-                <th className="text-left py-2 pr-3 font-medium">Abrev.</th>
-                <th className="text-left py-2 font-medium">Cor</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {services.map(s => (
-                <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="py-2.5 pr-3 font-medium">{s.name}</td>
-                  <td className="py-2.5 pr-3 text-gray-600">{s.duration} min</td>
-                  <td className="py-2.5 pr-3 text-gray-600">{s.price}€</td>
-                  <td className="py-2.5 pr-3 text-gray-500">{(s as unknown as { abreviacao?: string }).abreviacao ?? '—'}</td>
-                  <td className="py-2.5"><span className="inline-block w-5 h-5 rounded border border-gray-200" style={{ background: (s as unknown as { color?: string }).color ?? '#0f7e44' }} /></td>
-                  <td className="py-2.5 pl-3 whitespace-nowrap">
-                    {deleteId === s.id
-                      ? <ConfirmDelete onConfirm={() => del(s.id)} onCancel={() => setDeleteId(null)} />
-                      : <span className="flex items-center gap-1">
-                          <button onClick={() => openEdit(s)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil size={14} /></button>
-                          <button onClick={() => setDeleteId(s.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
-                        </span>}
-                  </td>
+      <Card>
+        <SectionHeader icon={Sparkles} title="Serviços" subtitle="Define preços e durações base ou por barbeiro" />
+        {isLoading ? <LoadingSpinner size="sm" /> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                <tr className="border-b border-gray-100 text-xs text-gray-500">
+                  <th className="text-left py-2 pr-3 font-medium">Nome</th>
+                  <th className="text-left py-2 pr-3 font-medium">Dur.</th>
+                  <th className="text-left py-2 pr-3 font-medium">Preço base</th>
+                  <th className="text-left py-2 pr-3 font-medium">Abrev.</th>
+                  <th className="text-left py-2 pr-3 font-medium">Cor</th>
+                  <th className="text-left py-2 font-medium">Por barbeiro</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <button onClick={openNew} className="mt-4 flex items-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium">
-            <Plus size={16} /> Novo serviço
-          </button>
-        </div>
-      )}
-      {form && (
-        <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
-          <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar serviço' : 'Novo serviço'}</p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-xs text-gray-500 mb-1">Nome *</label>
-              <input className="input text-sm w-full" value={form.name} onChange={e => setForm(f => f && ({ ...f, name: e.target.value }))} />
+                </thead>
+                <tbody>
+                {services.map(s => {
+                  const hasOverrides = (s.barber_overrides ?? []).some(
+                      ov => !ov.ativo || ov.preco !== null || ov.duracao !== null
+                  )
+                  return (
+                      <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <td className="py-2.5 pr-3 font-medium">{s.name}</td>
+                        <td className="py-2.5 pr-3 text-gray-600">{s.duration} min</td>
+                        <td className="py-2.5 pr-3 text-gray-600">{s.price}€</td>
+                        <td className="py-2.5 pr-3 text-gray-500">{(s as unknown as { abreviacao?: string }).abreviacao ?? '—'}</td>
+                        <td className="py-2.5 pr-3">
+                      <span className="inline-block w-5 h-5 rounded border border-gray-200"
+                            style={{ background: (s as unknown as { color?: string }).color ?? '#0f7e44' }} />
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          {hasOverrides
+                              ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">Personalizado</span>
+                              : <span className="text-xs text-gray-400">Padrão</span>
+                          }
+                        </td>
+                        <td className="py-2.5 pl-3 whitespace-nowrap">
+                          {deleteId === s.id
+                              ? <ConfirmDelete onConfirm={() => del(s.id)} onCancel={() => setDeleteId(null)} />
+                              : <span className="flex items-center gap-1">
+                            <button onClick={() => openEdit(s)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil size={14} /></button>
+                            <button onClick={() => setDeleteId(s.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                          </span>
+                          }
+                        </td>
+                      </tr>
+                  )
+                })}
+                </tbody>
+              </table>
+              <button onClick={openNew} className="mt-4 flex items-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium">
+                <Plus size={16} /> Novo serviço
+              </button>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Duração (min) *</label>
-              <input type="number" min={5} step={5} className="input text-sm w-full" value={form.duration} onChange={e => setForm(f => f && ({ ...f, duration: e.target.value }))} />
+        )}
+
+        {form && (
+            <div className="mt-4 border-t border-gray-100 pt-4 space-y-4">
+              <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar serviço' : 'Novo serviço'}</p>
+
+              {/* Campos base */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs text-gray-500 mb-1">Nome *</label>
+                  <input className="input text-sm w-full" value={form.name}
+                         onChange={e => setForm(f => f && ({ ...f, name: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Duração base (min) *</label>
+                  <input type="number" min={5} step={5} className="input text-sm w-full" value={form.duration}
+                         onChange={e => setForm(f => f && ({ ...f, duration: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Preço base (€) *</label>
+                  <input type="number" min={0} step={1} className="input text-sm w-full" value={form.price}
+                         onChange={e => setForm(f => f && ({ ...f, price: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Abreviação</label>
+                  <input maxLength={6} className="input text-sm w-full" value={form.abreviacao}
+                         onChange={e => setForm(f => f && ({ ...f, abreviacao: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Cor</label>
+                  <input type="color" className="h-9 w-full rounded border border-gray-200 cursor-pointer"
+                         value={form.color} onChange={e => setForm(f => f && ({ ...f, color: e.target.value }))} />
+                </div>
+              </div>
+
+              {/* Overrides por barbeiro */}
+              {form.barber_overrides.length > 0 && (
+                  <div>
+                    <button type="button" onClick={() => setShowOverrides(v => !v)}
+                            className="flex items-center gap-2 text-xs text-brand-600 hover:text-brand-700 font-medium mb-2">
+                      <Scissors size={13} />
+                      {showOverrides ? 'Ocultar' : 'Personalizar'} por barbeiro
+                    </button>
+
+                    {showOverrides && (
+                        <div className="border border-gray-100 rounded-xl overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead>
+                            <tr className="bg-gray-50 text-gray-500">
+                              <th className="text-left px-3 py-2 font-medium">Barbeiro</th>
+                              <th className="text-left px-2 py-2 font-medium">Disponível</th>
+                              <th className="text-left px-2 py-2 font-medium">Preço (€)</th>
+                              <th className="text-left px-2 py-2 font-medium">Duração (min)</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {form.barber_overrides.map(ov => (
+                                <tr key={ov.barbeiro_id} className="border-t border-gray-50">
+                                  <td className="px-3 py-2 font-medium text-gray-700">{ov.barber_name}</td>
+                                  <td className="px-2 py-2">
+                                    <input type="checkbox" checked={ov.ativo}
+                                           onChange={e => updateOverride(ov.barbeiro_id, 'ativo', e.target.checked)}
+                                           className="rounded" />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <input type="number" min={0} step={1} disabled={!ov.ativo}
+                                           placeholder={`${form.price} (base)`}
+                                           value={ov.preco ?? ''}
+                                           onChange={e => updateOverride(ov.barbeiro_id, 'preco', e.target.value === '' ? null : Number(e.target.value))}
+                                           className="input text-xs w-24 disabled:opacity-40" />
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <input type="number" min={5} step={5} disabled={!ov.ativo}
+                                           placeholder={`${form.duration} (base)`}
+                                           value={ov.duracao ?? ''}
+                                           onChange={e => updateOverride(ov.barbeiro_id, 'duracao', e.target.value === '' ? null : Number(e.target.value))}
+                                           className="input text-xs w-24 disabled:opacity-40" />
+                                  </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                          </table>
+                          <p className="text-[11px] text-gray-400 px-3 py-2 bg-gray-50 border-t border-gray-100">
+                            Deixa em branco para usar o valor base. Desmarca "Disponível" para que o barbeiro não faça este serviço.
+                          </p>
+                        </div>
+                    )}
+                  </div>
+              )}
+
+              {err && <p className="text-xs text-red-500">{err}</p>}
+              <div className="flex gap-2">
+                <button onClick={() => setForm(null)} className="btn-secondary text-xs">Cancelar</button>
+                <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">
+                  {saving ? 'A guardar...' : 'Guardar'}
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Preço (€) *</label>
-              <input type="number" min={0} step={1} className="input text-sm w-full"
-                placeholder="Ex: 20" value={form.price}
-                onChange={e => setForm(f => f && ({ ...f, price: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Abreviação</label>
-              <input maxLength={6} className="input text-sm w-full" value={form.abreviacao} onChange={e => setForm(f => f && ({ ...f, abreviacao: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Cor</label>
-              <input type="color" className="h-9 w-full rounded border border-gray-200 cursor-pointer" value={form.color} onChange={e => setForm(f => f && ({ ...f, color: e.target.value }))} />
-            </div>
-          </div>
-          {err && <p className="text-xs text-red-500">{err}</p>}
-          <div className="flex gap-2">
-            <button onClick={() => setForm(null)} className="btn-secondary text-xs">Cancelar</button>
-            <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">{saving ? 'A guardar...' : 'Guardar'}</button>
-          </div>
-        </div>
-      )}
-    </Card>
+        )}
+      </Card>
   )
 }
 

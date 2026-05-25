@@ -74,6 +74,16 @@ CREATE TABLE IF NOT EXISTS servicos (
   color      TEXT    NOT NULL DEFAULT '#000000'
 );
 
+CREATE TABLE servico_barbeiro (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  servico_id INTEGER NOT NULL REFERENCES servicos(id) ON DELETE CASCADE,
+  barbeiro_id INTEGER NOT NULL REFERENCES barbeiros(id) ON DELETE CASCADE,
+  preco      INTEGER,       -- NULL = usa o preço base do serviço
+  duracao    INTEGER,       -- NULL = usa a duração base do serviço
+  ativo      INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(servico_id, barbeiro_id)
+);
+
 -- Tabela de marcas parceiras para o carrossel da homepage
 CREATE TABLE IF NOT EXISTS marcas (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

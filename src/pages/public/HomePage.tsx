@@ -88,7 +88,12 @@ function ServiceCard({ service }: { service: Service }) {
 
       <h3 className="text-gray-900 font-bold text-lg mb-1">{service.name}</h3>
       <p className="text-gray-500 text-sm mb-4">{service.duration} min</p>
-      <p className="font-black text-2xl text-primary-700">{service.price}€</p>
+      <p className="font-black text-2xl text-primary-700">
+        {service.min_price != null && service.min_price < service.price
+            ? <><span className="text-base font-semibold">desde </span>{service.min_price}€</>
+            : <>{service.price}€</>
+        }
+      </p>
     </div>
   )
 }

@@ -44,6 +44,15 @@ export default function ReservationsPublicPage() {
     queryFn:  () => api.get<Barber[]>('/api/barbers'),
   })
 
+  const { data: editBarberServicesRes } = useQuery({
+    queryKey: ['barber-services-edit', editBarberId],
+    queryFn:  () => editBarberId
+        ? api.get<Service[]>(`/api/barbers/${editBarberId}/services`)
+        : api.get<Service[]>('/api/services'),
+    enabled: !!editing,
+  })
+  const editServices = editBarberServicesRes?.data ?? []
+
   const { data: slotsRes } = useQuery({
     queryKey: ['edit-slots', editBarberId, editDate, editServiceId],
     queryFn:  () =>
@@ -231,8 +240,8 @@ export default function ReservationsPublicPage() {
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Selecionar serviço</option>
-                  {services.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                  {editServices.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} — {s.price}€</option>
                   ))}
                 </select>
               </div>
@@ -240,7 +249,7 @@ export default function ReservationsPublicPage() {
                 <label className="block text-xs text-gray-400 mb-1.5">Barbeiro</label>
                 <select
                   value={editBarberId ?? ''}
-                  onChange={e => { setEditBarberId(Number(e.target.value) || null); setEditTime('') }}
+                  onChange={e => { setEditBarberId(Number(e.target.value) || null); setEditServiceId(null); setEditTime('') }}
                   className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm
                              text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
