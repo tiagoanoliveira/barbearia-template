@@ -26,7 +26,7 @@ export async function onRequest(context) {
        LEFT JOIN servico_barbeiro sb
          ON sb.barbeiro_id = b.id AND sb.servico_id = s.id
        WHERE s.id = ?
-         AND (b.active IS NULL OR b.active = 1)
+         AND (b.ativo IS NULL OR b.ativo = 1)
        ORDER BY b.nome`
         ).bind(serviceId).all()
 
