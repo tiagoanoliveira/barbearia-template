@@ -69,32 +69,32 @@ function Gallery() {
 function ServiceCard({ service }: { service: Service }) {
   const navigate = useNavigate()
   const goBook = () => navigate(`${ROUTES.BOOKING}?service_id=${service.id}`)
-  const color  = (service as unknown as { color?: string }).color ?? '#d4a017'
+  const hasPriceVar = (service as unknown as { has_price_variation?: boolean }).has_price_variation
+  const minPrice    = (service as unknown as { min_price?: number }).min_price ?? service.price
 
   return (
-    <div
-      onClick={goBook}
-      className="group relative bg-gray-50 rounded-2xl p-4 border border-gray-100
+      <div
+          onClick={goBook}
+          className="group relative bg-gray-50 rounded-2xl p-4 border border-gray-100
                  hover:border-primary-300 hover:bg-primary-50/40 transition-all duration-300
                  hover:-translate-y-1 cursor-pointer overflow-hidden"
-    >
-      {/* Overlay “Reservar” ao hover */}
-      <div className="absolute inset-0 bg-primary-600/90 rounded-2xl flex items-center justify-end
+      >
+        <div className="absolute inset-0 bg-primary-600/90 rounded-2xl flex items-center justify-end
                       opacity-0 group-hover:opacity-100 transition-opacity duration-250">
         <span className="flex items-center gap-2 text-primary-600 font-bold text-lg px-4">
           Reservar <ArrowRight size={20} />
         </span>
-      </div>
+        </div>
 
-      <h3 className="text-gray-900 font-bold text-lg mb-1">{service.name}</h3>
-      <p className="text-gray-500 text-sm mb-4">{service.duration} min</p>
-      <p className="font-black text-2xl text-primary-700">
-        {service.min_price != null && service.min_price < service.price
-            ? <><span className="text-base font-semibold">desde </span>{service.min_price}€</>
-            : <>{service.price}€</>
-        }
-      </p>
-    </div>
+        <h3 className="text-gray-900 font-bold text-lg mb-1">{service.name}</h3>
+        <p className="text-gray-500 text-sm mb-4">{service.duration} min</p>
+        <p className="font-black text-2xl text-primary-700">
+          {hasPriceVar
+              ? <><span className="text-base font-semibold">desde </span>{minPrice}€</>
+              : <>{service.price}€</>
+          }
+        </p>
+      </div>
   )
 }
 
