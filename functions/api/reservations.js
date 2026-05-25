@@ -92,14 +92,10 @@ export async function onRequest(context) {
 
       // Enviar Web Push aos admins/barbeiro em background
       sendPushToBarbers(
-          env.DB,
-          { message: notifMessage, barber_id: finalBarberId, notification_id: notifResult?.meta?.last_row_id ?? null },
-          env
-      ).then(results => {
-        console.log('[reservations POST] push results:', JSON.stringify(results))
-      }).catch(err => {
-        console.error('[reservations POST] push error:', err?.message)
-      })
+        env.DB,
+        { message: notifMessage, barber_id: finalBarberId, notification_id: notifResult?.meta?.last_row_id ?? null },
+        env
+      ).catch(() => {})
 
       // Envia email de confirmação e agenda lembrete 24h antes (em background)
       sendReservationConfirmation(context, {
