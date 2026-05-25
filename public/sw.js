@@ -3,7 +3,7 @@
  * CACHE_VERSION: alterar sempre que se queira forçar actualização em todos os browsers
  */
 
-const CACHE_VERSION = 'v2.1'
+const CACHE_VERSION = 'v2.3'
 const STATIC_CACHE  = `bb-static-${CACHE_VERSION}`
 const DYNAMIC_CACHE = `bb-dynamic-${CACHE_VERSION}`
 
