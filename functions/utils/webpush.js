@@ -134,7 +134,8 @@ export async function sendWebPush(subscription, payload, vapid) {
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Authorization':    `vapid t=${jwt},k=${vapid.publicKey}`,
+      // Formato correcto: espaço após vírgula, sem espaço extra
+      'Authorization':    `vapid t=${jwt}, k=${vapid.publicKey}`,
       'Content-Type':     'application/octet-stream',
       'Content-Encoding': 'aes128gcm',
       'TTL':              '86400',
@@ -143,6 +144,12 @@ export async function sendWebPush(subscription, payload, vapid) {
   })
 
   const resBody = await res.text().catch(() => '')
+
+  // Log sempre para facilitar diagnóstico
+  if (res.status !== 201 && res.status !== 200) {
+    console.error(`[webpush] sendWebPush → ${res.status} ${res.statusText} | endpoint: ...${endpoint.slice(-50)} | body: ${resBody}`)
+  }
+
   return { status: res.status, statusText: res.statusText, body: resBody }
 }
 
