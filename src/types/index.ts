@@ -62,10 +62,10 @@ export interface Reservation {
   client_email?: string
   client_photo_url?: string
   client_free_reservations?: number
-  barber_id: number
+  barber_id: number | undefined
   barber_name: string
   barber_color?: string
-  service_id: number
+  service_id: number | undefined
   service_name: string
   service_duration: number
   service_price: number
