@@ -13,12 +13,13 @@ export default function PublicLoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const redirectTo = searchParams.get('redirect') ?? '/perfil'
+  const justVerified = searchParams.get('verified') === '1'
 
   const [mode, setMode] = useState<Mode>('login')
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '' })
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(justVerified ? '✅ Email verificado com sucesso! Podes fazer login.' : null)
   const [loading, setLoading] = useState(false)
 
   // Turnstile
