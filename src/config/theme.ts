@@ -124,6 +124,28 @@ export const barberShopConfig = {
     everyN: 10,
   },
 
+  // ─ Sistema de descontos ──────────────────────────────────────────────────
+  discounts: {
+    /**
+     * Ativar/desativar o sistema de descontos em toda a aplicação.
+     * Quando false, a secção de descontos no perfil do cliente e o
+     * painel de admin ficam ocultos.
+     */
+    enabled: true,
+
+    /**
+     * Mostrar descontos no perfil público do cliente (/perfil).
+     * Requer discounts.enabled = true.
+     */
+    showOnProfile: true,
+
+    /**
+     * Separar visualmente os descontos exclusivos (cliente_id = clienteId)
+     * dos descontos gerais (cliente_id = null) na UI do perfil.
+     */
+    showGeneralSeparately: true,
+  },
+
   // ─ Personalização visual ─────────────────────────────────────────────────
   theme: {
     navbarBg:       'bg-primary-900 backdrop-blur-md',

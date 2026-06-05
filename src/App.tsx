@@ -15,6 +15,7 @@ import ClientDetailPage from '@/pages/admin/ClientDetailPage'
 import UnavailablePage from '@/pages/admin/UnavailablePage'
 import ConfiguracaoPage from '@/pages/admin/ConfiguracaoPage'
 import PagamentosPage from '@/pages/admin/PagamentosPage'
+import DiscountsPage from '@/pages/admin/DiscountsPage'
 import LoginPage from '@/pages/admin/LoginPage'
 import AdminResetPasswordPage from '@/pages/admin/AdminResetPasswordPage'
 
@@ -82,6 +83,8 @@ export default function App() {
           <Route path="indisponibilidades" element={<UnavailablePage />} />
           <Route path="configuracao"       element={<ConfiguracaoPage />} />
           <Route path="pagamentos"         element={<PagamentosPage />} />
+          {/* Gestão de descontos — apenas superAdmin (verificado dentro da página) */}
+          <Route path="descontos"          element={<DiscountsPage />} />
         </Route>
 
         {/* Fallback */}
