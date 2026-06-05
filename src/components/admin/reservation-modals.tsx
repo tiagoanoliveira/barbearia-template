@@ -9,16 +9,18 @@ import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
 import { adminApi } from '@/api/client'
 import Modal from '@/components/ui/Modal'
-import type { Reservation, ReservationStatus, Service, MeioPagamento } from '@/types'
+import type { Reservation, ReservationStatus, Service, MeioPagamento, Discount } from '@/types'
+import { isDiscountUsable } from '@/types'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
-// ─── Constantes partilhadas ────────────────────────────────────────────────────────────
-export const STATUS_LABEL: Record<string, string> = {
+// ─── Constantes partilhadas ──────────────────────────────────────────────────────
+const STATUS_LABEL_MAP: Record<string, string> = {
   confirmada: 'Confirmada',
   concluida:  'Concluída',
   cancelada:  'Cancelada',
   faltou:     'Não compareceu',
 }
+export const STATUS_LABEL = STATUS_LABEL_MAP
 export const STATUS_COLORS: Record<string, string> = {
   confirmada: '#3b82f6', concluida: '#10b981', cancelada: '#ef4444', faltou: '#6b7280',
 }
@@ -38,7 +40,46 @@ const OFERTA_TIPO_OPTIONS = [
   { value: 'outro',      label: '❓ Outro' },
 ]
 
-// ─── ReservationDetailModal ──────────────────────────────────────────────────────
+// ─── Helper: mapeia raw da API para Discount ────────────────────────────────────────
+function mapRawDiscount(d: any): Discount {
+  return {
+    id:                       d.id,
+    client_id:                d.cliente_id ?? null,
+    name:                     d.nome,
+    description:              d.descricao ?? null,
+    type:                     d.tipo,
+    origin:                   d.origem ?? null,
+    value_percent:            d.valor_percentagem ?? null,
+    value_fixed:              d.valor_fixo_centimos ?? null,
+    valid_from:               d.valido_de ?? null,
+    valid_to:                 d.valido_ate ?? null,
+    min_monthly_reservations: d.min_reservas_mes ?? null,
+    max_uses:                 d.max_usos ?? null,
+    used_count:               d.usos_feitos ?? 0,
+    last_used_at:             d.usado_ultima_vez_em ?? null,
+    last_used_reservation_id: d.usado_ultima_reserva_id ?? null,
+    usage_comment:            d.comentario_uso ?? null,
+    active:                   !!d.ativo,
+    created_by_admin_id:      d.criado_por_admin_id ?? null,
+    created_at:               d.criado_em,
+    updated_at:               d.atualizado_em,
+  }
+}
+
+// ─── Helper: calcula valor do desconto sobre o preço ──────────────────────────────
+function calcDiscountValue(d: Discount, preco: number): number {
+  if (d.value_percent != null) return Math.round(preco * d.value_percent) / 100
+  if (d.value_fixed   != null) return Math.min(d.value_fixed / 100, preco)
+  return 0
+}
+
+function fmtDiscountLabel(d: Discount): string {
+  if (d.value_percent != null) return `${d.value_percent}%`
+  if (d.value_fixed   != null) return `${(d.value_fixed / 100).toFixed(2)}€`
+  return ''
+}
+
+// ─── ReservationDetailModal ────────────────────────────────────────────────
 export function ReservationDetailModal({
   reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout, onEditPayment,
 }: {
@@ -121,7 +162,7 @@ export function ReservationDetailModal({
   )
 }
 
-// ─── ReservationEditModal ───────────────────────────────────────────────────────────
+// ─── ReservationEditModal ──────────────────────────────────────────────────────
 export function ReservationEditModal({
   reservation, invalidateKey, onClose, onCancelRequest, onOpenCheckout,
 }: {
@@ -151,7 +192,6 @@ export function ReservationEditModal({
   const barberServices = (barberServicesRes2?.data as unknown as Service[]) ?? services
 
   const handleServiceChange = (serviceId: number) => {
-    // barberServices já tem duration e price correctos para este barbeiro
     const service = barberServices.find(s => s.id === serviceId)
     setForm(f => ({
       ...f,
@@ -228,7 +268,7 @@ export function ReservationEditModal({
             <select className="input text-sm w-full" value={form.barber_id ?? ''}
               onChange={e => {
                 upd('barber_id', Number(e.target.value))
-                upd('service_id', undefined)  // força re-selecção do serviço
+                upd('service_id', undefined)
               }}>
               {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -283,7 +323,7 @@ export function ReservationEditModal({
   )
 }
 
-// ─── ReservationStatusModal ──────────────────────────────────────────────────────────
+// ─── ReservationStatusModal ────────────────────────────────────────────────────
 export function ReservationStatusModal({
   reservation, action, invalidateKey, onClose,
 }: {
@@ -343,7 +383,7 @@ export function ReservationStatusModal({
   )
 }
 
-// ─── CheckoutModal ────────────────────────────────────────────────────────────────
+// ─── CheckoutModal ─────────────────────────────────────────────────────────────────
 export function CheckoutModal({
   reservation,
   invalidateKey,
@@ -359,10 +399,39 @@ export function CheckoutModal({
 }) {
   const qc = useQueryClient()
   const precoServico = pendingEditForm?.service_price ?? reservation.service_price ?? 0
-  const freeReservations = reservation.client_free_reservations ?? 0
-  const hadOferta      = !!reservation.oferta_tipo
+  const clientId     = reservation.client_id
+  const hadOferta    = !!reservation.oferta_tipo
 
-  // ── Reconstrução do estado inicial em modo edição ──────────────────────────
+  // ── Carregar descontos aplicáveis (clíiente-específicos + gerais) ────────────────
+  const { data: clientDiscountsRes } = useQuery({
+    queryKey: ['checkout-discounts-client', clientId],
+    queryFn: () => adminApi.get<any[]>(`/api/discounts/client/${clientId}`),
+    enabled: !!clientId && !editMode,
+  })
+  const { data: generalDiscountsRes } = useQuery({
+    queryKey: ['checkout-discounts-general'],
+    queryFn: () => adminApi.get<any[]>('/api/discounts/general'),
+    enabled: !editMode,
+  })
+
+  const clientDiscounts: Discount[] = ((clientDiscountsRes as any)?.data ?? []).map(mapRawDiscount)
+  const generalDiscounts: Discount[] = ((generalDiscountsRes as any)?.data ?? []).map(mapRawDiscount)
+
+  // Só mostrar descontos que são usáveis
+  const usableClientDiscounts  = clientDiscounts.filter(isDiscountUsable)
+  const usableGeneralDiscounts = generalDiscounts.filter(isDiscountUsable)
+  const allUsable = [...usableClientDiscounts, ...usableGeneralDiscounts]
+
+  // ── Estado do modal ──────────────────────────────────────────────────────────────
+
+  // Desconto selecionado via tabela descontos
+  const [selectedDiscountId, setSelectedDiscountId] = useState<number | null>(
+    reservation.desconto_id ?? null
+  )
+  const selectedDiscount = selectedDiscountId != null
+    ? allUsable.find(d => d.id === selectedDiscountId) ?? null
+    : null
+
   const initialValorPago = (() => {
     if (hadOferta && reservation.oferta_valor != null)
       return Math.max(0, precoServico - reservation.oferta_valor)
@@ -370,13 +439,10 @@ export function CheckoutModal({
   })()
 
   const [temOferta, setTemOferta]   = useState(hadOferta)
-  // ofertaTipo: sempre 'fidelidade' por defeito (editMode usa o valor guardado na BD)
   const [ofertaTipo, setOfertaTipo] = useState<string>(reservation.oferta_tipo ?? 'fidelidade')
 
   const [meioPagamento, setMeioPagamento] = useState<MeioPagamento | null>(
-    hadOferta && initialValorPago === 0
-      ? null
-      : (reservation.meio_pagamento ?? 'multibanco')
+    hadOferta && initialValorPago === 0 ? null : (reservation.meio_pagamento ?? 'multibanco')
   )
   const [valorPago, setValorPago] = useState<number | null>(
     hadOferta && initialValorPago === 0 ? null : initialValorPago
@@ -389,9 +455,33 @@ export function CheckoutModal({
   const [error, setError]             = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
 
-  // Quando se activa/desactiva a oferta
-  // Ao activar: ofertaTipo fica sempre 'fidelidade' por defeito
+  // Quando seleciona um desconto da tabela, ajustar automaticamente o valor pago
+  const handleSelectDiscount = (discountId: number | null) => {
+    setSelectedDiscountId(discountId)
+    if (discountId === null) {
+      // Sem desconto selecionado: repor para cobrar total
+      setTemOferta(false)
+      setMeioPagamento('multibanco')
+      setValorPago(precoServico)
+      return
+    }
+    const d = allUsable.find(x => x.id === discountId)
+    if (!d) return
+    const descVal = calcDiscountValue(d, precoServico)
+    const restante = Math.max(0, precoServico - descVal)
+    setTemOferta(true)
+    setOfertaTipo(d.type)
+    if (restante === 0) {
+      setMeioPagamento(null)
+      setValorPago(null)
+    } else {
+      setMeioPagamento(meioPagamento ?? 'multibanco')
+      setValorPago(restante)
+    }
+  }
+
   const handleToggleOferta = (checked: boolean) => {
+    if (!checked) setSelectedDiscountId(null)
     setTemOferta(checked)
     if (checked) {
       setOfertaTipo('fidelidade')
@@ -405,21 +495,18 @@ export function CheckoutModal({
 
   const handleMeioChange = (meio: MeioPagamento) => {
     setMeioPagamento(meio)
-    if (temOferta) setValorPago(null)
-  }
-
-  const handleDescontarGratuita = () => {
-    setTemOferta(true)
-    setOfertaTipo('fidelidade')
-    setMeioPagamento(null)
-    setValorPago(null)
+    if (temOferta && selectedDiscount) {
+      const descVal = calcDiscountValue(selectedDiscount, precoServico)
+      setValorPago(Math.max(0, precoServico - descVal))
+    } else if (temOferta) {
+      setValorPago(null)
+    }
   }
 
   const valorPagoEfectivo = meioPagamento === null ? 0 : (valorPago ?? 0)
   const ofertaValorEuros = temOferta
     ? Math.round(Math.max(0, precoServico - valorPagoEfectivo) * 100) / 100
     : null
-
   const isOfertaTotal = temOferta && meioPagamento === null
 
   const validate = (): string | null => {
@@ -449,7 +536,9 @@ export function CheckoutModal({
         comentario_pagamento: comentario.trim() || undefined,
         oferta_valor:         ofertaValorEuros,
         oferta_tipo:          temOferta ? ofertaTipo : null,
+        desconto_id:          selectedDiscountId ?? null,
       }
+
       if (pendingEditForm) {
         await reservationsApi.update(reservation.id, {
           barber_id:        pendingEditForm.barber_id,
@@ -467,6 +556,16 @@ export function CheckoutModal({
           ...paymentPayload,
         })
       }
+
+      // Se foi selecionado um desconto da tabela, chamar o endpoint /apply
+      // para registar o uso na tabela descontos
+      if (selectedDiscountId != null && !editMode) {
+        await adminApi.post(`/api/discounts/${selectedDiscountId}/apply`, {
+          reserva_id:  reservation.id,
+          oferta_valor: ofertaValorEuros,
+        }).catch(() => {}) // não bloquear o checkout se isto falhar
+      }
+
       qc.invalidateQueries({ queryKey: [invalidateKey] })
       onClose()
     } catch {}
@@ -496,53 +595,130 @@ export function CheckoutModal({
           )}
         </div>
 
-        {/* Banner fidelidade */}
-        {freeReservations > 0 && !editMode && (
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800">
-            <span>🎁</span>
-            <span>
-              Este cliente tem <strong>{freeReservations}</strong> reserva{freeReservations > 1 ? 's' : ''} gratuita{freeReservations > 1 ? 's' : ''} por usar.
-            </span>
-            <button
-              type="button"
-              onClick={handleDescontarGratuita}
-              className="ml-auto shrink-0 px-2 py-1 rounded bg-emerald-600 text-white text-[10px] font-medium hover:bg-emerald-700 transition-colors">
-              Descontar
-            </button>
+        {/* ── Descontos disponíveis (apenas no checkout, não em editMode) ── */}
+        {!editMode && allUsable.length > 0 && (
+          <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 space-y-2">
+            <p className="text-xs font-semibold text-brand-700">🏷️ Descontos aplicáveis</p>
+
+            {usableClientDiscounts.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wide text-gray-400">Exclusivos deste cliente</p>
+                {usableClientDiscounts.map(d => {
+                  const selected = selectedDiscountId === d.id
+                  const descVal  = calcDiscountValue(d, precoServico)
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => handleSelectDiscount(selected ? null : d.id)}
+                      className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
+                        selected
+                          ? 'bg-brand-600 text-white border-brand-600'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-brand-400'
+                      }`}
+                    >
+                      <span className="font-medium">{d.name}</span>
+                      <span className="ml-2 opacity-75">— {fmtDiscountLabel(d)}</span>
+                      {descVal > 0 && (
+                        <span className={`ml-2 font-semibold ${selected ? 'text-white' : 'text-emerald-600'}`}>
+                          (−{descVal.toFixed(2)}€)
+                        </span>
+                      )}
+                      {d.max_uses != null && (
+                        <span className="ml-2 opacity-60">[{d.used_count}/{d.max_uses}]</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {usableGeneralDiscounts.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wide text-gray-400">Descontos gerais</p>
+                {usableGeneralDiscounts.map(d => {
+                  const selected = selectedDiscountId === d.id
+                  const descVal  = calcDiscountValue(d, precoServico)
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => handleSelectDiscount(selected ? null : d.id)}
+                      className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
+                        selected
+                          ? 'bg-brand-600 text-white border-brand-600'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-brand-400'
+                      }`}
+                    >
+                      <span className="font-medium">{d.name}</span>
+                      <span className="ml-2 opacity-75">— {fmtDiscountLabel(d)}</span>
+                      {descVal > 0 && (
+                        <span className={`ml-2 font-semibold ${selected ? 'text-white' : 'text-emerald-600'}`}>
+                          (−{descVal.toFixed(2)}€)
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {selectedDiscountId != null && (
+              <button
+                type="button"
+                onClick={() => handleSelectDiscount(null)}
+                className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+              >
+                Remover desconto selecionado
+              </button>
+            )}
           </div>
         )}
 
-        {/* Toggle oferta */}
-        <div className={`rounded-lg border p-3 space-y-3 transition-colors ${
-          temOferta ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200'
-        }`}>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={temOferta}
-              onChange={e => handleToggleOferta(e.target.checked)}
-              className="rounded"
-            />
-            <span className={`font-medium ${temOferta ? 'text-emerald-800' : 'text-gray-700'}`}>
-              🏷️ Aplicar oferta / desconto
-            </span>
-          </label>
+        {/* Toggle oferta manual (sem desconto da tabela selecionado) */}
+        {selectedDiscountId == null && (
+          <div className={`rounded-lg border p-3 space-y-3 transition-colors ${
+            temOferta ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200'
+          }`}>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={temOferta}
+                onChange={e => handleToggleOferta(e.target.checked)}
+                className="rounded"
+              />
+              <span className={`font-medium ${temOferta ? 'text-emerald-800' : 'text-gray-700'}`}>
+                🏷️ Aplicar oferta / desconto manual
+              </span>
+            </label>
 
-          {temOferta && (
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Tipo de oferta</label>
-              <select
-                className="input text-sm w-full bg-white"
-                value={ofertaTipo}
-                onChange={e => setOfertaTipo(e.target.value)}
-              >
-                {OFERTA_TIPO_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
+            {temOferta && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Tipo de oferta</label>
+                <select
+                  className="input text-sm w-full bg-white"
+                  value={ofertaTipo}
+                  onChange={e => setOfertaTipo(e.target.value)}
+                >
+                  {OFERTA_TIPO_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Desconto selecionado — resumo */}
+        {selectedDiscount && (
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800">
+            🏷️ Desconto <strong>{selectedDiscount.name}</strong> selecionado
+            {' '}— poupa <strong>{calcDiscountValue(selectedDiscount, precoServico).toFixed(2)} €</strong>
+            {selectedDiscount.max_uses === 1 && (
+              <span className="ml-1 text-amber-700">(único uso — será marcado como usado)</span>
+            )}
+          </div>
+        )}
 
         {/* Meio de pagamento */}
         <div>
@@ -660,7 +836,7 @@ export function CheckoutModal({
   )
 }
 
-// ─── Helpers internos ──────────────────────────────────────────────────────────────
+// ─── Helpers internos ────────────────────────────────────────────────────────
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">
