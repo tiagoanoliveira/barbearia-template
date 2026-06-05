@@ -186,7 +186,7 @@ export default function BookingPage() {
     mutationFn: () =>
         api.post('/api/reservations', {
           service_id: booking.service!.id,
-          barber_id:  booking.anyBarber ? 'any' : booking.barber!.id,
+          barber_id:  booking.anyBarber ? 'any' : (booking.barber?.id ?? singleBarber?.id),
           date:       booking.date,
           time:       booking.time,
           notes:      booking.notes || undefined,
@@ -245,8 +245,13 @@ export default function BookingPage() {
   )
 
   const goNext = useCallback(() => {
-    const next: Step = step === 1 && singleBarber ? 3 : (step + 1) as Step
-    goToStep(next)
+    // Se há só 1 barbeiro, garante que fica seleccionado antes de saltar o passo 2
+    if (step === 1 && singleBarber) {
+      setBooking(b => ({ ...b, barber: singleBarber, anyBarber: false }))
+      goToStep(3)
+      return
+    }
+    goToStep((step + 1) as Step)
   }, [step, singleBarber])
 
   const goPrev = useCallback(() => {
@@ -510,7 +515,9 @@ export default function BookingPage() {
                           },
                           {
                             icon: User, label: 'Barbeiro',
-                            value: booking.anyBarber ? 'Sem preferência (atribuição automática)' : booking.barber?.name ?? '',
+                            value: booking.anyBarber
+                              ? 'Sem preferência (atribuição automática)'
+                              : (booking.barber?.name ?? singleBarber?.name ?? '—'),
                           },
                           {
                             icon: Calendar, label: 'Data',
