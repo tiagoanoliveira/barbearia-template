@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS clientes (
   auth_methods              TEXT    DEFAULT 'password',
   token_verificacao_expira  TEXT,
   reservas_concluidas       INTEGER DEFAULT 0,
+  -- DEPRECATED: migrado para tabela descontos (tipo='fidelizacao')
+  -- Manter por compatibilidade com triggers existentes até migração completa
   reservas_gratuitas_disponiveis INTEGER DEFAULT 0,
   nif                       INTEGER,
   next_appointment_date     DATETIME,
@@ -95,6 +97,63 @@ CREATE TABLE IF NOT EXISTS marcas (
 );
 
 -- ================================================
+-- DESCONTOS
+-- ================================================
+CREATE TABLE IF NOT EXISTS descontos (
+  id                        INTEGER  PRIMARY KEY AUTOINCREMENT,
+
+  -- NULL = desconto geral (aplicável a todos os clientes)
+  -- NOT NULL = desconto exclusivo de um cliente específico
+  cliente_id                INTEGER  REFERENCES clientes(id) ON DELETE CASCADE,
+
+  nome                      TEXT     NOT NULL,
+  descricao                 TEXT,
+
+  -- Tipo livre — sem CHECK para permitir adicionar novos tipos apenas no código
+  -- Exemplos: 'fidelizacao', 'mensal', 'vitalicio', 'ocasional', 'campanha'
+  tipo                      TEXT     NOT NULL,
+
+  -- Origem do desconto (ex: 'manual', 'trigger_fidelizacao', 'campanha')
+  origem                    TEXT,
+
+  -- Valor do desconto — pelo menos um dos dois deve ser preenchido
+  valor_percentagem         INTEGER  DEFAULT NULL, -- ex: 10 = 10%
+  valor_fixo_centimos       INTEGER  DEFAULT NULL, -- ex: 500 = 5,00 €
+
+  -- Regras de validade temporal
+  valido_de                 DATETIME DEFAULT NULL,
+  valido_ate                DATETIME DEFAULT NULL,
+
+  -- Regra de ativação: número mínimo de reservas concluídas no mês atual
+  -- (NULL = sem requisito de quantidade mensal)
+  min_reservas_mes          INTEGER  DEFAULT NULL,
+
+  -- Controlo de usos
+  -- NULL = ilimitado (vitalício); 1 = ocasional (one-shot)
+  max_usos                  INTEGER  DEFAULT NULL,
+  usos_feitos               INTEGER  NOT NULL DEFAULT 0,
+
+  -- Tracking do último uso
+  usado_ultima_vez_em       DATETIME DEFAULT NULL,
+  usado_ultima_reserva_id   INTEGER  REFERENCES reservas(id) ON DELETE SET NULL,
+  comentario_uso            TEXT     DEFAULT NULL,
+
+  -- Estado
+  ativo                     INTEGER  NOT NULL DEFAULT 1,
+
+  -- Auditoria
+  criado_por_admin_id       INTEGER  REFERENCES admin_users(id) ON DELETE SET NULL,
+  criado_em                 DATETIME NOT NULL DEFAULT (datetime('now')),
+  atualizado_em             DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_descontos_cliente_id  ON descontos(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_descontos_tipo        ON descontos(tipo);
+CREATE INDEX IF NOT EXISTS idx_descontos_ativo       ON descontos(ativo, valido_ate);
+CREATE INDEX IF NOT EXISTS idx_descontos_geral_ativo ON descontos(cliente_id, ativo)
+  WHERE cliente_id IS NULL;
+
+-- ================================================
 -- RESERVAS
 -- ================================================
 CREATE TABLE IF NOT EXISTS reservas (
@@ -118,23 +177,20 @@ CREATE TABLE IF NOT EXISTS reservas (
   -- ID do email de lembrete agendado na Resend (para poder cancelar / reagendar)
   resend_lembrete_id     TEXT,
 
-  -- ── Pagamento ───────────────────────────────────────────────────────────────────────
-  -- Meio de pagamento do serviço (null = ainda não pago / não registado)
+  -- ── Pagamento ───────────────────────────────────────────────────────
   meio_pagamento         TEXT    DEFAULT NULL,
-  -- Valor efectivamente pago em cêntimos (INTEGER evita erros de vírgula flutuante)
   valor_pago             INTEGER DEFAULT NULL,
-  -- Gorjeta em cêntimos (null = sem gorjeta registada)
   gorjeta                INTEGER DEFAULT NULL,
-  -- Meio de pagamento da gorjeta (pode diferir do meio principal)
   meio_gorjeta           TEXT    DEFAULT NULL,
-  -- Comentário livre sobre o pagamento (obrigatório quando meio = 'outro')
-    comentario_pagamento   TEXT    DEFAULT NULL,
+  comentario_pagamento   TEXT    DEFAULT NULL,
 
-    -- ── Oferta / Fidelização ────────────────────────────────────────────────────────────
-    -- Valor oferecido em cêntimos (null = sem oferta; 0 = oferta total)
-    oferta_valor           INTEGER DEFAULT NULL,
-    -- Tipo de oferta (ex: 'fidelizacao', 'promocao', 'cortesia', etc.)
-    oferta_tipo            TEXT    DEFAULT NULL);
+  -- ── Oferta / Fidelização ─────────────────────────────────────────
+  oferta_valor           INTEGER DEFAULT NULL,
+  oferta_tipo            TEXT    DEFAULT NULL,
+
+  -- ── Desconto aplicado (FK para tabela descontos) ────────────────────
+  desconto_id            INTEGER DEFAULT NULL REFERENCES descontos(id) ON DELETE SET NULL
+);
 
 CREATE INDEX IF NOT EXISTS idx_reservas_cliente_data          ON reservas(cliente_id, data_hora);
 CREATE INDEX IF NOT EXISTS idx_reservas_barbeiro_data_status  ON reservas(barbeiro_id, data_hora, status);
@@ -145,6 +201,7 @@ CREATE INDEX IF NOT EXISTS idx_reservas_cliente_status_data   ON reservas(client
 CREATE INDEX IF NOT EXISTS idx_reservas_moloni_document       ON reservas(moloni_document_id);
 CREATE INDEX IF NOT EXISTS idx_reservas_resend_lembrete       ON reservas(resend_lembrete_id);
 CREATE INDEX IF NOT EXISTS idx_reservas_meio_pagamento        ON reservas(meio_pagamento, status, data_hora);
+CREATE INDEX IF NOT EXISTS idx_reservas_desconto_id           ON reservas(desconto_id);
 
 -- ================================================
 -- HORÁRIOS INDISPONÍVEIS
@@ -242,35 +299,15 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_data_range ON daily_stats(data, barbe
 -- TRIGGERS
 -- ================================================
 
--- ────────────────────────────────────────────────────────────────────────────
+-- ──────────────────────────────────────────────────────────────────────
 -- SISTEMA DE FIDELIZAÇÃO
 --
--- Parâmetro central: LOYALTY_EVERY_N (equivale a barberShopConfig.loyalty.everyN
--- em src/config/theme.ts e LOYALTY.everyN em functions/utils/site-config.js).
---
--- Semântica CORRECTA:
---   O cliente paga as primeiras (LOYALTY_EVERY_N - 1) reservas do ciclo.
---   Ao concluir a (LOYALTY_EVERY_N - 1)ª reserva, a gratuita fica DISPONÍVEL
---   para ser descontada NA LOYALTY_EVERY_N-ésima reserva.
---
--- Exemplo com LOYALTY_EVERY_N = 10:
---   reservas_concluidas 1–8  → reservas normais, sem gratuita acumulada
---   reservas_concluidas = 9  → reservas_gratuitas_disponiveis += 1  ← disponível!
---   reservas_concluidas = 10 → a 10ª foi grátis; tr_fidelidade_usar desconta -1
---   reservas_concluidas 11–18 → reservas normais
---   reservas_concluidas = 19 → reservas_gratuitas_disponiveis += 1  ← disponível!
---   ...
---
--- Fórmula usada nos triggers: (N + 1) / LOYALTY_EVERY_N
---   N=8:  (8+1)/10 = 0   N=9:  (9+1)/10 = 1  → delta = +1 ✅
---   N=18: (18+1)/10 = 1  N=19: (19+1)/10 = 2  → delta = +1 ✅
---
--- ⚠️  SE ALTERAR LOYALTY_EVERY_N: substituir o valor 10 abaixo em
---     tr_fidelidade_increment e tr_fidelidade_decrement.
---     O resto do código (frontend + site-config.js) usa o valor do config.
--- ────────────────────────────────────────────────────────────────────────────
+-- Mantém os triggers originais para compatibilidade com
+-- reservas_gratuitas_disponiveis durante período de transição.
+-- O novo sistema de descontos (tabela descontos) convive em paralelo.
+-- ──────────────────────────────────────────────────────────────────────
 
--- ── reservas_concluidas ─────────────────────────────────────────────────────
+-- ── reservas_concluidas ───────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_increment
 AFTER UPDATE ON reservas FOR EACH ROW
 WHEN NEW.status = 'concluida' AND OLD.status != 'concluida'
@@ -292,13 +329,9 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- ── reservas_gratuitas_disponiveis ───────────────────────────────────────────
+-- ── reservas_gratuitas_disponiveis (compat. legado) ─────────────────────
 --
 -- ⚠️  LOYALTY_EVERY_N = 10 (alterar aqui se mudar o config)
---
--- Usa (reservas_concluidas + 1) / LOYALTY_EVERY_N para que a gratuita
--- fique disponível AO CONCLUIR a (N-1)ª reserva, pronta a usar NA Nª.
--- (ao contrário de N/LOYALTY_EVERY_N que só disponibiliza DEPOIS da Nª)
 
 CREATE TRIGGER IF NOT EXISTS tr_fidelidade_increment
 AFTER UPDATE ON clientes FOR EACH ROW
@@ -324,9 +357,7 @@ BEGIN
   WHERE id = NEW.id;
 END;
 
--- ── reserva gratuita usada ───────────────────────────────────────────────────
--- Quando uma reserva é concluída com meio_pagamento = 'oferta',
--- decrementa reservas_gratuitas_disponiveis do cliente (mínimo 0).
+-- ── reserva gratuita usada (compat. legado) ────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_fidelidade_usar
 AFTER UPDATE ON reservas FOR EACH ROW
 WHEN NEW.status = 'concluida'
@@ -339,7 +370,7 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- ── next / last appointment ──────────────────────────────────────────────────
+-- ── next / last appointment ──────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_reserva_insert_next_appointment
 AFTER INSERT ON reservas FOR EACH ROW
 WHEN NEW.status = 'confirmada' AND datetime(NEW.data_hora) > datetime('now')
@@ -386,7 +417,7 @@ BEGIN
   WHERE id = NEW.cliente_id;
 END;
 
--- ── daily_stats ─────────────────────────────────────────────────────────────
+-- ── daily_stats ────────────────────────────────────────────────────────────
 CREATE TRIGGER IF NOT EXISTS tr_daily_stats_insert
 AFTER INSERT ON reservas FOR EACH ROW
 BEGIN
@@ -446,11 +477,7 @@ END;
 -- ================================================
 -- MIGRATION (executar em instâncias existentes)
 -- ================================================
--- ALTER TABLE clientes ADD COLUMN reservas_gratuitas_disponiveis INTEGER DEFAULT 0;
--- UPDATE clientes SET reservas_gratuitas_disponiveis = MAX(0, (reservas_concluidas + 1) / 10);
--- ALTER TABLE reservas ADD COLUMN comentario_pagamento TEXT DEFAULT NULL;
--- ALTER TABLE reservas ADD COLUMN oferta_valor INTEGER DEFAULT NULL;
--- ALTER TABLE reservas ADD COLUMN oferta_tipo  TEXT    DEFAULT NULL;
+-- Ver ficheiro migrations/0011_descontos.sql
 -- ================================================
 -- VIEWS
 -- ================================================
@@ -467,14 +494,15 @@ SELECT
   r.gorjeta,
   r.meio_gorjeta,
   r.comentario_pagamento,
+  r.oferta_valor,
+  r.oferta_tipo,
+  r.desconto_id,
   c.nome     AS cliente_nome,
   c.email    AS cliente_email,
   c.telefone AS cliente_telefone,
   c.nif      AS cliente_nif,
   c.reservas_concluidas AS cliente_total_reservas,
   c.reservas_gratuitas_disponiveis AS cliente_gratuitas_disponiveis,
-  r.oferta_valor,
-  r.oferta_tipo,
   b.nome  AS barbeiro_nome,
   b.foto  AS barbeiro_foto,
   b.color AS barbeiro_color,
@@ -484,11 +512,16 @@ SELECT
   s.abreviacao AS servico_abreviacao,
   s.svg        AS servico_svg,
   s.color      AS servico_color,
-  COALESCE(r.duracao_minutos, s.duracao) AS duracao_efetiva
+  COALESCE(r.duracao_minutos, s.duracao) AS duracao_efetiva,
+  d.nome              AS desconto_nome,
+  d.tipo              AS desconto_tipo,
+  d.valor_percentagem AS desconto_percentagem,
+  d.valor_fixo_centimos AS desconto_fixo_centimos
 FROM reservas r
 JOIN clientes  c ON r.cliente_id  = c.id
 JOIN barbeiros b ON r.barbeiro_id = b.id
-JOIN servicos  s ON r.servico_id  = s.id;
+JOIN servicos  s ON r.servico_id  = s.id
+LEFT JOIN descontos d ON r.desconto_id = d.id;
 
 CREATE VIEW IF NOT EXISTS v_reservas_duracao AS
 SELECT
