@@ -402,10 +402,13 @@ export function CheckoutModal({
   const clientId     = reservation.client_id
   const hadOferta    = !!reservation.oferta_tipo
 
-  // ── Carregar descontos aplicáveis (clíiente-específicos + gerais) ────────────────
+  // ── Carregar descontos aplicáveis via rotas ADMIN (autenticação de admin) ────────
+  // NOTA: Usamos /api/admin/discounts/... porque o CheckoutModal corre no painel admin
+  // com token de admin. As rotas públicas /api/discounts/... requerem token de cliente
+  // e falhariam aqui.
   const { data: clientDiscountsRes } = useQuery({
     queryKey: ['checkout-discounts-client', clientId],
-    queryFn: () => adminApi.get<any[]>(`/api/discounts/client/${clientId}`),
+    queryFn: () => adminApi.get<any[]>(`/api/admin/discounts/client/${clientId}`),
     enabled: !!clientId && !editMode,
   })
   const { data: generalDiscountsRes } = useQuery({
@@ -414,7 +417,7 @@ export function CheckoutModal({
     enabled: !editMode,
   })
 
-  const clientDiscounts: Discount[] = ((clientDiscountsRes as any)?.data ?? []).map(mapRawDiscount)
+  const clientDiscounts: Discount[]  = ((clientDiscountsRes  as any)?.data ?? []).map(mapRawDiscount)
   const generalDiscounts: Discount[] = ((generalDiscountsRes as any)?.data ?? []).map(mapRawDiscount)
 
   // Só mostrar descontos que são usáveis
@@ -424,7 +427,6 @@ export function CheckoutModal({
 
   // ── Estado do modal ──────────────────────────────────────────────────────────────
 
-  // Desconto selecionado via tabela descontos
   const [selectedDiscountId, setSelectedDiscountId] = useState<number | null>(
     reservation.desconto_id ?? null
   )
@@ -455,11 +457,10 @@ export function CheckoutModal({
   const [error, setError]             = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
 
-  // Quando seleciona um desconto da tabela, ajustar automaticamente o valor pago
+  // Quando seleciona um desconto, ajustar automaticamente o valor pago
   const handleSelectDiscount = (discountId: number | null) => {
     setSelectedDiscountId(discountId)
     if (discountId === null) {
-      // Sem desconto selecionado: repor para cobrar total
       setTemOferta(false)
       setMeioPagamento('multibanco')
       setValorPago(precoServico)
@@ -467,7 +468,7 @@ export function CheckoutModal({
     }
     const d = allUsable.find(x => x.id === discountId)
     if (!d) return
-    const descVal = calcDiscountValue(d, precoServico)
+    const descVal  = calcDiscountValue(d, precoServico)
     const restante = Math.max(0, precoServico - descVal)
     setTemOferta(true)
     setOfertaTipo(d.type)
@@ -557,12 +558,12 @@ export function CheckoutModal({
         })
       }
 
-      // Se foi selecionado um desconto da tabela, chamar o endpoint /apply
-      // para registar o uso na tabela descontos
+      // Se foi selecionado um desconto da tabela, registar o uso via /apply
+      // URL corrigida: /api/admin/discounts/:id/apply (tratado por [id]/apply.js)
       if (selectedDiscountId != null && !editMode) {
-        await adminApi.post(`/api/discounts/${selectedDiscountId}/apply`, {
-          reserva_id:  reservation.id,
-          oferta_valor: ofertaValorEuros,
+        await adminApi.post(`/api/admin/discounts/${selectedDiscountId}/apply`, {
+          reserva_id:   reservation.id,
+          oferta_valor: ofertaValorEuros != null ? Math.round(ofertaValorEuros * 100) : null,
         }).catch(() => {}) // não bloquear o checkout se isto falhar
       }
 
