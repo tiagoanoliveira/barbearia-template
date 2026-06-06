@@ -21,7 +21,7 @@ import type { Discount, Client } from '@/types'
 
 const API = '/api/admin/discounts'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────────────────
 function fmtValor(d: Discount) {
   if (d.value_percent != null) return `${d.value_percent}%`
   if (d.value_fixed  != null) return `${(d.value_fixed / 100).toFixed(2)} €`
@@ -38,21 +38,34 @@ const TIPO_OPTIONS = [
   { value: 'ocasional',    label: '\uD83C\uDF9F\uFE0F Ocasional (one-shot)' },
   { value: 'vitalicio',   label: '\u267E\uFE0F Vitalício' },
   { value: 'mensal',      label: '\uD83D\uDCC5 Mensal' },
+  { value: 'quantidade',  label: '\uD83D\uDCC8 Por quantidade' },
+  { value: 'servico',     label: '\u2702\uFE0F Por serviço' },
   { value: 'fidelizacao', label: '\u2B50 Fidelização' },
   { value: 'campanha',    label: '\uD83D\uDCE2 Campanha' },
   { value: 'outro',       label: '\uD83C\uDFF7\uFE0F Outro' },
+]
+
+const PERIODO_OPTIONS = [
+  { value: 'semana',    label: 'Semana (7 dias)' },
+  { value: 'quinzena',  label: 'Quinzena (15 dias)' },
+  { value: 'mes',       label: 'Mês (mês atual)' },
+  { value: 'trimestre', label: 'Trimestre (3 meses)' },
+  { value: 'semestre',  label: 'Semestre (6 meses)' },
+  { value: 'ano',       label: 'Ano (12 meses)' },
 ]
 
 const TIPO_BADGE: Record<string, string> = {
   ocasional:   'bg-amber-100 text-amber-700',
   vitalicio:   'bg-emerald-100 text-emerald-700',
   mensal:      'bg-blue-100 text-blue-700',
+  quantidade:  'bg-indigo-100 text-indigo-700',
+  servico:     'bg-teal-100 text-teal-700',
   fidelizacao: 'bg-purple-100 text-purple-700',
   campanha:    'bg-pink-100 text-pink-700',
   outro:       'bg-gray-100 text-gray-600',
 }
 
-// ─── Formulário vazio ───────────────────────────────────────────────────────────────────────
+// ─── Formulário vazio ───────────────────────────────────────────────────────────────────────────
 const emptyForm = () => ({
   cliente_id:           null as number | null,
   nome:                 '',
@@ -62,7 +75,11 @@ const emptyForm = () => ({
   valor_fixo_centimos:  null as number | null,
   valido_de:            '',
   valido_ate:           '',
-  min_reservas_mes:     null as number | null,
+  min_reservas:         null as number | null,
+  min_reservas_periodo: null as string | null,
+  grupo:                null as string | null,
+  regra_tipo:           null as string | null,
+  regra_detalhe:        null as string | null,
   max_usos:             1 as number | null,
   ativo:                true,
 })
@@ -108,6 +125,7 @@ function DiscountModal({
   }
 
   const isEditing = !!initial.id
+  const showQuantidade = ['quantidade', 'mensal'].includes(form.tipo)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -218,17 +236,63 @@ function DiscountModal({
             </div>
           </div>
 
-          {!form.cliente_id && (
+          {/* Campos de quantidade (visíveis para tipos 'quantidade' e 'mensal') */}
+          {showQuantidade && (
+            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
+              <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Regras de quantidade</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Mín. reservas necessárias</label>
+                  <input
+                    type="number" min={0} step={1} className="input w-full"
+                    value={form.min_reservas ?? ''}
+                    onChange={e => upd('min_reservas', e.target.value ? Number(e.target.value) : null)}
+                    placeholder="Ex.: 2"
+                  />
+                </div>
+                <div>
+                  <label className="label">Período</label>
+                  <select
+                    className="input text-sm w-full bg-white"
+                    value={form.min_reservas_periodo ?? ''}
+                    onChange={e => upd('min_reservas_periodo', e.target.value || null)}
+                  >
+                    <option value="">— Nenhum —</option>
+                    {PERIODO_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label">Grupo (programa escalonado)</label>
+                <input
+                  type="text"
+                  className="input text-sm w-full"
+                  placeholder="Ex.: frequencia-mensal"
+                  value={form.grupo ?? ''}
+                  onChange={e => upd('grupo', e.target.value || null)}
+                />
+                <p className="text-[10px] text-indigo-500 mt-0.5">
+                  Descontos com o mesmo grupo competem entre si — aplica-se apenas o melhor.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Grupo também disponível fora de "quantidade" (ex.: campanhas escalonadas) */}
+          {!showQuantidade && (
             <div>
-              <label className="label">Mín. reservas no mês para ativar</label>
+              <label className="label">Grupo (programa)</label>
               <input
-                type="number" min={0} step={1} className="input w-full"
-                value={form.min_reservas_mes ?? ''}
-                onChange={e => upd('min_reservas_mes', e.target.value ? Number(e.target.value) : null)}
-                placeholder="Ex.: 2 — deixa vazio para sem requisito"
+                type="text"
+                className="input text-sm w-full"
+                placeholder="Opcional — ex.: campanha-verão-2026"
+                value={form.grupo ?? ''}
+                onChange={e => upd('grupo', e.target.value || null)}
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Para descontos gerais que só se ativam quando o cliente fez N reservas no mês atual.
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                Descontos com o mesmo grupo competem entre si — aplica-se apenas o melhor.
               </p>
             </div>
           )}
@@ -270,7 +334,7 @@ function DiscountModal({
   )
 }
 
-// ─── Linha da tabela ──────────────────────────────────────────────────────────────────────────────────
+// ─── Linha da tabela ─────────────────────────────────────────────────────────────────────────────────────
 function DiscountRow({
   d,
   onEdit,
@@ -296,6 +360,9 @@ function DiscountRow({
           <div>
             <p className="text-sm font-medium text-gray-900">{d.name}</p>
             {d.description && <p className="text-xs text-gray-400 truncate max-w-[220px]">{d.description}</p>}
+            {d.group && (
+              <p className="text-[10px] text-indigo-400 font-mono mt-0.5">⧕ {d.group}</p>
+            )}
           </div>
         </div>
       </td>
@@ -309,6 +376,11 @@ function DiscountRow({
         <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${tipoClass}`}>
           {d.type}
         </span>
+        {d.min_reservations != null && d.min_reservations_period && (
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            ≥{d.min_reservations} / {d.min_reservations_period}
+          </p>
+        )}
       </td>
       <td className="px-4 py-3 text-sm font-semibold text-gray-800">{fmtValor(d)}</td>
       <td className="px-4 py-3 text-xs text-gray-500">
@@ -347,7 +419,7 @@ function DiscountRow({
   )
 }
 
-// ─── Página principal ──────────────────────────────────────────────────────────────────────────────────────
+// ─── Página principal ────────────────────────────────────────────────────────────────────────────────────
 export default function DiscountsPage() {
   const adminUser = useAdminUser()
   const isSA      = isSuperAdmin(adminUser)
@@ -363,7 +435,7 @@ export default function DiscountsPage() {
   // Pesquisa de clientes (usada no modal e no filtro)
   const [clientSearch, setClientSearch] = useState('')
 
-  // ── Dados ────────────────────────────────────────────────────────────────────────────
+  // ── Dados ────────────────────────────────────────────────────────────────────────────────────
   const { data: discountsRes, isLoading } = useQuery({
     queryKey: ['admin-discounts', filterTipo, filterAtivo, filterCliente],
     queryFn: () => {
@@ -395,7 +467,11 @@ export default function DiscountsPage() {
       value_fixed:              d.valor_fixo_centimos,
       valid_from:               d.valido_de,
       valid_to:                 d.valido_ate,
-      min_monthly_reservations: d.min_reservas_mes,
+      min_reservations:         d.min_reservas ?? null,
+      min_reservations_period:  d.min_reservas_periodo ?? null,
+      group:                    d.grupo ?? null,
+      rule_type:                d.regra_tipo ?? null,
+      rule_detail:              d.regra_detalhe ?? null,
       max_uses:                 d.max_usos,
       used_count:               d.usos_feitos ?? 0,
       last_used_at:             d.usado_ultima_vez_em,
@@ -410,23 +486,27 @@ export default function DiscountsPage() {
 
   const clients: Client[] = clientsRes?.data?.items ?? []
 
-  // ── Mutations ────────────────────────────────────────────────────────────────────────────
+  // ── Mutations ───────────────────────────────────────────────────────────────────────────────────
   const handleSave = async (form: DiscountForm & { id?: number }) => {
     setSaving(true)
     try {
       const payload = {
-        cliente_id:          form.cliente_id,
-        nome:                form.nome,
-        descricao:           form.descricao || null,
-        tipo:                form.tipo,
-        origem:              'manual',
-        valor_percentagem:   form.valor_percentagem,
-        valor_fixo_centimos: form.valor_fixo_centimos,
-        valido_de:           form.valido_de  || null,
-        valido_ate:          form.valido_ate || null,
-        min_reservas_mes:    form.min_reservas_mes,
-        max_usos:            form.max_usos,
-        ativo:               form.ativo,
+        cliente_id:           form.cliente_id,
+        nome:                 form.nome,
+        descricao:            form.descricao || null,
+        tipo:                 form.tipo,
+        origem:               'manual',
+        valor_percentagem:    form.valor_percentagem,
+        valor_fixo_centimos:  form.valor_fixo_centimos,
+        valido_de:            form.valido_de  || null,
+        valido_ate:           form.valido_ate || null,
+        min_reservas:         form.min_reservas,
+        min_reservas_periodo: form.min_reservas_periodo,
+        grupo:                form.grupo,
+        regra_tipo:           form.regra_tipo,
+        regra_detalhe:        form.regra_detalhe,
+        max_usos:             form.max_usos,
+        ativo:                form.ativo,
       }
       if (form.id) {
         await adminApi.put(`${API}/${form.id}`, payload)
@@ -470,14 +550,18 @@ export default function DiscountsPage() {
       valor_fixo_centimos:  d.value_fixed   ?? null,
       valido_de:            d.valid_from    ? d.valid_from.slice(0, 10) : '',
       valido_ate:           d.valid_to      ? d.valid_to.slice(0, 10)   : '',
-      min_reservas_mes:     d.min_monthly_reservations ?? null,
+      min_reservas:         d.min_reservations ?? null,
+      min_reservas_periodo: d.min_reservations_period ?? null,
+      grupo:                d.group ?? null,
+      regra_tipo:           d.rule_type ?? null,
+      regra_detalhe:        d.rule_detail ?? null,
       max_usos:             d.max_uses ?? null,
       ativo:                d.active,
     })
     setModalOpen(true)
   }
 
-  // ── Guard: só superAdmin ─────────────────────────────────────────────────────────────────────
+  // ── Guard: só superAdmin ───────────────────────────────────────────────────────────────────────
   if (!isSA) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-3 text-gray-400">
@@ -505,9 +589,9 @@ export default function DiscountsPage() {
             <Tag size={20} className="text-brand-500" /> Descontos
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            {discounts.length} desconto{discounts.length !== 1 ? 's' : ''} \u00b7{' '}
-            {geralCount} geral{geralCount !== 1 ? 'is' : ''} \u00b7{' '}
-            {exclusivoCount} exclusivo{exclusivoCount !== 1 ? 's' : ''} \u00b7{' '}
+            {discounts.length} desconto{discounts.length !== 1 ? 's' : ''} &middot;{' '}
+            {geralCount} geral{geralCount !== 1 ? 'is' : ''} &middot;{' '}
+            {exclusivoCount} exclusivo{exclusivoCount !== 1 ? 's' : ''} &middot;{' '}
             {ativoCount} ativo{ativoCount !== 1 ? 's' : ''}
           </p>
         </div>
