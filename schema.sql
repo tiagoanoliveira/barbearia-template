@@ -101,46 +101,36 @@ CREATE TABLE IF NOT EXISTS marcas (
 -- ================================================
 CREATE TABLE IF NOT EXISTS descontos (
   id                        INTEGER  PRIMARY KEY AUTOINCREMENT,
-
   -- NULL = desconto geral (aplicável a todos os clientes)
   -- NOT NULL = desconto exclusivo de um cliente específico
   cliente_id                INTEGER  REFERENCES clientes(id) ON DELETE CASCADE,
-
   nome                      TEXT     NOT NULL,
   descricao                 TEXT,
-
   -- Tipo livre — sem CHECK para permitir adicionar novos tipos apenas no código
   -- Exemplos: 'fidelizacao', 'mensal', 'vitalicio', 'ocasional', 'campanha'
   tipo                      TEXT     NOT NULL,
-
   -- Origem do desconto (ex: 'manual', 'trigger_fidelizacao', 'campanha')
   origem                    TEXT,
-
   -- Valor do desconto — pelo menos um dos dois deve ser preenchido
   valor_percentagem         INTEGER  DEFAULT NULL, -- ex: 10 = 10%
   valor_fixo_centimos       INTEGER  DEFAULT NULL, -- ex: 500 = 5,00 €
-
   -- Regras de validade temporal
   valido_de                 DATETIME DEFAULT NULL,
   valido_ate                DATETIME DEFAULT NULL,
-
-  -- Regra de ativação: número mínimo de reservas concluídas no mês atual
-  -- (NULL = sem requisito de quantidade mensal)
-  min_reservas_mes          INTEGER  DEFAULT NULL,
-
+  min_reservas            INTEGER  DEFAULT NULL,
+  min_reservas_periodo    TEXT     DEFAULT NULL;
+  grupo                   TEXT DEFAULT NULL;
+  regra_tipo              TEXT DEFAULT NULL;
+  regra_detalhe           TEXT DEFAULT NULL;
   -- Controlo de usos
   -- NULL = ilimitado (vitalício); 1 = ocasional (one-shot)
   max_usos                  INTEGER  DEFAULT NULL,
   usos_feitos               INTEGER  NOT NULL DEFAULT 0,
-
   -- Tracking do último uso
   usado_ultima_vez_em       DATETIME DEFAULT NULL,
   usado_ultima_reserva_id   INTEGER  REFERENCES reservas(id) ON DELETE SET NULL,
   comentario_uso            TEXT     DEFAULT NULL,
-
-  -- Estado
   ativo                     INTEGER  NOT NULL DEFAULT 1,
-
   -- Auditoria
   criado_por_admin_id       INTEGER  REFERENCES admin_users(id) ON DELETE SET NULL,
   criado_em                 DATETIME NOT NULL DEFAULT (datetime('now')),
