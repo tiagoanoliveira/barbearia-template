@@ -20,8 +20,8 @@ export async function onRequestPut({ request, env, params }) {
   if (!id) return badRequest('ID inválido')
 
   try {
-    const body  = await request.json()
-    // validação parcial — todos os campos são opcionais no PUT
+    const body = await request.json()
+
     if (body.valor_percentagem != null) {
       if (typeof body.valor_percentagem !== 'number' || body.valor_percentagem < 0 || body.valor_percentagem > 100)
         return badRequest('valor_percentagem deve ser entre 0 e 100')
@@ -30,6 +30,8 @@ export async function onRequestPut({ request, env, params }) {
       if (typeof body.valor_fixo_centimos !== 'number' || body.valor_fixo_centimos < 0)
         return badRequest('valor_fixo_centimos deve ser positivo')
     }
+    if (body.min_reservas != null && (typeof body.min_reservas !== 'number' || body.min_reservas < 0))
+      return badRequest('min_reservas deve ser um número >= 0')
 
     const now = new Date().toISOString()
     const { results } = await env.DB.prepare(`
@@ -42,7 +44,11 @@ export async function onRequestPut({ request, env, params }) {
         valor_fixo_centimos  = ?,
         valido_de            = ?,
         valido_ate           = ?,
-        min_reservas_mes     = ?,
+        min_reservas         = ?,
+        min_reservas_periodo = ?,
+        grupo                = ?,
+        regra_tipo           = ?,
+        regra_detalhe        = ?,
         max_usos             = ?,
         ativo                = COALESCE(?, ativo),
         atualizado_em        = ?
@@ -50,15 +56,19 @@ export async function onRequestPut({ request, env, params }) {
       RETURNING *
     `).bind(
       body.nome                ?? null,
-      body.descricao           !== undefined ? (body.descricao || null) : undefined,
+      body.descricao           !== undefined ? (body.descricao            || null) : undefined,
       body.tipo                ?? null,
-      body.origem              !== undefined ? (body.origem    || null) : undefined,
-      body.valor_percentagem   !== undefined ? (body.valor_percentagem   ?? null) : undefined,
-      body.valor_fixo_centimos !== undefined ? (body.valor_fixo_centimos ?? null) : undefined,
-      body.valido_de           !== undefined ? (body.valido_de  || null) : undefined,
-      body.valido_ate          !== undefined ? (body.valido_ate || null) : undefined,
-      body.min_reservas_mes    !== undefined ? (body.min_reservas_mes ?? null) : undefined,
-      body.max_usos            !== undefined ? (body.max_usos ?? null) : undefined,
+      body.origem              !== undefined ? (body.origem               || null) : undefined,
+      body.valor_percentagem   !== undefined ? (body.valor_percentagem    ?? null) : undefined,
+      body.valor_fixo_centimos !== undefined ? (body.valor_fixo_centimos  ?? null) : undefined,
+      body.valido_de           !== undefined ? (body.valido_de            || null) : undefined,
+      body.valido_ate          !== undefined ? (body.valido_ate           || null) : undefined,
+      body.min_reservas         !== undefined ? (body.min_reservas         ?? null) : undefined,
+      body.min_reservas_periodo !== undefined ? (body.min_reservas_periodo || null) : undefined,
+      body.grupo               !== undefined ? (body.grupo                || null) : undefined,
+      body.regra_tipo          !== undefined ? (body.regra_tipo           || null) : undefined,
+      body.regra_detalhe       !== undefined ? (body.regra_detalhe        || null) : undefined,
+      body.max_usos            !== undefined ? (body.max_usos             ?? null) : undefined,
       body.ativo               !== undefined ? (body.ativo ? 1 : 0) : null,
       now,
       id,
