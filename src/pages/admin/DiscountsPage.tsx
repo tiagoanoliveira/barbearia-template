@@ -8,7 +8,7 @@
  *  - Filtrar por tipo, estado (ativo/inativo) e cliente
  */
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, Tag, Users, User, X, Save, ToggleLeft, ToggleRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
@@ -19,8 +19,9 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { isSuperAdmin, useAdminUser } from '@/hooks/useAdminUser'
 import type { Discount, Client } from '@/types'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const API = '/api/admin/discounts'
 
+// ─── Helpers ────────────────────────────────────────────────────────────────────
 function fmtValor(d: Discount) {
   if (d.value_percent != null) return `${d.value_percent}%`
   if (d.value_fixed  != null) return `${(d.value_fixed / 100).toFixed(2)} €`
@@ -51,7 +52,7 @@ const TIPO_BADGE: Record<string, string> = {
   outro:       'bg-gray-100 text-gray-600',
 }
 
-// ─── Formulário vazio ─────────────────────────────────────────────────────────
+// ─── Formulário vazio ───────────────────────────────────────────────────────────────
 const emptyForm = () => ({
   cliente_id:           null as number | null,
   nome:                 '',
@@ -62,12 +63,12 @@ const emptyForm = () => ({
   valido_de:            '',
   valido_ate:           '',
   min_reservas_mes:     null as number | null,
-  max_usos:             1 as number | null,   // 1 = ocasional, null = vitalício
+  max_usos:             1 as number | null,
   ativo:                true,
 })
 type DiscountForm = ReturnType<typeof emptyForm>
 
-// ─── Modal de criação/edição ──────────────────────────────────────────────────
+// ─── Modal de criação/edição ────────────────────────────────────────────────────────
 function DiscountModal({
   initial,
   clients,
@@ -87,7 +88,6 @@ function DiscountModal({
     setForm(f => ({ ...f, [k]: v }))
 
   const handleTipoChange = (tipo: string) => {
-    // Ocasional → max_usos=1; qualquer outro → null (ilimitado por defeito)
     const maxUsos = tipo === 'ocasional' ? 1 : null
     setForm(f => ({ ...f, tipo, max_usos: maxUsos }))
   }
@@ -119,7 +119,6 @@ function DiscountModal({
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
 
-          {/* Geral vs cliente específico */}
           <div>
             <label className="label">Cliente</label>
             <select
@@ -137,7 +136,6 @@ function DiscountModal({
             </p>
           </div>
 
-          {/* Nome */}
           <div>
             <label className="label">Nome <span className="text-red-500">*</span></label>
             <input
@@ -147,7 +145,6 @@ function DiscountModal({
             />
           </div>
 
-          {/* Descrição */}
           <div>
             <label className="label">Descrição</label>
             <textarea
@@ -157,7 +154,6 @@ function DiscountModal({
             />
           </div>
 
-          {/* Tipo */}
           <div>
             <label className="label">Tipo <span className="text-red-500">*</span></label>
             <select
@@ -171,7 +167,6 @@ function DiscountModal({
             </select>
           </div>
 
-          {/* Valor */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Desconto em percentagem (%)</label>
@@ -196,7 +191,6 @@ function DiscountModal({
             Preenche apenas um dos dois campos (percentagem tem prioridade no checkout).
           </p>
 
-          {/* Validade */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Válido de</label>
@@ -212,7 +206,6 @@ function DiscountModal({
             </div>
           </div>
 
-          {/* Nº mínimo de reservas no mês */}
           {!form.cliente_id && (
             <div>
               <label className="label">Mín. reservas no mês para ativar</label>
@@ -228,7 +221,6 @@ function DiscountModal({
             </div>
           )}
 
-          {/* Max usos */}
           <div>
             <label className="label">Máximo de usos</label>
             <input
@@ -242,7 +234,6 @@ function DiscountModal({
             </p>
           </div>
 
-          {/* Ativo */}
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox" className="rounded"
@@ -267,7 +258,7 @@ function DiscountModal({
   )
 }
 
-// ─── Linha da tabela ─────────────────────────────────────────────────────────
+// ─── Linha da tabela ──────────────────────────────────────────────────────────────────
 function DiscountRow({
   d,
   onEdit,
@@ -344,27 +335,28 @@ function DiscountRow({
   )
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────────
+// ─── Página principal ─────────────────────────────────────────────────────────────────────
 export default function DiscountsPage() {
   const adminUser = useAdminUser()
   const isSA      = isSuperAdmin(adminUser)
   const qc        = useQueryClient()
 
-  const [modalOpen, setModalOpen]   = useState(false)
-  const [editing, setEditing]       = useState<(DiscountForm & { id?: number }) | null>(null)
-  const [filterTipo, setFilterTipo] = useState('')
+  const [modalOpen, setModalOpen]     = useState(false)
+  const [editing, setEditing]         = useState<(DiscountForm & { id?: number }) | null>(null)
+  const [filterTipo, setFilterTipo]   = useState('')
   const [filterAtivo, setFilterAtivo] = useState<'all' | '1' | '0'>('all')
   const [filterCliente, setFilterCliente] = useState('')
+  const [saving, setSaving]           = useState(false)
 
-  // ── Dados ────────────────────────────────────────────────────────────────
+  // ── Dados ──────────────────────────────────────────────────────────────────
   const { data: discountsRes, isLoading } = useQuery({
     queryKey: ['admin-discounts', filterTipo, filterAtivo, filterCliente],
     queryFn: () => {
       const params = new URLSearchParams()
-      if (filterTipo)    params.set('tipo',       filterTipo)
-      if (filterAtivo !== 'all') params.set('ativo', filterAtivo)
-      if (filterCliente) params.set('cliente_id', filterCliente)
-      return adminApi.get<any[]>(`/api/discounts?${params.toString()}`)
+      if (filterTipo)            params.set('tipo',       filterTipo)
+      if (filterAtivo !== 'all') params.set('ativo',      filterAtivo)
+      if (filterCliente)         params.set('cliente_id', filterCliente)
+      return adminApi.get<any[]>(`${API}?${params.toString()}`)
     },
     enabled: isSA,
   })
@@ -375,35 +367,34 @@ export default function DiscountsPage() {
     enabled: isSA,
   })
 
-  const discounts: (Discount & { cliente_nome?: string })[] = (discountsRes?.data ?? []).map((d: any) => ({
-    id:                      d.id,
-    client_id:               d.cliente_id ?? null,
-    name:                    d.nome,
-    description:             d.descricao,
-    type:                    d.tipo,
-    origin:                  d.origem,
-    value_percent:           d.valor_percentagem,
-    value_fixed:             d.valor_fixo_centimos,
-    valid_from:              d.valido_de,
-    valid_to:                d.valido_ate,
-    min_monthly_reservations: d.min_reservas_mes,
-    max_uses:                d.max_usos,
-    used_count:              d.usos_feitos ?? 0,
-    last_used_at:            d.usado_ultima_vez_em,
-    last_used_reservation_id: d.usado_ultima_reserva_id,
-    usage_comment:           d.comentario_uso,
-    active:                  !!d.ativo,
-    created_by_admin_id:     d.criado_por_admin_id,
-    created_at:              d.criado_em,
-    updated_at:              d.atualizado_em,
-    cliente_nome:            d.cliente_nome,
-  }))
+  const discounts: (Discount & { cliente_nome?: string })[] =
+    (discountsRes?.data ?? []).map((d: any) => ({
+      id:                       d.id,
+      client_id:                d.cliente_id ?? null,
+      name:                     d.nome,
+      description:              d.descricao,
+      type:                     d.tipo,
+      origin:                   d.origem,
+      value_percent:            d.valor_percentagem,
+      value_fixed:              d.valor_fixo_centimos,
+      valid_from:               d.valido_de,
+      valid_to:                 d.valido_ate,
+      min_monthly_reservations: d.min_reservas_mes,
+      max_uses:                 d.max_usos,
+      used_count:               d.usos_feitos ?? 0,
+      last_used_at:             d.usado_ultima_vez_em,
+      last_used_reservation_id: d.usado_ultima_reserva_id,
+      usage_comment:            d.comentario_uso,
+      active:                   !!d.ativo,
+      created_by_admin_id:      d.criado_por_admin_id,
+      created_at:               d.criado_em,
+      updated_at:               d.atualizado_em,
+      cliente_nome:             d.cliente_nome,
+    }))
 
-  const clients: Client[] = (clientsRes?.data?.items ?? [])
+  const clients: Client[] = clientsRes?.data?.items ?? []
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
-  const [saving, setSaving] = useState(false)
-
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const handleSave = async (form: DiscountForm & { id?: number }) => {
     setSaving(true)
     try {
@@ -415,16 +406,16 @@ export default function DiscountsPage() {
         origem:              'manual',
         valor_percentagem:   form.valor_percentagem,
         valor_fixo_centimos: form.valor_fixo_centimos,
-        valido_de:           form.valido_de   || null,
-        valido_ate:          form.valido_ate  || null,
+        valido_de:           form.valido_de  || null,
+        valido_ate:          form.valido_ate || null,
         min_reservas_mes:    form.min_reservas_mes,
         max_usos:            form.max_usos,
         ativo:               form.ativo,
       }
       if (form.id) {
-        await adminApi.put(`/api/discounts/${form.id}`, payload)
+        await adminApi.put(`${API}/${form.id}`, payload)
       } else {
-        await adminApi.post('/api/discounts', payload)
+        await adminApi.post(API, payload)
       }
       qc.invalidateQueries({ queryKey: ['admin-discounts'] })
       setModalOpen(false)
@@ -436,12 +427,12 @@ export default function DiscountsPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Tens a certeza que queres eliminar este desconto?')) return
-    await adminApi.delete(`/api/discounts/${id}`)
+    await adminApi.delete(`${API}/${id}`)
     qc.invalidateQueries({ queryKey: ['admin-discounts'] })
   }
 
   const handleToggleAtivo = async (d: Discount) => {
-    await adminApi.put(`/api/discounts/${d.id}`, { ativo: !d.active })
+    await adminApi.put(`${API}/${d.id}`, { ativo: !d.active })
     qc.invalidateQueries({ queryKey: ['admin-discounts'] })
   }
 
@@ -458,9 +449,9 @@ export default function DiscountsPage() {
       descricao:            d.description ?? '',
       tipo:                 d.type,
       valor_percentagem:    d.value_percent ?? null,
-      valor_fixo_centimos:  d.value_fixed  ?? null,
-      valido_de:            d.valid_from   ? d.valid_from.slice(0, 10) : '',
-      valido_ate:           d.valid_to     ? d.valid_to.slice(0, 10)   : '',
+      valor_fixo_centimos:  d.value_fixed   ?? null,
+      valido_de:            d.valid_from    ? d.valid_from.slice(0, 10) : '',
+      valido_ate:           d.valid_to      ? d.valid_to.slice(0, 10)   : '',
       min_reservas_mes:     d.min_monthly_reservations ?? null,
       max_usos:             d.max_uses ?? null,
       ativo:                d.active,
@@ -468,7 +459,7 @@ export default function DiscountsPage() {
     setModalOpen(true)
   }
 
-  // ── Guard: só superAdmin ──────────────────────────────────────────────────
+  // ── Guard: só superAdmin ───────────────────────────────────────────────────────
   if (!isSA) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-3 text-gray-400">
@@ -521,7 +512,7 @@ export default function DiscountsPage() {
           <div>
             <label className="label text-xs">Estado</label>
             <select className="input text-sm bg-white" value={filterAtivo}
-              onChange={e => setFilterAtivo(e.target.value as any)}>
+              onChange={e => setFilterAtivo(e.target.value as 'all' | '1' | '0')}>
               <option value="all">Todos</option>
               <option value="1">Ativos</option>
               <option value="0">Inativos</option>
