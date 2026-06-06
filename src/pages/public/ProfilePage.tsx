@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { LogOut, Edit2, Camera, X, Save, Link2, Unlink, Star, Eye, EyeOff, KeyRound } from 'lucide-react'
+import { LogOut, Edit2, Camera, X, Save, Link2, Unlink, Star, Eye, EyeOff, KeyRound, Tag } from 'lucide-react'
 import { api } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import type { Client } from '@/types'
+import type { Client, Discount } from '@/types'
+import { isDiscountUsable } from '@/types'
 import { barberShopConfig } from '@/config/theme'
 
 interface ProfileForm {
@@ -94,6 +95,126 @@ function SetPasswordModal({ onClose, onSuccess }: { onClose: () => void; onSucce
           </form>
         </div>
       </div>
+  )
+}
+
+// ─── Helpers de desconto ───────────────────────────────────────────────────
+function mapRawDiscount(d: any): Discount {
+  return {
+    id:                       d.id,
+    client_id:                d.cliente_id ?? null,
+    name:                     d.nome,
+    description:              d.descricao ?? null,
+    type:                     d.tipo,
+    origin:                   d.origem ?? null,
+    value_percent:            d.valor_percentagem ?? null,
+    value_fixed:              d.valor_fixo_centimos ?? null,
+    valid_from:               d.valido_de ?? null,
+    valid_to:                 d.valido_ate ?? null,
+    min_monthly_reservations: d.min_reservas_mes ?? null,
+    max_uses:                 d.max_usos ?? null,
+    used_count:               d.usos_feitos ?? 0,
+    last_used_at:             d.usado_ultima_vez_em ?? null,
+    last_used_reservation_id: d.usado_ultima_reserva_id ?? null,
+    usage_comment:            d.comentario_uso ?? null,
+    active:                   !!d.ativo,
+    created_by_admin_id:      d.criado_por_admin_id ?? null,
+    created_at:               d.criado_em,
+    updated_at:               d.atualizado_em,
+  }
+}
+
+function fmtDiscountValue(d: Discount): string {
+  if (d.value_percent != null) return `${d.value_percent}% de desconto`
+  if (d.value_fixed   != null) return `${(d.value_fixed / 100).toFixed(2)}€ de desconto`
+  return ''
+}
+
+const TIPO_BADGE: Record<string, string> = {
+  ocasional:   'bg-amber-100 text-amber-700',
+  vitalicio:   'bg-emerald-100 text-emerald-700',
+  mensal:      'bg-blue-100 text-blue-700',
+  fidelizacao: 'bg-purple-100 text-purple-700',
+  campanha:    'bg-pink-100 text-pink-700',
+  outro:       'bg-gray-100 text-gray-600',
+}
+
+function DiscountCard({ d }: { d: Discount }) {
+  const badgeClass = TIPO_BADGE[d.type] ?? TIPO_BADGE.outro
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3">
+      <div className="mt-0.5 flex-shrink-0 w-8 h-8 rounded-xl bg-primary-50 flex items-center justify-center">
+        <Tag size={14} className="text-primary-500" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-gray-900">{d.name}</p>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeClass}`}>{d.type}</span>
+        </div>
+        {d.description && (
+          <p className="text-xs text-gray-500 mt-0.5">{d.description}</p>
+        )}
+        <p className="text-xs font-semibold text-primary-600 mt-1">{fmtDiscountValue(d)}</p>
+        {d.max_uses != null && (
+          <p className="text-xs text-gray-400 mt-0.5">
+            {d.max_uses === 1
+              ? 'Válido para uma utilização'
+              : `${d.used_count} / ${d.max_uses} utilizações`
+            }
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Bloco de descontos no perfil público ─────────────────────────────────────
+function ProfileDiscountsBlock({ clientId }: { clientId: number }) {
+  const { data: clientRes }  = useQuery({
+    queryKey: ['profile-discounts-client', clientId],
+    queryFn: () => api.get<any[]>(`/api/discounts/client/${clientId}`),
+    enabled: !!clientId,
+  })
+  const { data: generalRes } = useQuery({
+    queryKey: ['profile-discounts-general'],
+    queryFn: () => api.get<any[]>('/api/discounts/general'),
+  })
+
+  const clientDiscounts: Discount[] = ((clientRes as any)?.data ?? []).map(mapRawDiscount).filter(isDiscountUsable)
+  const generalDiscounts: Discount[] = ((generalRes as any)?.data ?? []).map(mapRawDiscount).filter(isDiscountUsable)
+
+  // Não renderiza se não houver nenhum desconto aplicável
+  if (clientDiscounts.length === 0 && generalDiscounts.length === 0) return null
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-4">
+        <Tag size={16} className="text-primary-500" />
+        <h3 className="text-sm font-semibold text-gray-900">Os meus descontos</h3>
+      </div>
+
+      {clientDiscounts.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Descontos exclusivos</p>
+          <div className="space-y-2">
+            {clientDiscounts.map(d => <DiscountCard key={d.id} d={d} />)}
+          </div>
+        </div>
+      )}
+
+      {generalDiscounts.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Descontos gerais</p>
+          <div className="space-y-2">
+            {generalDiscounts.map(d => <DiscountCard key={d.id} d={d} />)}
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-gray-400 mt-4">
+        💡 Apresenta o teu perfil na barbearia para o barbeiro aplicar o desconto no momento do pagamento.
+      </p>
+    </Card>
   )
 }
 
@@ -203,7 +324,7 @@ export default function ProfilePage() {
       return
     }
     if (!form.phone.trim()) {
-      setFormError('O número de telemóvel não pode ser removido.')
+      setFormError('O número de telemovel não pode ser removido.')
       return
     }
     if (!form.email.trim()) {
@@ -387,6 +508,11 @@ export default function ProfilePage() {
             </Card>
           )}
 
+          {/* Descontos aplicáveis — apenas se existirem */}
+          {user.id && barberShopConfig.discounts?.enabled !== false && (
+            <ProfileDiscountsBlock clientId={user.id} />
+          )}
+
           <Card>
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Foto de perfil</h3>
             <div className="flex items-center gap-5">
@@ -537,7 +663,7 @@ export default function ProfilePage() {
                                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
                               </div>
-                            </div>
+            </div>
                         ))}
                       </>
                   )}
@@ -576,7 +702,7 @@ export default function ProfilePage() {
                 {emailChangeInfo.hadSocial && (
                     <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                       Atenção: ao confirmares o novo email, as contas de redes sociais associadas (Google/Facebook) serão desassociadas
-                      deste perfil. Depois podes associá-las novamente se quiseres.
+                      deste perfil. Depois podes associa-las novamente se quiseres.
                     </p>
                 )}
                 <div className="flex justify-end pt-2">
