@@ -47,8 +47,8 @@ export interface Discount {
   description?: string | null
 
   /**
-   * Tipo livre — não usar union para permitir extenso em runtime.
-   * Valores conhecidos: 'fidelizacao' | 'mensal' | 'vitalicio' | 'ocasional' | 'campanha'
+   * Tipo livre — não usar union para permitir extensão em runtime.
+   * Valores conhecidos: 'fidelizacao' | 'mensal' | 'vitalicio' | 'ocasional' | 'campanha' | 'quantidade' | 'servico'
    */
   type: string
 
@@ -68,10 +68,36 @@ export interface Discount {
   valid_to?: string | null
 
   /**
-   * Número mínimo de reservas concluídas no mês atual para ativar o desconto.
-   * null = sem requisito de quantidade mensal.
+   * Número mínimo de reservas concluídas/confirmadas no período indicado.
+   * null = sem requisito de quantidade.
    */
-  min_monthly_reservations?: number | null
+  min_reservations?: number | null
+
+  /**
+   * Período para cálculo de min_reservations.
+   * Exemplos: 'semana', 'quinzena', 'mes', 'trimestre', 'semestre', 'ano'.
+   * null = sem requisito de período.
+   */
+  min_reservations_period?: string | null
+
+  /**
+   * Identificador de grupo de "programa" (descontos escalonados).
+   * Ex.: 'frequencia-mensal' → apenas o melhor desconto desse grupo é usado.
+   * null = desconto isolado (não pertence a nenhum programa).
+   */
+  group?: string | null
+
+  /**
+   * Tipo de regra avançada para descontos baseados em serviços.
+   * Exemplos: 'bogo', 'percent_x_servicos'.
+   */
+  rule_type?: string | null
+
+  /**
+   * Detalhe da regra em JSON serializado.
+   * Ex.: '{"trigger_service_id":1,"free_service_id":2}'.
+   */
+  rule_detail?: string | null
 
   /**
    * Número máximo de vezes que o desconto pode ser usado.
@@ -101,8 +127,8 @@ export interface Discount {
 /**
  * Helper: verifica se um desconto está efetivamente aplicável
  * (ativo, dentro da validade, e ainda tem usos disponíveis).
- * Nota: a verificação de min_monthly_reservations é feita na API
- * pois requer contexto da base de dados.
+ * Nota: a verificação de min_reservations é feita na API, que já
+ * devolve apenas os descontos cujos critérios de quantidade estão cumpridos.
  */
 export function isDiscountUsable(d: Discount): boolean {
   if (!d.active) return false
