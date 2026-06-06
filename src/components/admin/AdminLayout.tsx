@@ -14,6 +14,7 @@ const pageTitles: Record<string, { title: string; subtitle?: string }> = {
   '/admin/indisponibilidades': { title: 'Indisponibilidades', subtitle: 'Gestão de folgas e ausências' },
   '/admin/configuracao':       { title: 'Configuração',       subtitle: 'Serviços, barbeiros, utilizadores e site' },
   '/admin/pagamentos':         { title: 'Pagamentos',         subtitle: 'Estatísticas e resumo financeiro' },
+  '/admin/descontos':          { title: 'Descontos',          subtitle: 'Gestão de descontos e promoções' },
 }
 
 export default function AdminLayout() {
@@ -52,10 +53,11 @@ export default function AdminLayout() {
     return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
   }
 
-  // Apenas superAdmin acede a configuração e pagamentos
+  // Apenas superAdmin acede a configuração, pagamentos e descontos
   if (!isSA && (
     location.pathname === ROUTES.ADMIN_SETTINGS ||
-    location.pathname === ROUTES.ADMIN_PAYMENTS
+    location.pathname === ROUTES.ADMIN_PAYMENTS ||
+    location.pathname === ROUTES.ADMIN_DISCOUNTS
   )) {
     return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
   }
