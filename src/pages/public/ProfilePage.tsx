@@ -289,7 +289,6 @@ export default function ProfilePage() {
   const hasPassword = methods.includes('password')
   const hasSocial   = hasGoogle || hasFacebook
 
-  // DEPOIS
   const updateProfile = useMutation({
     mutationFn: (data: Partial<ProfileForm>) => api.put('/api/me', data),
     onSuccess: (res: any) => {
@@ -351,7 +350,6 @@ export default function ProfilePage() {
   const handleLogout = () => {
     localStorage.removeItem('user_token')
     localStorage.removeItem('user_photo')
-    // Notificar todos os componentes na mesma tab (storage só dispara noutras tabs)
     window.dispatchEvent(new Event('authchange'))
     navigate('/login')
   }
@@ -450,6 +448,9 @@ export default function ProfilePage() {
   const isNextFree     = currentStamps === stampsNeeded
   const faltam         = stampsNeeded - currentStamps
 
+  // Feature flag: !!enabled converte o literal 'true' para boolean, evitando TS2367
+  const discountsEnabled = !!(barberShopConfig.discounts as any)?.enabled
+
   return (
       <div className="pt-24 pb-16 min-h-screen bg-gray-950 text-white">
         <div className="max-w-2xl mx-auto px-4 space-y-5">
@@ -508,8 +509,8 @@ export default function ProfilePage() {
             </Card>
           )}
 
-          {/* Descontos aplicáveis — apenas se existirem */}
-          {user.id && barberShopConfig.discounts?.enabled !== false && (
+          {/* Descontos aplicáveis — apenas se existirem e feature flag ativa */}
+          {user.id && discountsEnabled && (
             <ProfileDiscountsBlock clientId={user.id} />
           )}
 
