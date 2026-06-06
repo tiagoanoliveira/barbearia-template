@@ -19,7 +19,7 @@ export async function onRequestOptions() {
   return corsOptions()
 }
 
-// ─── GET — lista com filtros ──────────────────────────────────────────────────
+// ─── GET — lista com filtros ────────────────────────────────────────────────────────────────────
 export async function onRequestGet({ request, env }) {
   const adminAuth = await authenticateAdmin(request, env)
   if (!adminAuth.success) return unauthorized()
@@ -48,7 +48,7 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-// ─── POST — criar desconto ────────────────────────────────────────────────────
+// ─── POST — criar desconto ────────────────────────────────────────────────────────────────────
 export async function onRequestPost({ request, env }) {
   const adminAuth = await authenticateAdmin(request, env)
   if (!adminAuth.success) return unauthorized()
@@ -63,22 +63,28 @@ export async function onRequestPost({ request, env }) {
       INSERT INTO descontos
         (cliente_id, nome, descricao, tipo, origem,
          valor_percentagem, valor_fixo_centimos,
-         valido_de, valido_ate, min_reservas_mes,
+         valido_de, valido_ate,
+         min_reservas, min_reservas_periodo,
+         grupo, regra_tipo, regra_detalhe,
          max_usos, ativo, criado_por_admin_id, criado_em, atualizado_em)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       RETURNING *
     `).bind(
-      body.cliente_id          ?? null,
+      body.cliente_id           ?? null,
       body.nome,
-      body.descricao           ?? null,
+      body.descricao            ?? null,
       body.tipo,
-      body.origem              ?? 'manual',
-      body.valor_percentagem   ?? null,
-      body.valor_fixo_centimos ?? null,
-      body.valido_de           ?? null,
-      body.valido_ate          ?? null,
-      body.min_reservas_mes    ?? null,
-      body.max_usos            ?? null,
+      body.origem               ?? 'manual',
+      body.valor_percentagem    ?? null,
+      body.valor_fixo_centimos  ?? null,
+      body.valido_de            ?? null,
+      body.valido_ate           ?? null,
+      body.min_reservas         ?? null,
+      body.min_reservas_periodo ?? null,
+      body.grupo                ?? null,
+      body.regra_tipo           ?? null,
+      body.regra_detalhe        ?? null,
+      body.max_usos             ?? null,
       body.ativo !== undefined ? (body.ativo ? 1 : 0) : 1,
       adminAuth.adminId,
       now,
@@ -91,7 +97,7 @@ export async function onRequestPost({ request, env }) {
   }
 }
 
-// ─── Validação partilhada ─────────────────────────────────────────────────────
+// ─── Validação partilhada ───────────────────────────────────────────────────────────────────
 function validateDiscountBody(body, partial = false) {
   const erros = []
   if (!partial && !body.nome) erros.push('nome obrigatório')
@@ -106,5 +112,7 @@ function validateDiscountBody(body, partial = false) {
   }
   if (!partial && body.valor_percentagem == null && body.valor_fixo_centimos == null)
     erros.push('Deve indicar valor_percentagem ou valor_fixo_centimos')
+  if (body.min_reservas != null && (typeof body.min_reservas !== 'number' || body.min_reservas < 0))
+    erros.push('min_reservas deve ser um número >= 0')
   return erros
 }
