@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Phone, Mail, Calendar,
   Tag, Plus, Edit2, Trash2, X, Save,
@@ -17,7 +17,7 @@ import { StatusBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { Discount } from '@/types'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────────────────
 
 function fmtValor(d: Discount) {
   if (d.value_percent != null) return `${d.value_percent}%`
@@ -41,15 +41,15 @@ const TIPO_BADGE: Record<string, string> = {
 }
 
 const TIPO_OPTIONS = [
-  { value: 'ocasional',    label: '🎟️ Ocasional (one-shot)' },
-  { value: 'vitalicio',   label: '♾️ Vitalício' },
-  { value: 'mensal',      label: '📅 Mensal' },
-  { value: 'fidelizacao', label: '⭐ Fidelização' },
-  { value: 'campanha',    label: '📢 Campanha' },
-  { value: 'outro',       label: '🏷️ Outro' },
+  { value: 'ocasional',    label: '\uD83C\uDF9F\uFE0F Ocasional (one-shot)' },
+  { value: 'vitalicio',   label: '\u267E\uFE0F Vitalício' },
+  { value: 'mensal',      label: '\uD83D\uDCC5 Mensal' },
+  { value: 'fidelizacao', label: '\u2B50 Fidelização' },
+  { value: 'campanha',    label: '\uD83D\uDCE2 Campanha' },
+  { value: 'outro',       label: '\uD83C\uDFF7\uFE0F Outro' },
 ]
 
-// ─── Form vazio ────────────────────────────────────────────────────────────────
+// ─── Form vazio ────────────────────────────────────────────────────────────────────────
 
 const emptyForm = (clientId: number) => ({
   id:                   undefined as number | undefined,
@@ -66,7 +66,7 @@ const emptyForm = (clientId: number) => ({
 })
 type DiscountForm = ReturnType<typeof emptyForm>
 
-// ─── Modal de criação / edição ────────────────────────────────────────────────
+// ─── Modal de criação / edição ──────────────────────────────────────────────────────────────
 
 function DiscountModal({
   initial, onClose, onSave, saving,
@@ -103,7 +103,7 @@ function DiscountModal({
       <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <h3 className="font-bold text-gray-900">
-            {isEditing ? '✏️ Editar desconto' : '➕ Novo desconto'}
+            {isEditing ? '\u270F\uFE0F Editar desconto' : '\u2795 Novo desconto'}
           </h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
             <X size={18} className="text-gray-500" />
@@ -195,7 +195,7 @@ function DiscountModal({
   )
 }
 
-// ─── Bloco de descontos do cliente ────────────────────────────────────────────
+// ─── Bloco de descontos do cliente ───────────────────────────────────────────────────────────────
 
 function ClientDiscountsBlock({ clientId }: { clientId: number }) {
   const qc = useQueryClient()
@@ -203,9 +203,10 @@ function ClientDiscountsBlock({ clientId }: { clientId: number }) {
   const [editing, setEditing]     = useState<DiscountForm | null>(null)
   const [saving, setSaving]       = useState(false)
 
+  // Usa a rota ADMIN que devolve todos os descontos (incl. inativos)
   const { data, isLoading } = useQuery({
-    queryKey: ['client-discounts', clientId],
-    queryFn: () => adminApi.get<any[]>(`/api/discounts/client/${clientId}`),
+    queryKey: ['client-discounts-admin', clientId],
+    queryFn: () => adminApi.get<any[]>(`/api/admin/discounts/client/${clientId}`),
     enabled: !!clientId,
   })
 
@@ -250,11 +251,13 @@ function ClientDiscountsBlock({ clientId }: { clientId: number }) {
         ativo:               form.ativo,
       }
       if (form.id) {
-        await adminApi.put(`/api/discounts/${form.id}`, payload)
+        // PUT /:id — rota admin correta
+        await adminApi.put(`/api/admin/discounts/${form.id}`, payload)
       } else {
-        await adminApi.post('/api/discounts', payload)
+        // POST / — criar via rota admin
+        await adminApi.post('/api/admin/discounts', payload)
       }
-      qc.invalidateQueries({ queryKey: ['client-discounts', clientId] })
+      qc.invalidateQueries({ queryKey: ['client-discounts-admin', clientId] })
       setModalOpen(false)
       setEditing(null)
     } finally {
@@ -264,13 +267,13 @@ function ClientDiscountsBlock({ clientId }: { clientId: number }) {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Tens a certeza que queres eliminar este desconto?')) return
-    await adminApi.delete(`/api/discounts/${id}`)
-    qc.invalidateQueries({ queryKey: ['client-discounts', clientId] })
+    await adminApi.delete(`/api/admin/discounts/${id}`)
+    qc.invalidateQueries({ queryKey: ['client-discounts-admin', clientId] })
   }
 
   const handleToggleAtivo = async (d: Discount) => {
-    await adminApi.put(`/api/discounts/${d.id}`, { ativo: !d.active })
-    qc.invalidateQueries({ queryKey: ['client-discounts', clientId] })
+    await adminApi.put(`/api/admin/discounts/${d.id}`, { ativo: !d.active })
+    qc.invalidateQueries({ queryKey: ['client-discounts-admin', clientId] })
   }
 
   const openNew = () => {
@@ -338,18 +341,18 @@ function ClientDiscountsBlock({ clientId }: { clientId: number }) {
                     <span className="font-semibold text-gray-700">{fmtValor(d)}</span>
                     <span>
                       {d.max_uses == null
-                        ? '∞ usos'
+                        ? '\u221e usos'
                         : `${d.used_count} / ${d.max_uses} uso${d.max_uses !== 1 ? 's' : ''}`
                       }
                     </span>
                     {(d.valid_from || d.valid_to) && (
                       <span>
-                        {fmtData(d.valid_from)} {d.valid_from && d.valid_to ? '→' : ''} {fmtData(d.valid_to)}
+                        {fmtData(d.valid_from)} {d.valid_from && d.valid_to ? '\u2192' : ''} {fmtData(d.valid_to)}
                       </span>
                     )}
                     {d.usage_comment && (
                       <span className="italic text-gray-400 truncate max-w-[200px]" title={d.usage_comment}>
-                        💬 {d.usage_comment}
+                        \uD83D\uDCAC {d.usage_comment}
                       </span>
                     )}
                   </div>
@@ -397,7 +400,7 @@ function ClientDiscountsBlock({ clientId }: { clientId: number }) {
   )
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────────
+// ─── Página principal ──────────────────────────────────────────────────────────────────────────────
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()

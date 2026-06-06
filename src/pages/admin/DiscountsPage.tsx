@@ -21,7 +21,7 @@ import type { Discount, Client } from '@/types'
 
 const API = '/api/admin/discounts'
 
-// ─── Helpers ────────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────────────────
 function fmtValor(d: Discount) {
   if (d.value_percent != null) return `${d.value_percent}%`
   if (d.value_fixed  != null) return `${(d.value_fixed / 100).toFixed(2)} €`
@@ -35,12 +35,12 @@ function fmtData(iso?: string | null) {
 }
 
 const TIPO_OPTIONS = [
-  { value: 'ocasional',    label: '🎟️ Ocasional (one-shot)' },
-  { value: 'vitalicio',   label: '♾️ Vitalício' },
-  { value: 'mensal',      label: '📅 Mensal' },
-  { value: 'fidelizacao', label: '⭐ Fidelização' },
-  { value: 'campanha',    label: '📢 Campanha' },
-  { value: 'outro',       label: '🏷️ Outro' },
+  { value: 'ocasional',    label: '\uD83C\uDF9F\uFE0F Ocasional (one-shot)' },
+  { value: 'vitalicio',   label: '\u267E\uFE0F Vitalício' },
+  { value: 'mensal',      label: '\uD83D\uDCC5 Mensal' },
+  { value: 'fidelizacao', label: '\u2B50 Fidelização' },
+  { value: 'campanha',    label: '\uD83D\uDCE2 Campanha' },
+  { value: 'outro',       label: '\uD83C\uDFF7\uFE0F Outro' },
 ]
 
 const TIPO_BADGE: Record<string, string> = {
@@ -52,7 +52,7 @@ const TIPO_BADGE: Record<string, string> = {
   outro:       'bg-gray-100 text-gray-600',
 }
 
-// ─── Formulário vazio ───────────────────────────────────────────────────────────────
+// ─── Formulário vazio ───────────────────────────────────────────────────────────────────────
 const emptyForm = () => ({
   cliente_id:           null as number | null,
   nome:                 '',
@@ -68,16 +68,20 @@ const emptyForm = () => ({
 })
 type DiscountForm = ReturnType<typeof emptyForm>
 
-// ─── Modal de criação/edição ────────────────────────────────────────────────────────
+// ─── Modal de criação/edição ────────────────────────────────────────────────────────────────────
 function DiscountModal({
   initial,
   clients,
+  clientSearch,
+  onClientSearch,
   onClose,
   onSave,
   saving,
 }: {
   initial: DiscountForm & { id?: number }
   clients: Client[]
+  clientSearch: string
+  onClientSearch: (v: string) => void
   onClose: () => void
   onSave: (form: DiscountForm & { id?: number }) => void
   saving: boolean
@@ -110,7 +114,7 @@ function DiscountModal({
       <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <h3 className="font-bold text-gray-900">
-            {isEditing ? '✏️ Editar desconto' : '➕ Novo desconto'}
+            {isEditing ? '\u270F\uFE0F Editar desconto' : '\u2795 Novo desconto'}
           </h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
             <X size={18} className="text-gray-500" />
@@ -119,8 +123,16 @@ function DiscountModal({
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
 
+          {/* Seletor de cliente com pesquisa */}
           <div>
             <label className="label">Cliente</label>
+            <input
+              type="text"
+              className="input text-sm w-full mb-1"
+              placeholder="Pesquisar por nome, email ou telefone..."
+              value={clientSearch}
+              onChange={e => onClientSearch(e.target.value)}
+            />
             <select
               className="input text-sm w-full bg-white"
               value={form.cliente_id ?? ''}
@@ -128,7 +140,7 @@ function DiscountModal({
             >
               <option value="">— Desconto geral (todos os clientes) —</option>
               {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.name} {c.phone ? `· ${c.phone}` : ''}</option>
+                <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>
               ))}
             </select>
             <p className="text-xs text-gray-400 mt-1">
@@ -258,7 +270,7 @@ function DiscountModal({
   )
 }
 
-// ─── Linha da tabela ──────────────────────────────────────────────────────────────────
+// ─── Linha da tabela ──────────────────────────────────────────────────────────────────────────────────
 function DiscountRow({
   d,
   onEdit,
@@ -300,10 +312,10 @@ function DiscountRow({
       </td>
       <td className="px-4 py-3 text-sm font-semibold text-gray-800">{fmtValor(d)}</td>
       <td className="px-4 py-3 text-xs text-gray-500">
-        {d.max_uses == null ? '∞' : `${d.used_count ?? 0} / ${d.max_uses}`}
+        {d.max_uses == null ? '\u221e' : `${d.used_count ?? 0} / ${d.max_uses}`}
       </td>
       <td className="px-4 py-3 text-xs text-gray-400">
-        {fmtData(d.valid_from)} {d.valid_from && d.valid_to ? '→' : ''} {fmtData(d.valid_to)}
+        {fmtData(d.valid_from)} {d.valid_from && d.valid_to ? '\u2192' : ''} {fmtData(d.valid_to)}
         {!d.valid_from && !d.valid_to && <span className="italic">Sem limite</span>}
       </td>
       <td className="px-4 py-3">
@@ -335,7 +347,7 @@ function DiscountRow({
   )
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────────────────────
+// ─── Página principal ──────────────────────────────────────────────────────────────────────────────────────
 export default function DiscountsPage() {
   const adminUser = useAdminUser()
   const isSA      = isSuperAdmin(adminUser)
@@ -348,7 +360,10 @@ export default function DiscountsPage() {
   const [filterCliente, setFilterCliente] = useState('')
   const [saving, setSaving]           = useState(false)
 
-  // ── Dados ──────────────────────────────────────────────────────────────────
+  // Pesquisa de clientes (usada no modal e no filtro)
+  const [clientSearch, setClientSearch] = useState('')
+
+  // ── Dados ────────────────────────────────────────────────────────────────────────────
   const { data: discountsRes, isLoading } = useQuery({
     queryKey: ['admin-discounts', filterTipo, filterAtivo, filterCliente],
     queryFn: () => {
@@ -361,9 +376,10 @@ export default function DiscountsPage() {
     enabled: isSA,
   })
 
+  // Clientes com pesquisa dinâmica (máx. 20 resultados)
   const { data: clientsRes } = useQuery({
-    queryKey: ['clients-list'],
-    queryFn:  () => clientsApi.list({ perPage: 500 }),
+    queryKey: ['clients-discount-search', clientSearch],
+    queryFn:  () => clientsApi.list({ search: clientSearch, page: 1, perPage: 20 }),
     enabled: isSA,
   })
 
@@ -394,7 +410,7 @@ export default function DiscountsPage() {
 
   const clients: Client[] = clientsRes?.data?.items ?? []
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
+  // ── Mutations ────────────────────────────────────────────────────────────────────────────
   const handleSave = async (form: DiscountForm & { id?: number }) => {
     setSaving(true)
     try {
@@ -437,11 +453,13 @@ export default function DiscountsPage() {
   }
 
   const openNew = () => {
+    setClientSearch('')
     setEditing({ ...emptyForm() })
     setModalOpen(true)
   }
 
   const openEdit = (d: Discount & { cliente_nome?: string }) => {
+    setClientSearch(d.cliente_nome ?? '')
     setEditing({
       id:                   d.id,
       cliente_id:           d.client_id,
@@ -459,7 +477,7 @@ export default function DiscountsPage() {
     setModalOpen(true)
   }
 
-  // ── Guard: só superAdmin ───────────────────────────────────────────────────────
+  // ── Guard: só superAdmin ─────────────────────────────────────────────────────────────────────
   if (!isSA) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-3 text-gray-400">
@@ -487,9 +505,9 @@ export default function DiscountsPage() {
             <Tag size={20} className="text-brand-500" /> Descontos
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            {discounts.length} desconto{discounts.length !== 1 ? 's' : ''} ·{' '}
-            {geralCount} geral{geralCount !== 1 ? 'is' : ''} ·{' '}
-            {exclusivoCount} exclusivo{exclusivoCount !== 1 ? 's' : ''} ·{' '}
+            {discounts.length} desconto{discounts.length !== 1 ? 's' : ''} \u00b7{' '}
+            {geralCount} geral{geralCount !== 1 ? 'is' : ''} \u00b7{' '}
+            {exclusivoCount} exclusivo{exclusivoCount !== 1 ? 's' : ''} \u00b7{' '}
             {ativoCount} ativo{ativoCount !== 1 ? 's' : ''}
           </p>
         </div>
@@ -519,7 +537,7 @@ export default function DiscountsPage() {
             </select>
           </div>
           <div>
-            <label className="label text-xs">Cliente</label>
+            <label className="label text-xs">Cliente (filtro)</label>
             <select className="input text-sm bg-white" value={filterCliente}
               onChange={e => setFilterCliente(e.target.value)}>
               <option value="">Todos (incl. gerais)</option>
@@ -584,6 +602,8 @@ export default function DiscountsPage() {
         <DiscountModal
           initial={editing}
           clients={clients}
+          clientSearch={clientSearch}
+          onClientSearch={setClientSearch}
           onClose={() => { setModalOpen(false); setEditing(null) }}
           onSave={handleSave}
           saving={saving}
