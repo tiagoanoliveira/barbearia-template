@@ -111,7 +111,11 @@ function mapRawDiscount(d: any): Discount {
     value_fixed:              d.valor_fixo_centimos ?? null,
     valid_from:               d.valido_de ?? null,
     valid_to:                 d.valido_ate ?? null,
-    min_monthly_reservations: d.min_reservas_mes ?? null,
+    min_reservations:         d.min_reservas ?? null,
+    min_reservations_period:  d.min_reservas_periodo ?? null,
+    group:                    d.grupo ?? null,
+    rule_type:                d.regra_tipo ?? null,
+    rule_detail:              d.regra_detalhe ?? null,
     max_uses:                 d.max_usos ?? null,
     used_count:               d.usos_feitos ?? 0,
     last_used_at:             d.usado_ultima_vez_em ?? null,
@@ -664,7 +668,7 @@ export default function ProfilePage() {
                                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
                               </div>
-            </div>
+                          </div>
                         ))}
                       </>
                   )}
