@@ -2,7 +2,7 @@
  * /api/admin/discounts — lista + criar (apenas admins)
  *
  * GET  /api/admin/discounts   → lista todos com filtros
- * POST /api/admin/discounts   → criar desconto
+ * POST /api/admin/discounts   → criar desconto (aceita cliente_ids[] para criar vários)
  *
  * Sub-rotas em ficheiros próprios (Cloudflare Pages Functions):
  *   functions/api/admin/discounts/[id].js         → PUT, DELETE /:id
@@ -13,13 +13,11 @@
 import { authenticateAdmin } from '../../utils/auth.js'
 import { ok, unauthorized, badRequest, serverError, corsOptions } from '../../utils/response.js'
 
-export { validateDiscountBody }
-
 export async function onRequestOptions() {
   return corsOptions()
 }
 
-// ─── GET — lista com filtros ────────────────────────────────────────────────────────────────────
+// ─── GET — lista com filtros ───────────────────────────────────────────────────
 export async function onRequestGet({ request, env }) {
   const adminAuth = await authenticateAdmin(request, env)
   if (!adminAuth.success) return unauthorized()
@@ -38,17 +36,22 @@ export async function onRequestGet({ request, env }) {
     query += ' AND d.ativo = ?'; args.push(ativo === '1' || ativo === 'true' ? 1 : 0)
   }
 
-  query += ' ORDER BY d.criado_em DESC'
+  query += ' ORDER BY d.grupo ASC, d.criado_em DESC'
 
   try {
     const { results } = await env.DB.prepare(query).bind(...args).all()
-    return ok(results)
+    // Parse servicos_ids JSON string back to array
+    const mapped = results.map(r => ({
+      ...r,
+      servicos_ids: r.servicos_ids ? JSON.parse(r.servicos_ids) : [],
+    }))
+    return ok(mapped)
   } catch (e) {
     return serverError('Erro ao listar descontos', e.message)
   }
 }
 
-// ─── POST — criar desconto ────────────────────────────────────────────────────────────────────
+// ─── POST — criar desconto (suporta vários clientes → cria um por cliente) ─────
 export async function onRequestPost({ request, env }) {
   const adminAuth = await authenticateAdmin(request, env)
   if (!adminAuth.success) return unauthorized()
@@ -58,46 +61,71 @@ export async function onRequestPost({ request, env }) {
     const erros = validateDiscountBody(body)
     if (erros.length) return badRequest(erros.join('; '))
 
-    const now = new Date().toISOString()
-    const { results } = await env.DB.prepare(`
-      INSERT INTO descontos
-        (cliente_id, nome, descricao, tipo, origem,
-         valor_percentagem, valor_fixo_centimos,
-         valido_de, valido_ate,
-         min_reservas, min_reservas_periodo,
-         grupo, regra_tipo, regra_detalhe,
-         max_usos, ativo, criado_por_admin_id, criado_em, atualizado_em)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      RETURNING *
-    `).bind(
-      body.cliente_id           ?? null,
-      body.nome,
-      body.descricao            ?? null,
-      body.tipo,
-      body.origem               ?? 'manual',
-      body.valor_percentagem    ?? null,
-      body.valor_fixo_centimos  ?? null,
-      body.valido_de            ?? null,
-      body.valido_ate           ?? null,
-      body.min_reservas         ?? null,
-      body.min_reservas_periodo ?? null,
-      body.grupo                ?? null,
-      body.regra_tipo           ?? null,
-      body.regra_detalhe        ?? null,
-      body.max_usos             ?? null,
-      body.ativo !== undefined ? (body.ativo ? 1 : 0) : 1,
-      adminAuth.adminId,
-      now,
-      now,
-    ).all()
+    // Normalize cliente_ids: aceita cliente_id (singular) ou cliente_ids (array)
+    let clienteIds = []
+    if (Array.isArray(body.cliente_ids) && body.cliente_ids.length > 0) {
+      clienteIds = body.cliente_ids
+    } else if (body.cliente_id != null) {
+      clienteIds = [body.cliente_id]
+    } else {
+      clienteIds = [null] // desconto geral
+    }
 
-    return ok(results[0], 201)
+    // Se mais do que 1 cliente, gera grupo automático se não vier definido
+    const grupo = body.grupo || (clienteIds.length > 1
+      ? `grupo-${Date.now()}`
+      : null)
+
+    const servicosJson = Array.isArray(body.servicos_ids) && body.servicos_ids.length > 0
+      ? JSON.stringify(body.servicos_ids)
+      : null
+
+    const now = new Date().toISOString()
+    const created = []
+
+    for (const cid of clienteIds) {
+      const { results } = await env.DB.prepare(`
+        INSERT INTO descontos
+          (cliente_id, nome, descricao, tipo, origem,
+           valor_percentagem, valor_fixo_centimos,
+           valido_de, valido_ate,
+           min_reservas, min_reservas_periodo,
+           grupo, regra_tipo, regra_detalhe, servicos_ids,
+           max_usos, ativo, criado_por_admin_id, criado_em, atualizado_em)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        RETURNING *
+      `).bind(
+        cid                          ?? null,
+        body.nome,
+        body.descricao               ?? null,
+        body.tipo,
+        body.origem                  ?? 'manual',
+        body.valor_percentagem       ?? null,
+        body.valor_fixo_centimos     ?? null,
+        body.valido_de               ?? null,
+        body.valido_ate              ?? null,
+        body.min_reservas            ?? null,
+        body.min_reservas_periodo    ?? null,
+        grupo,
+        body.regra_tipo              ?? null,
+        body.regra_detalhe           ?? null,
+        servicosJson,
+        body.max_usos                ?? null,
+        body.ativo !== undefined ? (body.ativo ? 1 : 0) : 1,
+        adminAuth.adminId,
+        now,
+        now,
+      ).all()
+      created.push(results[0])
+    }
+
+    return ok(created.length === 1 ? created[0] : created, 201)
   } catch (e) {
     return serverError('Erro ao criar desconto', e.message)
   }
 }
 
-// ─── Validação partilhada ───────────────────────────────────────────────────────────────────
+// ─── Validação partilhada ──────────────────────────────────────────────────────
 function validateDiscountBody(body, partial = false) {
   const erros = []
   if (!partial && !body.nome) erros.push('nome obrigatório')
@@ -116,3 +144,5 @@ function validateDiscountBody(body, partial = false) {
     erros.push('min_reservas deve ser um número >= 0')
   return erros
 }
+
+export { validateDiscountBody }
