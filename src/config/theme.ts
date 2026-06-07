@@ -10,10 +10,10 @@ import faviconSrc from '@/media/images/logos/logo-96px.png'
 // ─ Media da HomePage ──────────────────────────────────────────────────────
 import heroVideoSrc from '@/media/video/presentation.mp4'
 import videoBackground from '@/media/video/video_background.mp4'
-import aboutImgSrc  from '@/media/images/corte-cabelo-detalhe.png'
-import gallery1Src  from '@/media/images/brooklyn/Entrada.jpg'
-import gallery2Src  from '@/media/images/brooklyn/Cadeiras.jpg'
-import gallery3Src  from '@/media/images/brooklyn/Sinuca.jpg'
+import aboutImgSrc  from '@/media/images/corte-cabelo-detalhe.webp'
+import gallery1Src  from '@/media/images/brooklyn/Entrada.webp'
+import gallery2Src  from '@/media/images/brooklyn/Cadeiras.webp'
+import gallery3Src  from '@/media/images/brooklyn/Sinuca.webp'
 
 export const LOGO_URL    = logoSrc
 export const FAVICON_URL = faviconSrc
