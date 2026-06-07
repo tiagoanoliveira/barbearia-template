@@ -86,22 +86,23 @@ type EditForm = Omit<DiscountForm, 'cliente_ids'> & {
 }
 
 // Payload enviado pelo GroupEditModal ao handleGroupEdit
+// min_reservas e min_reservas_periodo são agora campos INDIVIDUAIS por membro
 interface GroupEditPayload {
   common: {
-    descricao:            string | null
-    tipo:                 string
-    valido_de:            string | null
-    valido_ate:           string | null
-    min_reservas:         number | null
-    min_reservas_periodo: string | null
-    max_usos:             number | null
-    ativo:                boolean
+    descricao:  string | null
+    tipo:       string
+    valido_de:  string | null
+    valido_ate: string | null
+    max_usos:   number | null
+    ativo:      boolean
   }
   individual: Record<number, {
-    nome:                string
-    valor_percentagem:   number | null
-    valor_fixo_centimos: number | null
-    servicos_ids:        number[]
+    nome:                 string
+    valor_percentagem:    number | null
+    valor_fixo_centimos:  number | null
+    min_reservas:         number | null
+    min_reservas_periodo: string | null
+    servicos_ids:         number[]
   }>
 }
 
@@ -628,8 +629,8 @@ function EditModal({
 }
 
 // ─── Modal de EDIÇÃO DE GRUPO ──────────────────────────────────────────────────
-// Campos COMUNS: aplicados a todos os membros do grupo.
-// Campos INDIVIDUAIS (nome, valor, servicos_ids): editados por desconto.
+// Campos COMUNS: descrição, tipo, validade, máx. usos, ativo.
+// Campos INDIVIDUAIS por membro: nome, valor, min_reservas, min_reservas_periodo, servicos_ids.
 function GroupEditModal({
   group,
   members,
@@ -646,27 +647,30 @@ function GroupEditModal({
   const first = members[0]
 
   // ─ Campos comuns ──────────────────────────────────────────────────────
-  const [descricao, setDescricao]     = useState(first.description ?? '')
-  const [tipo, setTipo]               = useState(first.type)
-  const [validoDe, setValidoDe]       = useState(first.valid_from  ? first.valid_from.slice(0, 10)  : '')
-  const [validoAte, setValidoAte]     = useState(first.valid_to    ? first.valid_to.slice(0, 10)    : '')
-  const [minReservas, setMinReservas] = useState<number | null>((first as any).min_reservations ?? null)
-  const [minPeriodo, setMinPeriodo]   = useState<string | null>((first as any).min_reservations_period ?? null)
-  const [maxUsos, setMaxUsos]         = useState<number | null>(first.max_uses ?? null)
-  const [ativo, setAtivo]             = useState(first.active)
+  const [descricao, setDescricao] = useState(first.description ?? '')
+  const [tipo, setTipo]           = useState(first.type)
+  const [validoDe, setValidoDe]   = useState(first.valid_from ? first.valid_from.slice(0, 10) : '')
+  const [validoAte, setValidoAte] = useState(first.valid_to   ? first.valid_to.slice(0, 10)   : '')
+  const [maxUsos, setMaxUsos]     = useState<number | null>(first.max_uses ?? null)
+  const [ativo, setAtivo]         = useState(first.active)
 
   // ─ Campos individuais por membro ─────────────────────────────────────
+  // Inclui agora min_reservas e min_reservas_periodo por serem próprios de cada desconto
   const [memberPatches, setMemberPatches] = useState<Record<number, {
-    nome:                string
-    valor_percentagem:   number | null
-    valor_fixo_centimos: number | null
-    servicos_ids:        number[]
+    nome:                 string
+    valor_percentagem:    number | null
+    valor_fixo_centimos:  number | null
+    min_reservas:         number | null
+    min_reservas_periodo: string | null
+    servicos_ids:         number[]
   }>>(() =>
     Object.fromEntries(members.map(m => [m.id, {
-      nome:                m.name,
-      valor_percentagem:   m.value_percent  ?? null,
-      valor_fixo_centimos: m.value_fixed    ?? null,
-      servicos_ids:        (m as any).servicos_ids ?? [],
+      nome:                 m.name,
+      valor_percentagem:    m.value_percent  ?? null,
+      valor_fixo_centimos:  m.value_fixed    ?? null,
+      min_reservas:         (m as any).min_reservations        ?? null,
+      min_reservas_periodo: (m as any).min_reservations_period ?? null,
+      servicos_ids:         (m as any).servicos_ids ?? [],
     }]))
   )
 
@@ -701,13 +705,11 @@ function GroupEditModal({
     e.preventDefault()
     onSave({
       common: {
-        descricao:            descricao || null,
+        descricao:  descricao || null,
         tipo,
-        valido_de:            validoDe  || null,
-        valido_ate:           validoAte || null,
-        min_reservas:         minReservas,
-        min_reservas_periodo: minPeriodo,
-        max_usos:             maxUsos,
+        valido_de:  validoDe  || null,
+        valido_ate: validoAte || null,
+        max_usos:   maxUsos,
         ativo,
       },
       individual: memberPatches,
@@ -763,28 +765,6 @@ function GroupEditModal({
               </div>
             </div>
 
-            {showQuantidade && (
-              <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
-                <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Regras de quantidade</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="label">Mín. reservas</label>
-                    <input type="number" min={0} step={1} className="input w-full"
-                      value={minReservas ?? ''}
-                      onChange={e => setMinReservas(e.target.value ? Number(e.target.value) : null)} />
-                  </div>
-                  <div>
-                    <label className="label">Período</label>
-                    <select className="input text-sm w-full bg-white" value={minPeriodo ?? ''}
-                      onChange={e => setMinPeriodo(e.target.value || null)}>
-                      <option value="">— Nenhum —</option>
-                      {PERIODO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div>
               <label className="label">Máximo de usos (por cliente)</label>
               <input type="number" min={1} step={1} className="input w-full"
@@ -837,6 +817,32 @@ function GroupEditModal({
                         e.target.value ? Math.round(Number(e.target.value) * 100) : null)} />
                   </div>
                 </div>
+
+                {/* Regras de quantidade — individuais por desconto */}
+                {showQuantidade && (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2">
+                    <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wide">Regras de quantidade</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="label">Mín. reservas</label>
+                        <input type="number" min={0} step={1} className="input w-full"
+                          value={memberPatches[m.id]?.min_reservas ?? ''}
+                          onChange={e => updMember(m.id, 'min_reservas',
+                            e.target.value ? Number(e.target.value) : null)}
+                          placeholder="Ex.: 2" />
+                      </div>
+                      <div>
+                        <label className="label">Período</label>
+                        <select className="input text-sm w-full bg-white"
+                          value={memberPatches[m.id]?.min_reservas_periodo ?? ''}
+                          onChange={e => updMember(m.id, 'min_reservas_periodo', e.target.value || null)}>
+                          <option value="">— Nenhum —</option>
+                          {PERIODO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {tipo === 'servico' && (
                   <div>
@@ -1087,7 +1093,7 @@ export default function DiscountsPage() {
         grupo:                form.grupo,
         regra_tipo:           form.regra_tipo,
         regra_detalhe:        form.regra_detalhe,
-        servicos_ids:         form.servicos_ids,   // always array; backend treats [] as NULL
+        servicos_ids:         form.servicos_ids,
         max_usos:             form.max_usos,
         ativo:                form.ativo,
       }
@@ -1118,7 +1124,7 @@ export default function DiscountsPage() {
         min_reservas:         form.min_reservas,
         min_reservas_periodo: form.min_reservas_periodo,
         grupo:                form.grupo,
-        servicos_ids:         form.servicos_ids,   // always array; backend treats [] as NULL
+        servicos_ids:         form.servicos_ids,
         max_usos:             form.max_usos,
         ativo:                form.ativo,
       })
@@ -1130,6 +1136,7 @@ export default function DiscountsPage() {
   }
 
   // handleGroupEdit: merge common patch + individual patch per member
+  // min_reservas e min_reservas_periodo vêm do individual (específico de cada desconto)
   const handleGroupEdit = async (payload: GroupEditPayload) => {
     if (!groupTarget) return
     setSaving(true)
@@ -1138,9 +1145,12 @@ export default function DiscountsPage() {
       await Promise.all(members.map(d =>
         adminApi.put(`${API}/${d.id}`, {
           ...payload.common,
-          ...payload.individual[d.id],
-          // servicos_ids always array (never null) so backend serialises correctly
-          servicos_ids: payload.individual[d.id]?.servicos_ids ?? [],
+          nome:                 payload.individual[d.id]?.nome,
+          valor_percentagem:    payload.individual[d.id]?.valor_percentagem,
+          valor_fixo_centimos:  payload.individual[d.id]?.valor_fixo_centimos,
+          min_reservas:         payload.individual[d.id]?.min_reservas ?? null,
+          min_reservas_periodo: payload.individual[d.id]?.min_reservas_periodo ?? null,
+          servicos_ids:         payload.individual[d.id]?.servicos_ids ?? [],
         })
       ))
       qc.invalidateQueries({ queryKey: ['admin-discounts'] })
