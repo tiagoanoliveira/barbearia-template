@@ -33,12 +33,16 @@ export async function onRequestPut({ request, env, params }) {
     if (body.min_reservas != null && (typeof body.min_reservas !== 'number' || body.min_reservas < 0))
       return badRequest('min_reservas deve ser um número >= 0')
 
-    // Serialize servicos_ids array to JSON string if present
-    const servicosJson = body.servicos_ids !== undefined
-      ? (Array.isArray(body.servicos_ids) && body.servicos_ids.length > 0
-          ? JSON.stringify(body.servicos_ids)
-          : null)
-      : undefined
+    // Fix: serialize servicos_ids properly; coerce IDs to Number to prevent
+    // D1 from receiving a raw JS array or string IDs.
+    let servicosJson = undefined
+    if (body.servicos_ids !== undefined) {
+      if (Array.isArray(body.servicos_ids) && body.servicos_ids.length > 0) {
+        servicosJson = JSON.stringify(body.servicos_ids.map(Number))
+      } else {
+        servicosJson = null  // empty array or null → store NULL
+      }
+    }
 
     const now = new Date().toISOString()
 
@@ -74,7 +78,13 @@ export async function onRequestPut({ request, env, params }) {
     ).bind(...args).all()
 
     if (!results.length) return notFound('Desconto não encontrado')
-    return ok(results[0])
+
+    // Parse servicos_ids back to array before returning
+    const row = results[0]
+    return ok({
+      ...row,
+      servicos_ids: row.servicos_ids ? JSON.parse(row.servicos_ids) : [],
+    })
   } catch (e) {
     return serverError('Erro ao atualizar desconto', e.message)
   }

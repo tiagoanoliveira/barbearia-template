@@ -61,7 +61,6 @@ const TIPO_BADGE: Record<string, string> = {
 
 // ─── Formulário vazio ──────────────────────────────────────────────────────────
 const emptyForm = () => ({
-  // Para criar: lista de clientes selecionados (vazio = desconto geral)
   cliente_ids:          [] as number[],
   nome:                 '',
   descricao:            '',
@@ -81,10 +80,29 @@ const emptyForm = () => ({
 })
 type DiscountForm = ReturnType<typeof emptyForm>
 
-// Forma de edição: um único desconto existente
 type EditForm = Omit<DiscountForm, 'cliente_ids'> & {
   id: number
   cliente_id: number | null
+}
+
+// Payload enviado pelo GroupEditModal ao handleGroupEdit
+interface GroupEditPayload {
+  common: {
+    descricao:            string | null
+    tipo:                 string
+    valido_de:            string | null
+    valido_ate:           string | null
+    min_reservas:         number | null
+    min_reservas_periodo: string | null
+    max_usos:             number | null
+    ativo:                boolean
+  }
+  individual: Record<number, {
+    nome:                string
+    valor_percentagem:   number | null
+    valor_fixo_centimos: number | null
+    servicos_ids:        number[]
+  }>
 }
 
 // ─── Seletor de clientes (multi) ───────────────────────────────────────────────
@@ -152,7 +170,6 @@ function ClientSelector({
             <p className="text-xs text-gray-400 mb-1">Nenhum cliente encontrado.</p>
           )}
 
-          {/* Chips dos selecionados */}
           {selectedIds.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-1">
               {selectedIds.map(id => (
@@ -611,8 +628,8 @@ function EditModal({
 }
 
 // ─── Modal de EDIÇÃO DE GRUPO ──────────────────────────────────────────────────
-// Edita os campos COMUNS a todos os descontos do grupo num só ecrã;
-// campos que diferem por desconto (cliente) devem ser editados individualmente.
+// Campos COMUNS: aplicados a todos os membros do grupo.
+// Campos INDIVIDUAIS (nome, valor, servicos_ids): editados por desconto.
 function GroupEditModal({
   group,
   members,
@@ -621,47 +638,87 @@ function GroupEditModal({
   saving,
 }: {
   group: string
-  members: (Discount & { cliente_nome?: string })[]
+  members: (Discount & { cliente_nome?: string; servicos_ids?: number[] })[]
   onClose: () => void
-  onSave: (patch: Partial<EditForm>) => void
+  onSave: (payload: GroupEditPayload) => void
   saving: boolean
 }) {
-  // Campos comuns editáveis em grupo
   const first = members[0]
-  const [nome, setNome]                     = useState(first.name)
-  const [descricao, setDescricao]           = useState(first.description ?? '')
-  const [tipo, setTipo]                     = useState(first.type)
-  const [valorPct, setValorPct]             = useState<number | null>(first.value_percent ?? null)
-  const [valorFixo, setValorFixo]           = useState<number | null>(first.value_fixed   ?? null)
-  const [validoDe, setValidoDe]             = useState(first.valid_from  ? first.valid_from.slice(0,10)  : '')
-  const [validoAte, setValidoAte]           = useState(first.valid_to    ? first.valid_to.slice(0,10)    : '')
-  const [minReservas, setMinReservas]       = useState<number | null>((first as any).min_reservations ?? null)
-  const [minPeriodo, setMinPeriodo]         = useState<string | null>((first as any).min_reservations_period ?? null)
-  const [maxUsos, setMaxUsos]               = useState<number | null>(first.max_uses ?? null)
-  const [ativo, setAtivo]                   = useState(first.active)
+
+  // ─ Campos comuns ──────────────────────────────────────────────────────
+  const [descricao, setDescricao]     = useState(first.description ?? '')
+  const [tipo, setTipo]               = useState(first.type)
+  const [validoDe, setValidoDe]       = useState(first.valid_from  ? first.valid_from.slice(0, 10)  : '')
+  const [validoAte, setValidoAte]     = useState(first.valid_to    ? first.valid_to.slice(0, 10)    : '')
+  const [minReservas, setMinReservas] = useState<number | null>((first as any).min_reservations ?? null)
+  const [minPeriodo, setMinPeriodo]   = useState<string | null>((first as any).min_reservations_period ?? null)
+  const [maxUsos, setMaxUsos]         = useState<number | null>(first.max_uses ?? null)
+  const [ativo, setAtivo]             = useState(first.active)
+
+  // ─ Campos individuais por membro ─────────────────────────────────────
+  const [memberPatches, setMemberPatches] = useState<Record<number, {
+    nome:                string
+    valor_percentagem:   number | null
+    valor_fixo_centimos: number | null
+    servicos_ids:        number[]
+  }>>(() =>
+    Object.fromEntries(members.map(m => [m.id, {
+      nome:                m.name,
+      valor_percentagem:   m.value_percent  ?? null,
+      valor_fixo_centimos: m.value_fixed    ?? null,
+      servicos_ids:        (m as any).servicos_ids ?? [],
+    }]))
+  )
+
+  const { data: servicesRes } = useQuery({
+    queryKey: ['admin-services-list'],
+    queryFn:  () => adminApi.get<{ id: number; nome: string }[]>('/api/admin/services'),
+    enabled: tipo === 'servico',
+    staleTime: 5 * 60 * 1000,
+  })
+  const services: { id: number; name: string }[] =
+    ((servicesRes as any)?.data ?? []).map((s: any) => ({ id: s.id, name: s.nome ?? s.name ?? '' }))
+
+  const updMember = (id: number, k: string, v: any) =>
+    setMemberPatches(p => ({ ...p, [id]: { ...p[id], [k]: v } }))
+
+  const toggleMemberServico = (memberId: number, serviceId: number) => {
+    setMemberPatches(p => {
+      const current = p[memberId]?.servicos_ids ?? []
+      return {
+        ...p,
+        [memberId]: {
+          ...p[memberId],
+          servicos_ids: current.includes(serviceId)
+            ? current.filter(s => s !== serviceId)
+            : [...current, serviceId],
+        },
+      }
+    })
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSave({
-      nome,
-      descricao,
-      tipo,
-      valor_percentagem:    valorPct,
-      valor_fixo_centimos:  valorFixo,
-      valido_de:            validoDe  || null,
-      valido_ate:           validoAte || null,
-      min_reservas:         minReservas,
-      min_reservas_periodo: minPeriodo,
-      max_usos:             maxUsos,
-      ativo,
-    } as any)
+      common: {
+        descricao:            descricao || null,
+        tipo,
+        valido_de:            validoDe  || null,
+        valido_ate:           validoAte || null,
+        min_reservas:         minReservas,
+        min_reservas_periodo: minPeriodo,
+        max_usos:             maxUsos,
+        ativo,
+      },
+      individual: memberPatches,
+    })
   }
 
   const showQuantidade = ['quantidade', 'mensal'].includes(tipo)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh]">
+      <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <div>
             <h3 className="font-bold text-gray-900">✏️ Editar grupo</h3>
@@ -672,96 +729,141 @@ function GroupEditModal({
           </button>
         </div>
 
-        <div className="px-6 pt-3 pb-1">
-          <p className="text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
-            Clientes neste grupo: {members.map(m => (m as any).cliente_nome ?? `#${m.client_id}`).join(', ')}
-          </p>
-        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
 
-        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-          <div>
-            <label className="label">Nome <span className="text-red-500">*</span></label>
-            <input type="text" className="input w-full" value={nome}
-              onChange={e => setNome(e.target.value)} />
-          </div>
+          {/* ─── Campos comuns ─── */}
+          <div className="space-y-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Campos comuns (todos os descontos)</p>
 
-          <div>
-            <label className="label">Descrição</label>
-            <textarea rows={2} className="input w-full resize-none" value={descricao}
-              onChange={e => setDescricao(e.target.value)} />
-          </div>
-
-          <div>
-            <label className="label">Tipo</label>
-            <select className="input text-sm w-full bg-white" value={tipo}
-              onChange={e => setTipo(e.target.value)}>
-              {TIPO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Desconto (%)</label>
-              <input type="number" min={0} max={100} step={1} className="input w-full"
-                value={valorPct ?? ''}
-                onChange={e => setValorPct(e.target.value ? Number(e.target.value) : null)} />
+              <label className="label">Descrição</label>
+              <textarea rows={2} className="input w-full resize-none" value={descricao}
+                onChange={e => setDescricao(e.target.value)}
+                placeholder="Opcional — aparece no perfil do cliente" />
             </div>
-            <div>
-              <label className="label">Valor fixo (€)</label>
-              <input type="number" min={0} step={0.5} className="input w-full"
-                value={valorFixo != null ? (valorFixo / 100) : ''}
-                onChange={e => setValorFixo(e.target.value ? Math.round(Number(e.target.value) * 100) : null)} />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Válido de</label>
-              <input type="date" className="input w-full" value={validoDe}
-                onChange={e => setValidoDe(e.target.value)} />
+              <label className="label">Tipo</label>
+              <select className="input text-sm w-full bg-white" value={tipo}
+                onChange={e => setTipo(e.target.value)}>
+                {TIPO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </div>
-            <div>
-              <label className="label">Válido até</label>
-              <input type="date" className="input w-full" value={validoAte}
-                onChange={e => setValidoAte(e.target.value)} />
-            </div>
-          </div>
 
-          {showQuantidade && (
-            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
-              <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Regras de quantidade</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Mín. reservas</label>
-                  <input type="number" min={0} step={1} className="input w-full"
-                    value={minReservas ?? ''}
-                    onChange={e => setMinReservas(e.target.value ? Number(e.target.value) : null)} />
-                </div>
-                <div>
-                  <label className="label">Período</label>
-                  <select className="input text-sm w-full bg-white" value={minPeriodo ?? ''}
-                    onChange={e => setMinPeriodo(e.target.value || null)}>
-                    <option value="">— Nenhum —</option>
-                    {PERIODO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Válido de</label>
+                <input type="date" className="input w-full" value={validoDe}
+                  onChange={e => setValidoDe(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Válido até</label>
+                <input type="date" className="input w-full" value={validoAte}
+                  onChange={e => setValidoAte(e.target.value)} />
               </div>
             </div>
-          )}
 
-          <div>
-            <label className="label">Máximo de usos (por cliente)</label>
-            <input type="number" min={1} step={1} className="input w-full"
-              value={maxUsos ?? ''}
-              onChange={e => setMaxUsos(e.target.value ? Number(e.target.value) : null)}
-              placeholder="Vazio = ilimitado" />
+            {showQuantidade && (
+              <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
+                <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Regras de quantidade</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Mín. reservas</label>
+                    <input type="number" min={0} step={1} className="input w-full"
+                      value={minReservas ?? ''}
+                      onChange={e => setMinReservas(e.target.value ? Number(e.target.value) : null)} />
+                  </div>
+                  <div>
+                    <label className="label">Período</label>
+                    <select className="input text-sm w-full bg-white" value={minPeriodo ?? ''}
+                      onChange={e => setMinPeriodo(e.target.value || null)}>
+                      <option value="">— Nenhum —</option>
+                      {PERIODO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="label">Máximo de usos (por cliente)</label>
+              <input type="number" min={1} step={1} className="input w-full"
+                value={maxUsos ?? ''}
+                onChange={e => setMaxUsos(e.target.value ? Number(e.target.value) : null)}
+                placeholder="Vazio = ilimitado" />
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" className="rounded" checked={ativo}
+                onChange={e => setAtivo(e.target.checked)} />
+              <span className="text-sm font-medium">Todos os descontos do grupo ativos</span>
+            </label>
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" className="rounded" checked={ativo}
-              onChange={e => setAtivo(e.target.checked)} />
-            <span className="text-sm font-medium">Todos os descontos do grupo ativos</span>
-          </label>
+          {/* ─── Divider ─── */}
+          <hr className="border-gray-100" />
+
+          {/* ─── Campos individuais por membro ─── */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Campos individuais por desconto</p>
+            {members.map(m => (
+              <div key={m.id} className="rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                  <User size={12} className="text-brand-400" />
+                  {(m as any).cliente_nome ?? `#${m.client_id}`}
+                </p>
+
+                <div>
+                  <label className="label">Nome</label>
+                  <input type="text" className="input w-full"
+                    value={memberPatches[m.id]?.nome ?? ''}
+                    onChange={e => updMember(m.id, 'nome', e.target.value)} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">Desconto (%)</label>
+                    <input type="number" min={0} max={100} step={1} className="input w-full"
+                      value={memberPatches[m.id]?.valor_percentagem ?? ''}
+                      onChange={e => updMember(m.id, 'valor_percentagem',
+                        e.target.value ? Number(e.target.value) : null)} />
+                  </div>
+                  <div>
+                    <label className="label">Valor fixo (€)</label>
+                    <input type="number" min={0} step={0.5} className="input w-full"
+                      value={memberPatches[m.id]?.valor_fixo_centimos != null
+                        ? memberPatches[m.id].valor_fixo_centimos! / 100 : ''}
+                      onChange={e => updMember(m.id, 'valor_fixo_centimos',
+                        e.target.value ? Math.round(Number(e.target.value) * 100) : null)} />
+                  </div>
+                </div>
+
+                {tipo === 'servico' && (
+                  <div>
+                    <label className="label">Serviços abrangidos</label>
+                    {services.length === 0
+                      ? <p className="text-xs text-gray-400">A carregar serviços...</p>
+                      : (
+                        <div className="space-y-1 max-h-32 overflow-y-auto mt-1">
+                          {services.map(s => (
+                            <label key={s.id} className="flex items-center gap-2 cursor-pointer select-none py-0.5">
+                              <input type="checkbox" className="rounded text-teal-600"
+                                checked={(memberPatches[m.id]?.servicos_ids ?? []).includes(s.id)}
+                                onChange={() => toggleMemberServico(m.id, s.id)} />
+                              <span className="text-sm text-gray-800">{s.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )
+                    }
+                    {(memberPatches[m.id]?.servicos_ids ?? []).length === 0 && (
+                      <p className="text-[10px] text-teal-500 mt-0.5">Sem seleção = aplica-se a todos os serviços.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
@@ -875,7 +977,6 @@ function GroupRows({
 
   return (
     <>
-      {/* Cabeçalho de grupo */}
       <tr className="bg-indigo-50/60 border-b border-indigo-100">
         <td colSpan={8} className="px-4 py-2">
           <div className="flex items-center gap-2">
@@ -986,11 +1087,10 @@ export default function DiscountsPage() {
         grupo:                form.grupo,
         regra_tipo:           form.regra_tipo,
         regra_detalhe:        form.regra_detalhe,
-        servicos_ids:         form.servicos_ids.length > 0 ? form.servicos_ids : null,
+        servicos_ids:         form.servicos_ids,   // always array; backend treats [] as NULL
         max_usos:             form.max_usos,
         ativo:                form.ativo,
       }
-      // Envia cliente_ids se houver selecionados, senão desconto geral (cliente_id null)
       if (form.cliente_ids.length > 0) {
         payload.cliente_ids = form.cliente_ids
       } else {
@@ -1018,7 +1118,7 @@ export default function DiscountsPage() {
         min_reservas:         form.min_reservas,
         min_reservas_periodo: form.min_reservas_periodo,
         grupo:                form.grupo,
-        servicos_ids:         form.servicos_ids.length > 0 ? form.servicos_ids : null,
+        servicos_ids:         form.servicos_ids,   // always array; backend treats [] as NULL
         max_usos:             form.max_usos,
         ativo:                form.ativo,
       })
@@ -1029,12 +1129,20 @@ export default function DiscountsPage() {
     }
   }
 
-  const handleGroupEdit = async (patch: Partial<EditForm>) => {
+  // handleGroupEdit: merge common patch + individual patch per member
+  const handleGroupEdit = async (payload: GroupEditPayload) => {
     if (!groupTarget) return
     setSaving(true)
     try {
       const members = discounts.filter(d => d.group === groupTarget)
-      await Promise.all(members.map(d => adminApi.put(`${API}/${d.id}`, patch)))
+      await Promise.all(members.map(d =>
+        adminApi.put(`${API}/${d.id}`, {
+          ...payload.common,
+          ...payload.individual[d.id],
+          // servicos_ids always array (never null) so backend serialises correctly
+          servicos_ids: payload.individual[d.id]?.servicos_ids ?? [],
+        })
+      ))
       qc.invalidateQueries({ queryKey: ['admin-discounts'] })
       setGroupTarget(null)
     } finally {
@@ -1090,7 +1198,6 @@ export default function DiscountsPage() {
   }
 
   // ─── Agrupamento para a tabela ─────────────────────────────────────────────────
-  // Separa em: grupos nomeados (grupo != null) e individuais (sem grupo)
   const grouped = new Map<string, (Discount & { cliente_nome?: string; servicos_ids?: number[] })[]>()
   const ungrouped: (Discount & { cliente_nome?: string; servicos_ids?: number[] })[] = []
 
@@ -1210,7 +1317,6 @@ export default function DiscountsPage() {
                 </tr>
               )}
 
-              {/* Grupos nomeados */}
               {Array.from(grouped.entries()).map(([grp, members]) => (
                 <GroupRows key={grp} groupName={grp} members={members}
                   onEditGroup={() => setGroupTarget(grp)}
@@ -1220,7 +1326,6 @@ export default function DiscountsPage() {
                 />
               ))}
 
-              {/* Descontos sem grupo */}
               {ungrouped.map(d => (
                 <DiscountRow key={d.id} d={d}
                   onEdit={() => openEdit(d)}
