@@ -8,7 +8,6 @@ import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 import { adminApi } from '@/api/client'
 import { clientsApi } from '@/api/clients'
-import { servicesApi } from '@/api/services'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { isSuperAdmin, useAdminUser } from '@/hooks/useAdminUser'
@@ -16,7 +15,7 @@ import type { Discount, Client } from '@/types'
 
 const API = '/api/admin/discounts'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 function fmtValor(d: Discount) {
   if (d.value_percent != null) return `${d.value_percent}%`
   if (d.value_fixed  != null) return `${(d.value_fixed / 100).toFixed(2)} €`
@@ -30,14 +29,14 @@ function fmtData(iso?: string | null) {
 }
 
 const TIPO_OPTIONS = [
-  { value: 'ocasional',    label: '\uD83C\uDF9F\uFE0F Ocasional (one-shot)' },
-  { value: 'vitalicio',   label: '\u267E\uFE0F Vitalício' },
-  { value: 'mensal',      label: '\uD83D\uDCC5 Mensal' },
-  { value: 'quantidade',  label: '\uD83D\uDCC8 Por quantidade' },
-  { value: 'servico',     label: '\u2702\uFE0F Por serviço' },
-  { value: 'fidelizacao', label: '\u2B50 Fidelização' },
-  { value: 'campanha',    label: '\uD83D\uDCE2 Campanha' },
-  { value: 'outro',       label: '\uD83C\uDFF7\uFE0F Outro' },
+  { value: 'ocasional',    label: '🎟️ Ocasional (one-shot)' },
+  { value: 'vitalicio',   label: '♾️ Vitalício' },
+  { value: 'mensal',      label: '📅 Mensal' },
+  { value: 'quantidade',  label: '📈 Por quantidade' },
+  { value: 'servico',     label: '✂️ Por serviço' },
+  { value: 'fidelizacao', label: '⭐ Fidelização' },
+  { value: 'campanha',    label: '📢 Campanha' },
+  { value: 'outro',       label: '🏷️ Outro' },
 ]
 
 const PERIODO_OPTIONS = [
@@ -60,7 +59,7 @@ const TIPO_BADGE: Record<string, string> = {
   outro:       'bg-gray-100 text-gray-600',
 }
 
-// ─── Formulário vazio ────────────────────────────────────────────────────────────────────
+// ─── Formulário vazio ──────────────────────────────────────────────────────────
 const emptyForm = () => ({
   cliente_id:           null as number | null,
   nome:                 '',
@@ -81,7 +80,7 @@ const emptyForm = () => ({
 })
 type DiscountForm = ReturnType<typeof emptyForm>
 
-// ─── Modal de criação/edição ────────────────────────────────────────────────────────────────────
+// ─── Modal de criação/edição ───────────────────────────────────────────────────
 function DiscountModal({
   initial,
   onClose,
@@ -96,28 +95,28 @@ function DiscountModal({
   const [form, setForm] = useState(initial)
   const [error, setError] = useState<string | null>(null)
 
-  // Pesquisa de clientes
   const [clientSearch, setClientSearch] = useState('')
   const [allClients, setAllClients] = useState(initial.cliente_id == null && !initial.id)
 
   const upd = <K extends keyof DiscountForm>(k: K, v: DiscountForm[K]) =>
     setForm(f => ({ ...f, [k]: v }))
 
-  // Dados: clientes pesquisados
   const { data: clientsRes } = useQuery({
     queryKey: ['clients-discount-search', clientSearch],
     queryFn:  () => clientsApi.list({ search: clientSearch, page: 1, perPage: 20 }),
     enabled: !allClients && clientSearch.length >= 1,
   })
-  const clients: Client[] = clientsRes?.data?.items ?? []
+  const clients: Client[] = (clientsRes as any)?.data?.items ?? []
 
-  // Dados: serviços disponíveis (carregados apenas quando tipo = 'servico')
+  // Serviços — usa adminApi directamente (não existe src/api/services.ts)
   const { data: servicesRes } = useQuery({
-    queryKey: ['services-for-discount'],
-    queryFn:  () => servicesApi.list(),
+    queryKey: ['admin-services-list'],
+    queryFn:  () => adminApi.get<{ id: number; nome: string }[]>('/api/admin/services'),
     enabled: form.tipo === 'servico',
+    staleTime: 5 * 60 * 1000,
   })
-  const services: { id: number; name: string }[] = servicesRes?.data ?? []
+  const services: { id: number; name: string }[] =
+    ((servicesRes as any)?.data ?? []).map((s: any) => ({ id: s.id, name: s.nome ?? s.name ?? '' }))
 
   const handleTipoChange = (tipo: string) => {
     const maxUsos = tipo === 'ocasional' ? 1 : null
@@ -155,7 +154,7 @@ function DiscountModal({
     onSave(form)
   }
 
-  const isEditing = !!initial.id
+  const isEditing     = !!initial.id
   const showQuantidade = ['quantidade', 'mensal'].includes(form.tipo)
   const showServico    = form.tipo === 'servico'
 
@@ -164,7 +163,7 @@ function DiscountModal({
       <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <h3 className="font-bold text-gray-900">
-            {isEditing ? '\u270F\uFE0F Editar desconto' : '\u2795 Novo desconto'}
+            {isEditing ? '✏️ Editar desconto' : '➕ Novo desconto'}
           </h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
             <X size={18} className="text-gray-500" />
@@ -173,11 +172,9 @@ function DiscountModal({
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
 
-          {/* Seletor de cliente — pesquisa inline + checkbox Todos */}
+          {/* Cliente */}
           <div>
             <label className="label">Cliente</label>
-
-            {/* Checkbox: Todos os clientes */}
             <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -188,7 +185,6 @@ function DiscountModal({
               <span className="text-sm text-gray-700">Todos os clientes (desconto geral)</span>
             </label>
 
-            {/* Campo de pesquisa — desabilitado quando allClients */}
             {!allClients && (
               <>
                 <div className="relative mb-1">
@@ -204,21 +200,20 @@ function DiscountModal({
                     }}
                   />
                 </div>
-                {/* Resultados da pesquisa */}
                 {clientSearch.length >= 1 && clients.length > 0 && form.cliente_id == null && (
                   <ul className="border border-gray-200 rounded-xl divide-y divide-gray-100 mb-1 max-h-40 overflow-y-auto">
-                    {clients.map(c => (
+                    {clients.map((c: Client) => (
                       <li key={c.id}>
                         <button
                           type="button"
                           className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
                           onClick={() => {
                             upd('cliente_id', c.id)
-                            setClientSearch(c.name + (c.phone ? ` · ${c.phone}` : ''))
+                            setClientSearch(c.name + ((c as any).phone ? ` · ${(c as any).phone}` : ''))
                           }}
                         >
                           <span className="font-medium text-gray-900">{c.name}</span>
-                          {c.phone && <span className="text-gray-400 ml-2 text-xs">{c.phone}</span>}
+                          {(c as any).phone && <span className="text-gray-400 ml-2 text-xs">{(c as any).phone}</span>}
                           {c.email && <span className="text-gray-400 ml-2 text-xs">{c.email}</span>}
                         </button>
                       </li>
@@ -244,9 +239,7 @@ function DiscountModal({
               </>
             )}
             {allClients && (
-              <p className="text-xs text-gray-400">
-                Este desconto será aplicável a qualquer cliente.
-              </p>
+              <p className="text-xs text-gray-400">Este desconto será aplicável a qualquer cliente.</p>
             )}
           </div>
 
@@ -320,7 +313,6 @@ function DiscountModal({
             </div>
           </div>
 
-          {/* Campos de quantidade */}
           {showQuantidade && (
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
               <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Regras de quantidade</p>
@@ -364,7 +356,6 @@ function DiscountModal({
             </div>
           )}
 
-          {/* Seleção de serviços (apenas para tipo 'servico') */}
           {showServico && (
             <div className="rounded-2xl border border-teal-100 bg-teal-50/50 p-4 space-y-2">
               <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide">Serviços abrangidos</p>
@@ -392,7 +383,6 @@ function DiscountModal({
             </div>
           )}
 
-          {/* Grupo fora de "quantidade" */}
           {!showQuantidade && (
             <div>
               <label className="label">Grupo (programa)</label>
@@ -446,7 +436,7 @@ function DiscountModal({
   )
 }
 
-// ─── Linha da tabela ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ─── Linha da tabela ───────────────────────────────────────────────────────────
 function DiscountRow({
   d,
   onEdit,
@@ -496,10 +486,10 @@ function DiscountRow({
       </td>
       <td className="px-4 py-3 text-sm font-semibold text-gray-800">{fmtValor(d)}</td>
       <td className="px-4 py-3 text-xs text-gray-500">
-        {d.max_uses == null ? '\u221e' : `${d.used_count ?? 0} / ${d.max_uses}`}
+        {d.max_uses == null ? '∞' : `${d.used_count ?? 0} / ${d.max_uses}`}
       </td>
       <td className="px-4 py-3 text-xs text-gray-400">
-        {fmtData(d.valid_from)} {d.valid_from && d.valid_to ? '\u2192' : ''} {fmtData(d.valid_to)}
+        {fmtData(d.valid_from)} {d.valid_from && d.valid_to ? '→' : ''} {fmtData(d.valid_to)}
         {!d.valid_from && !d.valid_to && <span className="italic">Sem limite</span>}
       </td>
       <td className="px-4 py-3">
@@ -531,7 +521,7 @@ function DiscountRow({
   )
 }
 
-// ─── Página principal ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ─── Página principal ──────────────────────────────────────────────────────────
 export default function DiscountsPage() {
   const adminUser = useAdminUser()
   const isSA      = isSuperAdmin(adminUser)
@@ -543,11 +533,9 @@ export default function DiscountsPage() {
   const [filterAtivo, setFilterAtivo] = useState<'all' | '1' | '0'>('all')
   const [filterCliente, setFilterCliente] = useState('')
   const [saving, setSaving]           = useState(false)
-
-  // Pesquisa de clientes para o filtro da tabela
   const [filterClientSearch, setFilterClientSearch] = useState('')
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false)
 
-  // ── Dados ──────────────────────────────────────────────────────────────────────────────────────────
   const { data: discountsRes, isLoading } = useQuery({
     queryKey: ['admin-discounts', filterTipo, filterAtivo, filterCliente],
     queryFn: () => {
@@ -565,10 +553,10 @@ export default function DiscountsPage() {
     queryFn:  () => clientsApi.list({ search: filterClientSearch, page: 1, perPage: 20 }),
     enabled: isSA && filterClientSearch.length >= 1,
   })
-  const filterClients: Client[] = filterClientsRes?.data?.items ?? []
+  const filterClients: Client[] = (filterClientsRes as any)?.data?.items ?? []
 
   const discounts: (Discount & { cliente_nome?: string })[] =
-    (discountsRes?.data ?? []).map((d: any) => ({
+    ((discountsRes as any)?.data ?? []).map((d: any) => ({
       id:                       d.id,
       client_id:                d.cliente_id ?? null,
       name:                     d.nome,
@@ -596,7 +584,6 @@ export default function DiscountsPage() {
       cliente_nome:             d.cliente_nome,
     }))
 
-  // ── Mutations ────────────────────────────────────────────────────────────────────────────────────────
   const handleSave = async (form: DiscountForm & { id?: number }) => {
     setSaving(true)
     try {
@@ -671,7 +658,6 @@ export default function DiscountsPage() {
     setModalOpen(true)
   }
 
-  // ── Guard: só superAdmin ────────────────────────────────────────────────────────────────────────────────
   if (!isSA) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-3 text-gray-400">
@@ -692,7 +678,6 @@ export default function DiscountsPage() {
   return (
     <div className="space-y-5">
 
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -710,9 +695,8 @@ export default function DiscountsPage() {
         </button>
       </div>
 
-      {/* Filtros */}
       <Card>
-        <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex flex-wrap gap-3 items-end relative">
           <div>
             <label className="label text-xs">Tipo</label>
             <select className="input text-sm bg-white" value={filterTipo}
@@ -730,7 +714,7 @@ export default function DiscountsPage() {
               <option value="0">Inativos</option>
             </select>
           </div>
-          <div>
+          <div className="relative">
             <label className="label text-xs">Cliente (filtro)</label>
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -739,14 +723,17 @@ export default function DiscountsPage() {
                 className="input text-sm pl-8 bg-white"
                 placeholder="Pesquisar cliente..."
                 value={filterClientSearch}
+                onFocus={() => setShowFilterDropdown(true)}
+                onBlur={() => setTimeout(() => setShowFilterDropdown(false), 150)}
                 onChange={e => {
                   setFilterClientSearch(e.target.value)
                   if (!e.target.value) setFilterCliente('')
+                  setShowFilterDropdown(true)
                 }}
               />
             </div>
-            {filterClientSearch.length >= 1 && filterClients.length > 0 && !filterCliente && (
-              <ul className="absolute z-10 bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-40 overflow-y-auto min-w-[200px]">
+            {showFilterDropdown && filterClientSearch.length >= 1 && filterClients.length > 0 && !filterCliente && (
+              <ul className="absolute z-20 bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-40 overflow-y-auto min-w-[200px]">
                 {filterClients.map(c => (
                   <li key={c.id}>
                     <button
@@ -755,9 +742,10 @@ export default function DiscountsPage() {
                       onClick={() => {
                         setFilterCliente(String(c.id))
                         setFilterClientSearch(c.name)
+                        setShowFilterDropdown(false)
                       }}
                     >
-                      {c.name}{c.phone ? ` · ${c.phone}` : ''}
+                      {c.name}{(c as any).phone ? ` · ${(c as any).phone}` : ''}
                     </button>
                   </li>
                 ))}
@@ -780,7 +768,6 @@ export default function DiscountsPage() {
         </div>
       </Card>
 
-      {/* Tabela */}
       <Card padding="none">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -816,13 +803,11 @@ export default function DiscountsPage() {
         </div>
       </Card>
 
-      {/* Legenda */}
       <div className="flex items-center gap-4 text-xs text-gray-400">
         <span className="flex items-center gap-1"><Users size={12} /> Desconto geral</span>
         <span className="flex items-center gap-1"><User  size={12} className="text-brand-400" /> Desconto exclusivo</span>
       </div>
 
-      {/* Modal */}
       {modalOpen && editing && (
         <DiscountModal
           initial={editing}
