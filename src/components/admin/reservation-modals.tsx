@@ -13,7 +13,7 @@ import type { Reservation, ReservationStatus, Service, MeioPagamento, Discount }
 import { isDiscountUsable } from '@/types'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
-// ─── Constantes partilhadas ──────────────────────────────────────────────────────
+// ─── Constantes partilhadas ─────────────────────────────────────────────────────
 const STATUS_LABEL_MAP: Record<string, string> = {
   confirmada: 'Confirmada',
   concluida:  'Concluída',
@@ -40,7 +40,7 @@ const OFERTA_TIPO_OPTIONS = [
   { value: 'outro',      label: '❓ Outro' },
 ]
 
-// ─── Helper: mapeia raw da API para Discount ────────────────────────────────────────
+// ─── Helper: mapeia raw da API para Discount ────────────────────────────────────────────
 function mapRawDiscount(d: any): Discount {
   return {
     id:                       d.id,
@@ -70,7 +70,7 @@ function mapRawDiscount(d: any): Discount {
   }
 }
 
-// ─── Helper: calcula valor do desconto sobre o preço ──────────────────────────────
+// ─── Helper: calcula valor do desconto sobre o preço ─────────────────────────────────────
 function calcDiscountValue(d: Discount, preco: number): number {
   if (d.value_percent != null) return Math.round(preco * d.value_percent) / 100
   if (d.value_fixed   != null) return Math.min(d.value_fixed / 100, preco)
@@ -83,7 +83,26 @@ function fmtDiscountLabel(d: Discount): string {
   return ''
 }
 
-// ─── ReservationDetailModal ────────────────────────────────────────────────
+// ─── ReservationDetailModal ──────────────────────────────────────────────────
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-gray-500">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  )
+}
+function NoteBox({ label, text, bg }: { label: string; text: string; bg: 'gray' | 'amber' }) {
+  return (
+    <div>
+      <p className="text-gray-500 mb-1">{label}</p>
+      <p className={`text-xs rounded-lg px-3 py-2 ${
+        bg === 'amber' ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-700'
+      }`}>{text}</p>
+    </div>
+  )
+}
+
 export function ReservationDetailModal({
   reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout, onEditPayment,
 }: {
@@ -327,7 +346,7 @@ export function ReservationEditModal({
   )
 }
 
-// ─── ReservationStatusModal ────────────────────────────────────────────────────
+// ─── ReservationStatusModal ──────────────────────────────────────────────────────
 export function ReservationStatusModal({
   reservation, action, invalidateKey, onClose,
 }: {
@@ -387,7 +406,7 @@ export function ReservationStatusModal({
   )
 }
 
-// ─── CheckoutModal ─────────────────────────────────────────────────────────────────
+// ─── CheckoutModal ─────────────────────────────────────────────────────────────────────
 export function CheckoutModal({
   reservation,
   invalidateKey,
@@ -406,10 +425,7 @@ export function CheckoutModal({
   const clientId     = reservation.client_id
   const hadOferta    = !!reservation.oferta_tipo
 
-  // ── Carregar descontos aplicáveis via rotas ADMIN (autenticação de admin) ────────
-  // NOTA: Usamos /api/admin/discounts/... porque o CheckoutModal corre no painel admin
-  // com token de admin. As rotas públicas /api/discounts/... requerem token de cliente
-  // e falhariam aqui.
+  // ── Carregar descontos da tabela (admin routes) ─────────────────────────────────────────
   const { data: clientDiscountsRes } = useQuery({
     queryKey: ['checkout-discounts-client', clientId],
     queryFn: () => adminApi.get<any[]>(`/api/admin/discounts/client/${clientId}`),
@@ -421,20 +437,37 @@ export function CheckoutModal({
     enabled: !!clientId && !editMode,
   })
 
+  // ── Carregar dados do cliente para verificar reservas_gratuitas_disponiveis ──────
+  // Este campo é gerido pelos triggers de fidelização existentes e ainda não foi
+  // migrado para a tabela de descontos — por isso verificamos diretamente aqui.
+  const { data: clientRes } = useQuery({
+    queryKey: ['checkout-client', clientId],
+    queryFn: () => adminApi.get<any>(`/api/admin/clients/${clientId}`),
+    enabled: !!clientId && !editMode,
+  })
+  const clientRaw = (clientRes as any)?.data
+  const reservasGratuitas: number = clientRaw?.reservas_gratuitas_disponiveis ?? 0
+
   const clientDiscounts: Discount[]  = ((clientDiscountsRes  as any)?.data ?? []).map(mapRawDiscount)
   const generalDiscounts: Discount[] = ((generalDiscountsRes as any)?.data ?? []).map(mapRawDiscount)
 
-  // Só mostrar descontos que são usáveis
+  // Descontos usáveis da tabela
   const usableClientDiscounts  = clientDiscounts.filter(isDiscountUsable)
   const usableGeneralDiscounts = generalDiscounts.filter(isDiscountUsable)
   const allUsable = [...usableClientDiscounts, ...usableGeneralDiscounts]
 
-  // ── Estado do modal ──────────────────────────────────────────────────────────────
+  // ── Identificador especial para "reserva gratuita" legada (fora da tabela) ──────
+  // Usamos um ID sentinel negativo para distinguir do ID de um desconto real.
+  const GRATUITA_SENTINEL = -1
 
+  // ── Estado do modal ─────────────────────────────────────────────────────────────────
   const [selectedDiscountId, setSelectedDiscountId] = useState<number | null>(
     reservation.desconto_id ?? null
   )
-  const selectedDiscount = selectedDiscountId != null
+  // true quando a reserva gratuita (sentinel) está selecionada
+  const isGratuitaSelected = selectedDiscountId === GRATUITA_SENTINEL
+
+  const selectedDiscount = selectedDiscountId != null && selectedDiscountId !== GRATUITA_SENTINEL
     ? allUsable.find(d => d.id === selectedDiscountId) ?? null
     : null
 
@@ -461,13 +494,21 @@ export function CheckoutModal({
   const [error, setError]             = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
 
-  // Quando seleciona um desconto, ajustar automaticamente o valor pago
+  // ── Handler de seleção de desconto (tabela) ───────────────────────────────────────
   const handleSelectDiscount = (discountId: number | null) => {
     setSelectedDiscountId(discountId)
     if (discountId === null) {
       setTemOferta(false)
       setMeioPagamento('multibanco')
       setValorPago(precoServico)
+      return
+    }
+    // Reserva gratuita legada — desconta 100%
+    if (discountId === GRATUITA_SENTINEL) {
+      setTemOferta(true)
+      setOfertaTipo('fidelidade')
+      setMeioPagamento(null)
+      setValorPago(null)
       return
     }
     const d = allUsable.find(x => x.id === discountId)
@@ -516,7 +557,7 @@ export function CheckoutModal({
 
   const validate = (): string | null => {
     if (!temOferta && meioPagamento === null)
-      return 'Selecciona um meio de pagamento.'
+      return 'Selectiona um meio de pagamento.'
     if (!isOfertaTotal && meioPagamento !== null && (valorPago === null || valorPago < 0))
       return 'Introduz o valor cobrado ao cliente.'
     if (meioPagamento === 'outro' && !comentario.trim())
@@ -533,6 +574,9 @@ export function CheckoutModal({
     if (err) { setError(err); return }
     setSaving(true)
     try {
+      // O desconto_id enviado à API não deve incluir o sentinel (-1)
+      const discountIdForApi = selectedDiscountId === GRATUITA_SENTINEL ? null : selectedDiscountId
+
       const paymentPayload: Record<string, unknown> = {
         meio_pagamento:       isOfertaTotal ? null : meioPagamento,
         valor_pago:           valorPagoEfectivo,
@@ -541,7 +585,7 @@ export function CheckoutModal({
         comentario_pagamento: comentario.trim() || undefined,
         oferta_valor:         ofertaValorEuros,
         oferta_tipo:          temOferta ? ofertaTipo : null,
-        desconto_id:          selectedDiscountId ?? null,
+        desconto_id:          discountIdForApi ?? null,
       }
 
       if (pendingEditForm) {
@@ -562,13 +606,19 @@ export function CheckoutModal({
         })
       }
 
-      // Se foi selecionado um desconto da tabela, registar o uso via /apply
-      // URL corrigida: /api/admin/discounts/:id/apply (tratado por [id]/apply.js)
-      if (selectedDiscountId != null && !editMode) {
-        await adminApi.post(`/api/admin/discounts/${selectedDiscountId}/apply`, {
+      // Registar uso de desconto da tabela via /apply
+      if (discountIdForApi != null && !editMode) {
+        await adminApi.post(`/api/admin/discounts/${discountIdForApi}/apply`, {
           reserva_id:   reservation.id,
           oferta_valor: ofertaValorEuros != null ? Math.round(ofertaValorEuros * 100) : null,
-        }).catch(() => {}) // não bloquear o checkout se isto falhar
+        }).catch(() => {})
+      }
+
+      // Se foi usada uma reserva gratuita (legado), decrementar o contador via API
+      if (isGratuitaSelected && !editMode) {
+        await adminApi.post(`/api/admin/clients/${clientId}/usar-gratuita`, {
+          reserva_id: reservation.id,
+        }).catch(() => {})
       }
 
       qc.invalidateQueries({ queryKey: [invalidateKey] })
@@ -576,6 +626,9 @@ export function CheckoutModal({
     } catch {}
     finally { setSaving(false) }
   }
+
+  // Flag de conveniência: há algo (desconto tabela ou gratuita legada) para mostrar
+  const hasAnyDiscount = allUsable.length > 0 || reservasGratuitas > 0
 
   return (
     <Modal
@@ -600,11 +653,43 @@ export function CheckoutModal({
           )}
         </div>
 
-        {/* ── Descontos disponíveis (apenas no checkout, não em editMode) ── */}
-        {!editMode && allUsable.length > 0 && (
+        {/* ── Painel de descontos aplicáveis (apenas no checkout, não em editMode) ── */}
+        {!editMode && hasAnyDiscount && (
           <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3 space-y-2">
             <p className="text-xs font-semibold text-brand-700">🏷️ Descontos aplicáveis</p>
 
+            {/* ─ Reserva gratuita legada (triggers de fidelização) ─ */}
+            {reservasGratuitas > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wide text-gray-400">Fidelização (reservas gratuitas)</p>
+                <button
+                  type="button"
+                  onClick={() => handleSelectDiscount(
+                    isGratuitaSelected ? null : GRATUITA_SENTINEL
+                  )}
+                  className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
+                    isGratuitaSelected
+                      ? 'bg-brand-600 text-white border-brand-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:border-brand-400'
+                  }`}
+                >
+                  <span className="font-medium">⭐ Reserva gratuita</span>
+                  <span className="ml-2 opacity-75">— 100% gratuito</span>
+                  <span className={`ml-2 font-semibold ${
+                    isGratuitaSelected ? 'text-white' : 'text-emerald-600'
+                  }`}>
+                    (−{precoServico.toFixed(2)}€)
+                  </span>
+                  <span className={`ml-2 text-[10px] ${
+                    isGratuitaSelected ? 'text-white/80' : 'text-purple-600'
+                  }`}>
+                    [{reservasGratuitas} disponível{reservasGratuitas !== 1 ? 'is' : ''}]
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* ─ Descontos exclusivos do cliente (tabela) ─ */}
             {usableClientDiscounts.length > 0 && (
               <div className="space-y-1">
                 <p className="text-[10px] uppercase tracking-wide text-gray-400">Exclusivos deste cliente</p>
@@ -638,6 +723,7 @@ export function CheckoutModal({
               </div>
             )}
 
+            {/* ─ Descontos gerais (tabela) ─ */}
             {usableGeneralDiscounts.length > 0 && (
               <div className="space-y-1">
                 <p className="text-[10px] uppercase tracking-wide text-gray-400">Descontos gerais</p>
@@ -680,7 +766,7 @@ export function CheckoutModal({
           </div>
         )}
 
-        {/* Toggle oferta manual (sem desconto da tabela selecionado) */}
+        {/* Toggle oferta manual (sem desconto selecionado) */}
         {selectedDiscountId == null && (
           <div className={`rounded-lg border p-3 space-y-3 transition-colors ${
             temOferta ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200'
@@ -714,7 +800,7 @@ export function CheckoutModal({
           </div>
         )}
 
-        {/* Desconto selecionado — resumo */}
+        {/* Resumo do desconto selecionado (tabela) */}
         {selectedDiscount && (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800">
             🏷️ Desconto <strong>{selectedDiscount.name}</strong> selecionado
@@ -722,6 +808,16 @@ export function CheckoutModal({
             {selectedDiscount.max_uses === 1 && (
               <span className="ml-1 text-amber-700">(único uso — será marcado como usado)</span>
             )}
+          </div>
+        )}
+
+        {/* Resumo da reserva gratuita legada quando selecionada */}
+        {isGratuitaSelected && (
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800">
+            ⭐ <strong>Reserva gratuita</strong> selecionada — esta reserva será totalmente gratuita.
+            <span className="ml-1 text-purple-700">
+              (o contador de reservas gratuitas será decrementado)
+            </span>
           </div>
         )}
 
@@ -838,25 +934,5 @@ export function CheckoutModal({
         )}
       </div>
     </Modal>
-  )
-}
-
-// ─── Helpers internos ────────────────────────────────────────────────────────
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
-  )
-}
-function NoteBox({ label, text, bg }: { label: string; text: string; bg: 'gray' | 'amber' }) {
-  return (
-    <div>
-      <p className="text-gray-500 mb-1">{label}</p>
-      <p className={`text-xs rounded-lg px-3 py-2 ${
-        bg === 'amber' ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-700'
-      }`}>{text}</p>
-    </div>
   )
 }
