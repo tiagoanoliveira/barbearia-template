@@ -16,10 +16,11 @@ CREATE TABLE IF NOT EXISTS descontos (
   valido_de               DATETIME DEFAULT NULL,
   valido_ate              DATETIME DEFAULT NULL,
   min_reservas            INTEGER  DEFAULT NULL,
-  min_reservas_periodo    TEXT     DEFAULT NULL;
-  grupo                   TEXT DEFAULT NULL;
-  regra_tipo              TEXT DEFAULT NULL;
-  regra_detalhe           TEXT DEFAULT NULL;
+  min_reservas_periodo    TEXT     DEFAULT NULL,
+  grupo                   TEXT DEFAULT NULL,
+  regra_tipo              TEXT DEFAULT NULL,
+  regra_detalhe           TEXT DEFAULT NULL,
+    servicos_ids TEXT DEFAULT NULL,
   max_usos                INTEGER  DEFAULT NULL,
   usos_feitos             INTEGER  NOT NULL DEFAULT 0,
   usado_ultima_vez_em     DATETIME DEFAULT NULL,
