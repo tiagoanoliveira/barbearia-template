@@ -146,45 +146,29 @@ export default function HomePage() {
       {/* ── HERO ── */}
       <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-black">
 
-        {/* Vídeo de fundo (blur) — apenas desktop, aria-hidden */}
-        <div aria-hidden="true" className="hidden md:flex absolute inset-0 w-full h-full">
-          <div className="flex-1 overflow-hidden">
-            <video
-                className="w-full h-full object-cover"
-                style={{ transform: 'scaleX(-1)', filter: 'blur(20px) brightness(0.45)' }}
-                autoPlay muted loop playsInline preload="none"
-            >
-              <source src={heroVideoWebm} type="video/webm" />
-              <source src={heroVideo}     type="video/mp4" />
-            </video>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <video
-                className="w-full h-full object-cover"
-                style={{ filter: 'blur(20px) brightness(0.45)' }}
-                autoPlay muted loop playsInline preload="none"
-            >
-              <source src={heroVideoWebm} type="video/webm" />
-              <source src={heroVideo}     type="video/mp4" />
-            </video>
-          </div>
-        </div>
+        {/* Vídeo principal — UMA única instância, usada como base */}
+        <video
+            id="hero-video"
+            className="absolute h-full w-auto object-cover"
+            style={{ maxWidth: '100%' }}
+            autoPlay muted loop playsInline
+            preload="metadata"
+            poster="/hero-poster.webp"
+        >
+          <source src={heroVideoWebm} type="video/webm" />
+          <source src={heroVideo}     type="video/mp4" />
+        </video>
 
-        {/* Vídeo principal — centrado */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <video
-              className="h-full w-auto object-cover"
-              style={{ maxWidth: '100%' }}
-              autoPlay muted loop playsInline
-              preload="metadata"
-              poster="/hero-poster.webp"
-          >
-            <source src={heroVideoWebm} type="video/webm" />
-            <source src={heroVideo}     type="video/mp4" />
-          </video>
-        </div>
+        {/* Efeito blur lateral em desktop — feito via CSS box-shadow, SEM vídeo extra */}
+        <div
+            aria-hidden="true"
+            className="hidden md:block absolute inset-0 pointer-events-none"
+            style={{
+              boxShadow: 'inset 200px 0 120px 0 rgba(0,0,0,0.85), inset -200px 0 120px 0 rgba(0,0,0,0.85)',
+            }}
+        />
 
-        {/* Gradiente e botões — sem alterações */}
+        {/* Gradiente e botões */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/75" />
         <div className="absolute bottom-20 left-0 right-0 z-10 text-center px-4 max-w-3xl mx-auto text-white">
           <div className="flex flex-col xs:flex-row items-center justify-center gap-4">
@@ -198,7 +182,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Link scroll — aria-label adicionado (fix acessibilidade) */}
         <a href="#about"
            aria-label="Scroll para a secção Sobre nós"
            className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors z-10">
