@@ -674,7 +674,7 @@ export function CheckoutModal({
                   }`}
                 >
                   <span className="font-medium">⭐ Reserva gratuita</span>
-                  <span className="ml-2 opacity-75">— Desconto Cartão Fidelização</span>
+                  <span className="ml-2 opacity-75">— Desconto Fidelização</span>
                   <span className={`ml-2 font-semibold ${
                     isGratuitaSelected ? 'text-white' : 'text-emerald-600'
                   }`}>
