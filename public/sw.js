@@ -136,8 +136,8 @@ self.addEventListener('push', (event) => {
   const title   = payload.title ?? 'Barbearia'
   const options = {
     body:     payload.body ?? '',
-    icon:     '/icons/logo-96px.png',
-    badge:    '/icons/logo-96px.png',
+    icon:     '/icons/logo-96px.webp',
+    badge:    '/icons/logo-96px.webp',
     vibrate:  [200, 100, 200],
     tag:      payload.tag ?? 'bb-push',
     renotify: true,

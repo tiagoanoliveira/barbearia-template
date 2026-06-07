@@ -4,8 +4,8 @@
  */
 
 // ─ Logos / Favicon (servidos do repositório via BASE_URL) ─────────────────
-import logoSrc    from '@/media/images/logos/logo-512px.png'
-import faviconSrc from '@/media/images/logos/logo-96px.png'
+import logoSrc    from '@/media/images/logos/logo-192px.webp'
+import faviconSrc from '@/media/images/logos/logo-96px.webp'
 
 // ─ Media da HomePage ──────────────────────────────────────────────────────
 import heroVideoSrc from '@/media/video/presentation.mp4'

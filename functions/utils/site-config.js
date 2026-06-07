@@ -32,7 +32,7 @@ export const SHOP = {
   address:      'Rua do Campo Alegre, 450, Porto',
 
   // URL do logo (relativo ao baseUrl, servido do R2 ou directamente)
-  logoPath:     '/icons/logo-512px.png',
+  logoPath:     '/icons/logo-192px.webp',
 
   /**
    * Link directo para a página de avaliação no Google Maps.
