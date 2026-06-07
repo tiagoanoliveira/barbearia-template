@@ -134,17 +134,31 @@ function fmtDiscountValue(d: Discount): string {
   return ''
 }
 
+// Agrupa descontos pelo campo group; descontos sem grupo ficam em grupos individuais (chave = 'solo-{id}')
+function groupDiscounts(discounts: Discount[]): { groupKey: string; items: Discount[] }[] {
+  const map = new Map<string, Discount[]>()
+  for (const d of discounts) {
+    const key = d.group ?? `solo-${d.id}`
+    const existing = map.get(key)
+    if (existing) existing.push(d)
+    else map.set(key, [d])
+  }
+  return Array.from(map.entries()).map(([groupKey, items]) => ({ groupKey, items }))
+}
+
 const TIPO_BADGE: Record<string, string> = {
   ocasional:   'bg-amber-100 text-amber-700',
   vitalicio:   'bg-emerald-100 text-emerald-700',
   mensal:      'bg-blue-100 text-blue-700',
+  quantidade:  'bg-indigo-100 text-indigo-700',
+  servico:     'bg-teal-100 text-teal-700',
   fidelizacao: 'bg-purple-100 text-purple-700',
   campanha:    'bg-pink-100 text-pink-700',
   outro:       'bg-gray-100 text-gray-600',
 }
 
 function DiscountCard({ d }: { d: Discount }) {
-  const badgeClass = TIPO_BADGE[d.type] ?? TIPO_BADGE.outro
+  const badgeClass = TIPO_BADGE[d.type] ?? 'bg-gray-100 text-gray-600'
   return (
     <div className="flex items-start gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3">
       <div className="mt-0.5 flex-shrink-0 w-8 h-8 rounded-xl bg-primary-50 flex items-center justify-center">
@@ -152,11 +166,14 @@ function DiscountCard({ d }: { d: Discount }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-semibold text-gray-900">{d.name}</p>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeClass}`}>{d.type}</span>
+          <p className="text-sm font-semibold text-gray-900 leading-snug">{d.name}</p>
+          {/* Só mostra badge de tipo se for relevante para o cliente (não 'quantidade') */}
+          {!['quantidade', 'mensal'].includes(d.type) && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeClass}`}>{d.type}</span>
+          )}
         </div>
         {d.description && (
-          <p className="text-xs text-gray-500 mt-0.5">{d.description}</p>
+          <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{d.description}</p>
         )}
         <p className="text-xs font-semibold text-primary-600 mt-1">{fmtDiscountValue(d)}</p>
         {d.max_uses != null && (
@@ -168,6 +185,31 @@ function DiscountCard({ d }: { d: Discount }) {
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+// Grupo de descontos com o mesmo 'group' — mostrados como conjunto
+function DiscountGroup({ groupKey, items }: { groupKey: string; items: Discount[] }) {
+  const hasGroup = !groupKey.startsWith('solo-')
+  if (!hasGroup) return <DiscountCard d={items[0]} />
+  return (
+    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/30 px-4 py-3 space-y-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400">{groupKey}</p>
+      {items.map(d => (
+        <div key={d.id} className="flex items-start gap-2">
+          <div className="mt-0.5 flex-shrink-0 w-6 h-6 rounded-lg bg-white flex items-center justify-center border border-indigo-100">
+            <Tag size={11} className="text-indigo-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-sm font-semibold text-gray-900 leading-snug">{d.name}</p>
+            </div>
+            {d.description && <p className="text-xs text-gray-500 mt-0.5">{d.description}</p>}
+            <p className="text-xs font-semibold text-primary-600 mt-0.5">{fmtDiscountValue(d)}</p>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -187,8 +229,10 @@ function ProfileDiscountsBlock({ clientId }: { clientId: number }) {
   const clientDiscounts: Discount[] = ((clientRes as any)?.data ?? []).map(mapRawDiscount).filter(isDiscountUsable)
   const generalDiscounts: Discount[] = ((generalRes as any)?.data ?? []).map(mapRawDiscount).filter(isDiscountUsable)
 
-  // Não renderiza se não houver nenhum desconto aplicável
   if (clientDiscounts.length === 0 && generalDiscounts.length === 0) return null
+
+  const clientGroups  = groupDiscounts(clientDiscounts)
+  const generalGroups = groupDiscounts(generalDiscounts)
 
   return (
     <Card>
@@ -197,20 +241,20 @@ function ProfileDiscountsBlock({ clientId }: { clientId: number }) {
         <h3 className="text-sm font-semibold text-gray-900">Os meus descontos</h3>
       </div>
 
-      {clientDiscounts.length > 0 && (
+      {clientGroups.length > 0 && (
         <div className="mb-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Descontos exclusivos</p>
           <div className="space-y-2">
-            {clientDiscounts.map(d => <DiscountCard key={d.id} d={d} />)}
+            {clientGroups.map(g => <DiscountGroup key={g.groupKey} {...g} />)}
           </div>
         </div>
       )}
 
-      {generalDiscounts.length > 0 && (
+      {generalGroups.length > 0 && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Descontos gerais</p>
           <div className="space-y-2">
-            {generalDiscounts.map(d => <DiscountCard key={d.id} d={d} />)}
+            {generalGroups.map(g => <DiscountGroup key={g.groupKey} {...g} />)}
           </div>
         </div>
       )}
@@ -300,14 +344,12 @@ export default function ProfilePage() {
         setFormError(res?.error ?? 'Erro ao guardar.')
         return
       }
-
       qc.invalidateQueries({ queryKey: ['me'] })
       setEditOpen(false)
       setFormError(null)
       setShowCurrentPw(false)
       setShowNewPw(false)
       setShowConfirmPw(false)
-
       if (res?.data?.email_change_pending && res.data.pending_email) {
         setEmailChangeInfo({
           pendingEmail: res.data.pending_email,
@@ -321,28 +363,15 @@ export default function ProfilePage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
-
-    if (!form.name.trim()) {
-      setFormError('O nome não pode estar vazio.')
-      return
-    }
-    if (!form.phone.trim()) {
-      setFormError('O número de telemovel não pode ser removido.')
-      return
-    }
-    if (!form.email.trim()) {
-      setFormError('O email não pode estar vazio.')
-      return
-    }
+    if (!form.name.trim()) { setFormError('O nome não pode estar vazio.'); return }
+    if (!form.phone.trim()) { setFormError('O número de telemovel não pode ser removido.'); return }
+    if (!form.email.trim()) { setFormError('O email não pode estar vazio.'); return }
     if (form.new_password && form.new_password !== form.new_password_confirm) {
       setFormError('As passwords não coincidem.')
       return
     }
     const payload: Record<string, string> = {
-      name: form.name,
-      email: form.email,
-      phone: form.phone,
-      nif: form.nif,
+      name: form.name, email: form.email, phone: form.phone, nif: form.nif,
     }
     if (form.new_password) {
       payload.current_password = form.current_password
@@ -401,14 +430,9 @@ export default function ProfilePage() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       const data = await res.json()
-      if (data.success && data.data?.url) {
-        window.location.href = data.data.url
-      } else {
-        setLinkError(data.error ?? 'Não foi possível iniciar a associação com a Google.')
-      }
-    } catch (e: any) {
-      setLinkError('Erro de rede ao iniciar associação com a Google.')
-    }
+      if (data.success && data.data?.url) window.location.href = data.data.url
+      else setLinkError(data.error ?? 'Não foi possível iniciar a associação com a Google.')
+    } catch { setLinkError('Erro de rede ao iniciar associação com a Google.') }
   }
 
   const handleLinkFacebook = async () => {
@@ -419,14 +443,9 @@ export default function ProfilePage() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       const data = await res.json()
-      if (data.success && data.data?.url) {
-        window.location.href = data.data.url
-      } else {
-        setLinkError(data.error ?? 'Não foi possível iniciar a associação com o Facebook.')
-      }
-    } catch (e: any) {
-      setLinkError('Erro de rede ao iniciar associação com o Facebook.')
-    }
+      if (data.success && data.data?.url) window.location.href = data.data.url
+      else setLinkError(data.error ?? 'Não foi possível iniciar a associação com o Facebook.')
+    } catch { setLinkError('Erro de rede ao iniciar associação com o Facebook.') }
   }
 
   const handleUnlinkGoogle = async () => {
@@ -451,8 +470,6 @@ export default function ProfilePage() {
   const currentStamps  = totalCompleted % everyN
   const isNextFree     = currentStamps === stampsNeeded
   const faltam         = stampsNeeded - currentStamps
-
-  // Feature flag: !!enabled converte o literal 'true' para boolean, evitando TS2367
   const discountsEnabled = !!(barberShopConfig.discounts as any)?.enabled
 
   return (
@@ -513,7 +530,6 @@ export default function ProfilePage() {
             </Card>
           )}
 
-          {/* Descontos aplicáveis — apenas se existirem e feature flag ativa */}
           {user.id && discountsEnabled && (
             <ProfileDiscountsBlock clientId={user.id} />
           )}
@@ -584,10 +600,8 @@ export default function ProfilePage() {
                 {hasPassword
                     ? <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 font-medium">Ativo</span>
                     : (
-                        <button
-                            onClick={() => setSetPasswordOpen(true)}
-                            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 font-medium transition-colors"
-                        >
+                        <button onClick={() => setSetPasswordOpen(true)}
+                            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 font-medium transition-colors">
                           <KeyRound size={12} /> Definir password
                         </button>
                     )
@@ -641,7 +655,6 @@ export default function ProfilePage() {
                         <input type={type} className="input" value={(form as any)[key]} onChange={field(key as keyof ProfileForm)} />
                       </div>
                   ))}
-
                   {hasPassword && (
                       <>
                         <hr className="border-gray-100" />
@@ -668,11 +681,10 @@ export default function ProfilePage() {
                                   {show ? <EyeOff size={16} /> : <Eye size={16} />}
                                 </button>
                               </div>
-                          </div>
+                            </div>
                         ))}
                       </>
                   )}
-
                   {formError && <p className="text-sm text-red-500">{formError}</p>}
                   <div className="flex items-center justify-end gap-3 pt-2">
                     <button type="button" className="btn-secondary" onClick={() => setEditOpen(false)}>Cancelar</button>
@@ -711,11 +723,7 @@ export default function ProfilePage() {
                     </p>
                 )}
                 <div className="flex justify-end pt-2">
-                  <button
-                      type="button"
-                      onClick={() => setEmailChangeInfo(null)}
-                      className="btn-primary text-sm"
-                  >
+                  <button type="button" onClick={() => setEmailChangeInfo(null)} className="btn-primary text-sm">
                     Percebi
                   </button>
                 </div>
