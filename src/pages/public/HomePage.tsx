@@ -8,7 +8,7 @@ import { ROUTES } from '@/config/routes'
 import BrandsCarousel from '@/components/ui/BrandsCarousel'
 import type { Service, Barber } from '@/types'
 
-const { heroVideo, aboutImage, gallery: galleryImages } = barberShopConfig.media
+const { heroVideo, heroVideoWebm, aboutImage, gallery: galleryImages } = barberShopConfig.media
 
 // ── Galeria: grelha em desktop, slideshow em mobile ────────────────────────────────────
 function Gallery() {
@@ -42,20 +42,28 @@ function Gallery() {
         </div>
         {count > 1 && (
           <>
-            <button onClick={() => setCurrent(c => (c - 1 + count) % count)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70">
+            <button
+                onClick={() => setCurrent(c => (c - 1 + count) % count)}
+                aria-label="Imagem anterior"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70">
               <ChevronLeft size={18} />
             </button>
-            <button onClick={() => setCurrent(c => (c + 1) % count)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70">
+            <button
+                onClick={() => setCurrent(c => (c + 1) % count)}
+                aria-label="Imagem seguinte"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70">
               <ChevronRightIcon size={18} />
             </button>
             <div className="flex justify-center gap-2 mt-3">
               {galleryImages.map((_, i) => (
-                <button key={i} onClick={() => setCurrent(i)}
-                  className={`w-2 h-2 rounded-full transition-colors ${
-                    i === current ? 'bg-secondary-400' : 'bg-gray-300'
-                  }`} />
+                  <button
+                      key={i}
+                      onClick={() => setCurrent(i)}
+                      aria-label={`Slide ${i + 1}`}
+                      className={`w-4 h-4 rounded-full transition-colors ${   // ← w-2 h-2 → w-4 h-4 (área toque)
+                          i === current ? 'bg-secondary-400' : 'bg-gray-300'
+                      }`}
+                  />
               ))}
             </div>
           </>
@@ -135,24 +143,48 @@ export default function HomePage() {
   return (
     <div>
 
-      {/* ── HERO ────────────────────────────────────────────────────────────────── */}
+      {/* ── HERO ── */}
       <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-black">
+
+        {/* Vídeo de fundo (blur) — apenas desktop, aria-hidden */}
         <div aria-hidden="true" className="hidden md:flex absolute inset-0 w-full h-full">
           <div className="flex-1 overflow-hidden">
-            <video className="w-full h-full object-cover"
-              style={{ transform: 'scaleX(-1)', filter: 'blur(20px) brightness(0.45)' }}
-              autoPlay muted loop playsInline src={heroVideo} />
+            <video
+                className="w-full h-full object-cover"
+                style={{ transform: 'scaleX(-1)', filter: 'blur(20px) brightness(0.45)' }}
+                autoPlay muted loop playsInline preload="none"
+            >
+              <source src={heroVideoWebm} type="video/webm" />
+              <source src={heroVideo}     type="video/mp4" />
+            </video>
           </div>
           <div className="flex-1 overflow-hidden">
-            <video className="w-full h-full object-cover"
-              style={{ filter: 'blur(20px) brightness(0.45)' }}
-              autoPlay muted loop playsInline src={heroVideo} />
+            <video
+                className="w-full h-full object-cover"
+                style={{ filter: 'blur(20px) brightness(0.45)' }}
+                autoPlay muted loop playsInline preload="none"
+            >
+              <source src={heroVideoWebm} type="video/webm" />
+              <source src={heroVideo}     type="video/mp4" />
+            </video>
           </div>
         </div>
+
+        {/* Vídeo principal — centrado */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <video className="h-full w-auto object-cover" style={{ maxWidth: '100%' }}
-            autoPlay muted loop playsInline src={heroVideo} />
+          <video
+              className="h-full w-auto object-cover"
+              style={{ maxWidth: '100%' }}
+              autoPlay muted loop playsInline
+              preload="metadata"
+              poster="/hero-poster.webp"
+          >
+            <source src={heroVideoWebm} type="video/webm" />
+            <source src={heroVideo}     type="video/mp4" />
+          </video>
         </div>
+
+        {/* Gradiente e botões — sem alterações */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/75" />
         <div className="absolute bottom-20 left-0 right-0 z-10 text-center px-4 max-w-3xl mx-auto text-white">
           <div className="flex flex-col xs:flex-row items-center justify-center gap-4">
@@ -160,12 +192,16 @@ export default function HomePage() {
               Ver serviços
             </a>
             <Link to={ROUTES.BOOKING}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white font-bold rounded-2xl hover:bg-primary-600 transition-all hover:scale-105 text-base shadow-lg">
+                  className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white font-bold rounded-2xl hover:bg-primary-600 transition-all hover:scale-105 text-base shadow-lg">
               Reservar agora <ArrowRight size={18} />
             </Link>
           </div>
         </div>
-        <a href="#about" className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors z-10">
+
+        {/* Link scroll — aria-label adicionado (fix acessibilidade) */}
+        <a href="#about"
+           aria-label="Scroll para a secção Sobre nós"
+           className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors z-10">
           <ChevronDown size={20} className="animate-bounce" />
         </a>
       </section>

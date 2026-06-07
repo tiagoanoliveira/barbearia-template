@@ -4,11 +4,12 @@
  */
 
 // ─ Logos / Favicon (servidos do repositório via BASE_URL) ─────────────────
-import logoSrc    from '@/media/images/logos/logo-192px.webp'
+import logoSrc    from '@/media/images/logos/logo-96px.webp'
 import faviconSrc from '@/media/images/logos/logo-96px.webp'
 
 // ─ Media da HomePage ──────────────────────────────────────────────────────
 import heroVideoSrc from '@/media/video/presentation.mp4'
+import heroVideoWebm   from '@/media/video/presentation.webm'
 import videoBackground from '@/media/video/video_background.mp4'
 import aboutImgSrc  from '@/media/images/corte-cabelo-detalhe.webp'
 import gallery1Src  from '@/media/images/brooklyn/Entrada.webp'
@@ -68,6 +69,7 @@ export const barberShopConfig = {
   media: {
     // Vídeo do hero (null para usar imagem de fallback)
     heroVideo: heroVideoSrc as string,
+    heroVideoWebm:  heroVideoWebm as string,
     videoBackground: videoBackground as string,
     // Imagem da secção "Sobre"
     aboutImage: { src: aboutImgSrc as string, alt: 'Barbearia' },

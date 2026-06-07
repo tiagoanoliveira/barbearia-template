@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, ArrowRight, Check, Scissors, User,
   Calendar, Clock, LogIn, AlertTriangle, Shuffle
@@ -73,6 +73,7 @@ export default function BookingPage() {
   const [calMonth, setCalMonth] = useState(new Date())
   const [error, setError]       = useState<string | null>(null)
   const [tosChecked, setTosChecked] = useState(true)
+  const queryClient = useQueryClient()
 
   const isLoggedIn = !!storage?.getItem('user_token')
 
@@ -163,6 +164,38 @@ export default function BookingPage() {
     const s = services.find(s => String(s.id) === id)
     if (s) setBooking(b => ({ ...b, service: s }))
   }, [searchParams, services, booking.service])
+
+  // ── Pré-carregar slots dos próximos 3 dias quando barbeiro + serviço estiverem prontos ──
+  useEffect(() => {
+    const barberId  = booking.anyBarber ? null : booking.barber?.id
+    const serviceId = booking.service?.id
+    if (!serviceId || (!barberId && !booking.anyBarber)) return
+
+    const today = new Date()
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(today)
+      d.setDate(today.getDate() + i)
+      const dow      = d.getDay()
+      const dateStr  = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const closedDay = isClosedDay(dow)
+      const restricted = booking.service ? !serviceAvailableOnDay(booking.service.id, dow) : false
+      if (closedDay || restricted) continue
+
+      if (booking.anyBarber) {
+        queryClient.prefetchQuery({
+          queryKey: ['slots-any', dateStr, serviceId],
+          queryFn:  () => api.get<string[]>(`/api/slots-any-barber?date=${dateStr}&service_id=${serviceId}`),
+          staleTime: 30_000,
+        })
+      } else {
+        queryClient.prefetchQuery({
+          queryKey: ['slots', barberId, dateStr, serviceId],
+          queryFn:  () => api.get<string[]>(`/api/slots?barber_id=${barberId}&date=${dateStr}&service_id=${serviceId}`),
+          staleTime: 30_000,
+        })
+      }
+    }
+  }, [booking.barber?.id, booking.anyBarber, booking.service?.id])
 
   // ── Slots ─────────────────────────────────────────────────────────────────
   const { data: slotsRes } = useQuery({

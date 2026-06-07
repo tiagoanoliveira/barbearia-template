@@ -23,13 +23,14 @@ export async function onRequest(context) {
     const [service, { results: reservations }, { results: unavailabilities }] = await Promise.all([
       env.DB.prepare('SELECT id, duracao FROM servicos WHERE id = ?').bind(serviceId).first(),
 
-      // Usar v_reservas_duracao (existe no schema original)
       env.DB.prepare(`
-        SELECT data_hora, duracao_minutos
-        FROM v_reservas_duracao
-        WHERE barbeiro_id = ?
-          AND date(data_hora) = ?
-          AND status IN ('confirmada', 'faltou', 'concluida')
+        SELECT r.data_hora,
+               COALESCE(r.duracao_minutos, s.duracao, 60) AS duracao_minutos
+        FROM reservas r
+               JOIN servicos s ON s.id = r.servico_id
+        WHERE r.barbeiro_id = ?
+          AND date(r.data_hora) = ?
+          AND r.status IN ('confirmada', 'faltou', 'concluida')
       `).bind(barberId, date).all(),
 
       env.DB.prepare(`

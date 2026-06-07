@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+Disallow: /admin/
+Disallow: /api/
+Disallow: /perfil
+Disallow: /reserva-confirmada
+
+Sitemap: https://brooklynbarbearia.pt/sitemap.xml

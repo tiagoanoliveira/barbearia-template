@@ -39,7 +39,7 @@ export default function Footer() {
 
           {/* Contacto */}
           <div>
-            <h4 className="text-white font-semibold text-sm mb-4">Contacto</h4>
+            <h3 className="text-white font-semibold text-sm mb-4">Contacto</h3>
             <ul className="space-y-3 text-sm text-gray-500">
               <li className="flex items-center gap-2">
                 <Phone size={14} className="text-brand-500 flex-shrink-0" />
@@ -62,10 +62,10 @@ export default function Footer() {
 
           {/* Horário — agrupado automaticamente */}
           <div>
-            <h4 className="text-white font-semibold text-sm mb-4">
+            <h3 className="text-white font-semibold text-sm mb-4">
               <Clock size={14} className="inline mr-1.5 text-brand-500" />
               Horário
-            </h4>
+            </h3>
             <ul className="space-y-1.5 text-sm text-gray-500">
               {hourGroups.map(g => (
                 <li key={g.label} className="flex justify-between gap-4">
@@ -80,7 +80,7 @@ export default function Footer() {
 
           {/* Links legais */}
           <div>
-            <h4 className="text-white font-semibold text-sm mb-4">Informações</h4>
+            <h3 className="text-white font-semibold text-sm mb-4">Informações</h3>
             <ul className="space-y-2 text-sm">
               {[
                 { to: '/faq',               label: 'Perguntas Frequentes' },
