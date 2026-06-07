@@ -674,16 +674,11 @@ export function CheckoutModal({
                   }`}
                 >
                   <span className="font-medium">⭐ Reserva gratuita</span>
-                  <span className="ml-2 opacity-75">— 100% gratuito</span>
+                  <span className="ml-2 opacity-75">— Desconto Cartão Fidelização</span>
                   <span className={`ml-2 font-semibold ${
                     isGratuitaSelected ? 'text-white' : 'text-emerald-600'
                   }`}>
                     (−{precoServico.toFixed(2)}€)
-                  </span>
-                  <span className={`ml-2 text-[10px] ${
-                    isGratuitaSelected ? 'text-white/80' : 'text-purple-600'
-                  }`}>
-                    [{reservasGratuitas} disponível{reservasGratuitas !== 1 ? 'is' : ''}]
                   </span>
                 </button>
               </div>
@@ -814,10 +809,7 @@ export function CheckoutModal({
         {/* Resumo da reserva gratuita legada quando selecionada */}
         {isGratuitaSelected && (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800">
-            ⭐ <strong>Reserva gratuita</strong> selecionada — esta reserva será totalmente gratuita.
-            <span className="ml-1 text-purple-700">
-              (o contador de reservas gratuitas será decrementado)
-            </span>
+            ⭐ <strong>Reserva gratuita</strong> selecionada (oferta de fidelização do cliente).
           </div>
         )}
 
