@@ -77,12 +77,12 @@ CREATE TABLE IF NOT EXISTS servicos (
 );
 
 CREATE TABLE servico_barbeiro (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  servico_id INTEGER NOT NULL REFERENCES servicos(id) ON DELETE CASCADE,
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  servico_id  INTEGER NOT NULL REFERENCES servicos(id)  ON DELETE CASCADE,
   barbeiro_id INTEGER NOT NULL REFERENCES barbeiros(id) ON DELETE CASCADE,
-  preco      INTEGER,       -- NULL = usa o preço base do serviço
-  duracao    INTEGER,       -- NULL = usa a duração base do serviço
-  ativo      INTEGER NOT NULL DEFAULT 1,
+  preco       INTEGER,       -- NULL = usa o preço base do serviço
+  duracao     INTEGER,       -- NULL = usa a duração base do serviço
+  ativo       INTEGER NOT NULL DEFAULT 1,
   UNIQUE(servico_id, barbeiro_id)
 );
 
@@ -112,16 +112,21 @@ CREATE TABLE IF NOT EXISTS descontos (
   -- Origem do desconto (ex: 'manual', 'trigger_fidelizacao', 'campanha')
   origem                    TEXT,
   -- Valor do desconto — pelo menos um dos dois deve ser preenchido
-  valor_percentagem         INTEGER  DEFAULT NULL, -- ex: 10 = 10%
-  valor_fixo_centimos       INTEGER  DEFAULT NULL, -- ex: 500 = 5,00 €
+  valor_percentagem         INTEGER  DEFAULT NULL,  -- ex: 10 = 10%
+  valor_fixo_centimos       INTEGER  DEFAULT NULL,  -- ex: 500 = 5,00 €
   -- Regras de validade temporal
   valido_de                 DATETIME DEFAULT NULL,
   valido_ate                DATETIME DEFAULT NULL,
-  min_reservas            INTEGER  DEFAULT NULL,
-  min_reservas_periodo    TEXT     DEFAULT NULL;
-  grupo                   TEXT DEFAULT NULL;
-  regra_tipo              TEXT DEFAULT NULL;
-  regra_detalhe           TEXT DEFAULT NULL;
+  -- Regras de quantidade/período
+  min_reservas              INTEGER  DEFAULT NULL,
+  min_reservas_periodo      TEXT     DEFAULT NULL,
+  -- Agrupamento de descontos escalonados (mesmo grupo = aplica-se o melhor)
+  grupo                     TEXT     DEFAULT NULL,
+  -- Regras personalizadas (extensível)
+  regra_tipo                TEXT     DEFAULT NULL,
+  regra_detalhe             TEXT     DEFAULT NULL,
+  -- Serviços abrangidos (JSON array de IDs; NULL ou [] = todos os serviços)
+  servicos_ids              TEXT     DEFAULT NULL,
   -- Controlo de usos
   -- NULL = ilimitado (vitalício); 1 = ocasional (one-shot)
   max_usos                  INTEGER  DEFAULT NULL,
@@ -223,8 +228,8 @@ CREATE TABLE IF NOT EXISTS admin_users (
   username      TEXT    NOT NULL UNIQUE,
   password_hash TEXT    NOT NULL,
   nome          TEXT    NOT NULL,
-  role TEXT NOT NULL DEFAULT 'admin'
-        CHECK(role IN ('admin','barbeiro','superAdmin')),
+  role          TEXT    NOT NULL DEFAULT 'admin'
+                  CHECK(role IN ('admin','barbeiro','superAdmin')),
   barbeiro_id   INTEGER REFERENCES barbeiros(id) ON DELETE CASCADE,
   ativo         INTEGER DEFAULT 1,
   criado_em     DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -264,7 +269,7 @@ CREATE TABLE push_subscriptions (
     auth          TEXT    NOT NULL,
     user_agent    TEXT,
     created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
-)
+);
 
 -- ================================================
 -- ESTATÍSTICAS DIÁRIAS (cache de stats por barbeiro/dia)
@@ -468,6 +473,8 @@ END;
 -- MIGRATION (executar em instâncias existentes)
 -- ================================================
 -- Ver ficheiro migrations/0011_descontos.sql
+-- Ver ficheiro migrations/0012_descontos_servicos_ids.sql
+
 -- ================================================
 -- VIEWS
 -- ================================================
