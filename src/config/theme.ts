@@ -8,19 +8,47 @@ import logoSrc    from '@/media/images/logos/logo-96px.webp'
 import faviconSrc from '@/media/images/logos/logo-96px.webp'
 
 // ─ Media da HomePage ──────────────────────────────────────────────────────
-import heroVideoSrc from '@/media/video/presentation.mp4'
+import heroVideoSrc    from '@/media/video/presentation.mp4'
 import heroVideoWebm   from '@/media/video/presentation.webm'
 import videoBackground from '@/media/video/video_background.mp4'
-import aboutImgSrc  from '@/media/images/corte-cabelo-detalhe.webp'
-import gallery1Src  from '@/media/images/brooklyn/Entrada.webp'
-import gallery2Src  from '@/media/images/brooklyn/Cadeiras.webp'
-import gallery3Src  from '@/media/images/brooklyn/Sinuca.webp'
+import aboutImgSrc     from '@/media/images/corte-cabelo-detalhe.webp'
+import gallery1Src     from '@/media/images/brooklyn/Entrada.webp'
+import gallery2Src     from '@/media/images/brooklyn/Cadeiras.webp'
+import gallery3Src     from '@/media/images/brooklyn/Sinuca.webp'
 
 export const LOGO_URL    = logoSrc
 export const FAVICON_URL = faviconSrc
 
 // Tipo explícito para o rating — permite null para ocultar o badge
 type Rating = { score: string; label: string } | null
+
+// ─ Tipo e constante dos horários de funcionamento ─────────────────────────
+// Declarados FORA do barberShopConfig para preservar os campos opcionais
+// (o "as const" congela os tipos e tornaria breakStart/breakEnd obrigatórios).
+//
+// ⚠️  Sempre que alterar estes horários, actualizar também:
+//     functions/utils/site-config.js → WORKING_HOURS
+//
+export interface DayHours {
+  open:        string   // ex: '10:00'
+  close:       string   // ex: '20:00'
+  closed:      boolean
+  breakStart?: string   // opcional — início da pausa, ex: '13:00'
+  breakEnd?:   string   // opcional — fim da pausa,   ex: '14:00'
+}
+
+export const WORKING_HOURS_CONFIG: Record<
+    'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday',
+    DayHours
+> = {
+  monday:    { open: '10:00', close: '20:00', closed: false, breakStart: '13:00', breakEnd: '14:00' },
+  tuesday:   { open: '10:00', close: '20:00', closed: false, breakStart: '13:00', breakEnd: '14:00' },
+  wednesday: { open: '10:00', close: '20:00', closed: false, breakStart: '13:00', breakEnd: '14:00' },
+  thursday:  { open: '10:00', close: '20:00', closed: false, breakStart: '13:00', breakEnd: '14:00' },
+  friday:    { open: '10:00', close: '20:00', closed: false, breakStart: '13:00', breakEnd: '14:00' },
+  saturday:  { open: '09:00', close: '18:00', closed: false },   // sem pausa ao sábado
+  sunday:    { open: '00:00', close: '00:00', closed: true  },
+}
 
 export const barberShopConfig = {
   // Identidade
@@ -37,10 +65,10 @@ export const barberShopConfig = {
   turnstileSiteKey: '0x4AAAAAACob-aLDgwmHRXUO',
 
   // ─ Web Push (VAPID) ──────────────────────────────────────────────────────
-// Chave pública VAPID — gerada com `npx web-push generate-vapid-keys`
-// A chave privada correspondente deve estar em VAPID_PRIVATE_KEY nas
-// variáveis de ambiente do Cloudflare (nunca expor no frontend).
-  vapidPublicKey:'BLZgq4JhJQEiLs3bJv2gwU3u4W6E2MN7rC-rKDjkZBdvH_JQrYZQ9nCiRvuD_0JUmjpVZe10suA0rHxQFM_Rsw0',
+  // Chave pública VAPID — gerada com `npx web-push generate-vapid-keys`
+  // A chave privada correspondente deve estar em VAPID_PRIVATE_KEY nas
+  // variáveis de ambiente do Cloudflare (nunca expor no frontend).
+  vapidPublicKey: 'BLZgq4JhJQEiLs3bJv2gwU3u4W6E2MN7rC-rKDjkZBdvH_JQrYZQ9nCiRvuD_0JUmjpVZe10suA0rHxQFM_Rsw0',
 
   // ─ OAuth social ──────────────────────────────────────────────────────────
   // O botão do Facebook fica oculto e o do Google ocupa a linha toda.
@@ -67,13 +95,10 @@ export const barberShopConfig = {
 
   // ─ Media da HomePage ─────────────────────────────────────────────────────
   media: {
-    // Vídeo do hero (null para usar imagem de fallback)
-    heroVideo: heroVideoSrc as string,
-    heroVideoWebm:  heroVideoWebm as string,
+    heroVideo:       heroVideoSrc as string,
+    heroVideoWebm:   heroVideoWebm as string,
     videoBackground: videoBackground as string,
-    // Imagem da secção "Sobre"
     aboutImage: { src: aboutImgSrc as string, alt: 'Barbearia' },
-    // Galeria — adicionar/remover entradas conforme necessário
     gallery: [
       { src: gallery1Src as string, alt: 'Entrada da barbearia' },
       { src: gallery2Src as string, alt: 'Cadeiras' },
@@ -88,36 +113,26 @@ export const barberShopConfig = {
       'Desde 2018 no coração do Porto, a <strong>Brooklyn Barbearia</strong> oferece uma experiência única de cuidado masculino. Combinamos técnicas clássicas com as tendências mais modernas.',
       'Os nossos barbeiros estão prontos para proporcionar o melhor serviço, num ambiente acolhedor e autêntico.',
     ],
-    // null → oculta o badge de avaliação na HomePage
-    // { score, label } → mostra o badge
     rating: {
       score: '4,8 / 5,0',
       label: '+ 300 avaliações',
     } as Rating,
   },
 
-  // Horário
-  workingHours: {
-    monday:    { open: '10:00', close: '20:00', closed: false },
-    tuesday:   { open: '10:00', close: '20:00', closed: false },
-    wednesday: { open: '10:00', close: '20:00', closed: false },
-    thursday:  { open: '10:00', close: '20:00', closed: false },
-    friday:    { open: '10:00', close: '20:00', closed: false },
-    saturday:  { open: '09:00', close: '18:00', closed: false },
-    sunday:    { open: '00:00', close: '00:00', closed: true  },
-  },
+  // ─ Horário ───────────────────────────────────────────────────────────────
+  // Fonte de verdade frontend. Referencia WORKING_HOURS_CONFIG declarado acima.
+  // Para alterar horários edita apenas WORKING_HOURS_CONFIG (e o espelho
+  // em functions/utils/site-config.js → WORKING_HOURS).
+  workingHours: WORKING_HOURS_CONFIG,
 
   slotDuration: 30,
 
   // ─ Sistema de fidelização ────────────────────────────────────────────────
-  // Ativar/desativar em toda a aplicação (frontend + backend).
-  // Quando false, toda a UI de fidelização fica oculta.
   loyalty: {
     /** Activar sistema de fidelização */
     enabled: true,
     /**
-     * De quantas em quantas reservas CONCLUÍDAS o cliente ganha
-     * um corte gratuito.
+     * De quantas em quantas reservas CONCLUÍDAS o cliente ganha um corte gratuito.
      * Ex: 10 → a 10.ª, 20.ª, 30.ª reserva concluída é gratuita.
      * ⚠️  Este valor deve coincidir com o hardcoded nos triggers SQL
      *     (tr_fidelidade_increment / tr_fidelidade_decrement).
@@ -128,23 +143,8 @@ export const barberShopConfig = {
 
   // ─ Sistema de descontos ──────────────────────────────────────────────────
   discounts: {
-    /**
-     * Ativar/desativar o sistema de descontos em toda a aplicação.
-     * Quando false, a secção de descontos no perfil do cliente e o
-     * painel de admin ficam ocultos.
-     */
-    enabled: true,
-
-    /**
-     * Mostrar descontos no perfil público do cliente (/perfil).
-     * Requer discounts.enabled = true.
-     */
-    showOnProfile: true,
-
-    /**
-     * Separar visualmente os descontos exclusivos (cliente_id = clienteId)
-     * dos descontos gerais (cliente_id = null) na UI do perfil.
-     */
+    enabled:              true,
+    showOnProfile:        true,
     showGeneralSeparately: true,
   },
 
@@ -208,7 +208,7 @@ export const serviceRestrictions: Record<number, { allowedDays: number[]; messag
 }
 
 // ─ Agrupamento de horários ────────────────────────────────────────────────
-type DayKey = keyof typeof barberShopConfig.workingHours
+type DayKey = keyof typeof WORKING_HOURS_CONFIG
 
 const DAY_LABELS: Record<DayKey, string> = {
   monday:    'Segunda',
@@ -231,40 +231,52 @@ export interface HourGroup {
 }
 
 /**
- * Agrupa dias consecutivos com o mesmo horário.
- * Ex: Seg–Sex 10:00–20:00 + Sáb 09:00–18:00 + Dom fechado
- * → [{label:'Segunda a Sexta', hours:'10:00 – 20:00', closed:false}, ...]
+ * Agrupa dias consecutivos com o mesmo horário para mostrar na UI pública.
+ * Inclui a pausa quando definida (ex: "10:00 – 13:00 / 14:00 – 20:00").
  */
 export function groupWorkingHours(): HourGroup[] {
-  const wh = barberShopConfig.workingHours
-
-  type Group = { keys: DayKey[]; open: string; close: string; closed: boolean }
+  type Group = { keys: DayKey[]; open: string; close: string; closed: boolean; breakStart?: string; breakEnd?: string }
   const groups: Group[] = []
 
   for (const key of DAY_ORDER) {
-    const h    = wh[key]
+    const h    = WORKING_HOURS_CONFIG[key]
     const last = groups.length > 0 ? groups[groups.length - 1] : null
 
     const sameAsLast =
-      last != null &&
-      last.closed === h.closed &&
-      last.open   === h.open   &&
-      last.close  === h.close
+        last != null &&
+        last.closed     === h.closed     &&
+        last.open       === h.open       &&
+        last.close      === h.close      &&
+        (last.breakStart ?? null) === (h.breakStart ?? null) &&
+        (last.breakEnd   ?? null) === (h.breakEnd   ?? null)
 
     if (sameAsLast && last) {
       last.keys.push(key)
     } else {
-      groups.push({ keys: [key], open: h.open, close: h.close, closed: h.closed })
+      groups.push({
+        keys:       [key],
+        open:       h.open,
+        close:      h.close,
+        closed:     h.closed,
+        breakStart: h.breakStart,
+        breakEnd:   h.breakEnd,
+      })
     }
   }
 
   return groups.map((g): HourGroup => {
     const firstKey = g.keys[0]
     const lastKey  = g.keys[g.keys.length - 1]
-    const first    = DAY_LABELS[firstKey]
-    const last     = DAY_LABELS[lastKey]
-    const label    = g.keys.length === 1 ? first : `${first} a ${last}`
-    const hours    = g.closed ? 'Fechado' : `${g.open} – ${g.close}`
+    const label    = g.keys.length === 1
+        ? DAY_LABELS[firstKey]
+        : `${DAY_LABELS[firstKey]} a ${DAY_LABELS[lastKey]}`
+
+    let hours = 'Fechado'
+    if (!g.closed) {
+      hours = (g.breakStart && g.breakEnd)
+          ? `${g.open} – ${g.breakStart} / ${g.breakEnd} – ${g.close}`
+          : `${g.open} – ${g.close}`
+    }
     return { label, hours, closed: g.closed }
   })
 }

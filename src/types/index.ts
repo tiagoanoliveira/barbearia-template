@@ -214,6 +214,15 @@ export interface Reservation {
   desconto_fixo_centimos?: number | null
 }
 
+// ─── Cópia recorrente de reservas ─────────────────────────────────────────
+export type RecurrenceInterval = 'none' | 'weekly' | 'biweekly' | 'every3weeks' | 'every4weeks'
+
+export interface CopyOccurrence {
+  date: string            // 'yyyy-MM-dd'
+  time: string            // 'HH:mm'
+  conflict: 'reservation' | 'unavailable' | null
+}
+
 // ─── Indisponibilidade ───────────────────────────────────────────────────────────────────
 export type UnavailableTipo = 'folga' | 'almoco' | 'ferias' | 'ausencia' | 'outro'
 export type RecurrenceType  = 'none' | 'daily' | 'weekly'

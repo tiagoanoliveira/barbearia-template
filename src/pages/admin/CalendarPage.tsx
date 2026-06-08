@@ -8,7 +8,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
 import { adminApi } from '@/api/client'
-import { barberShopConfig } from '@/config/theme'
+import { barberShopConfig, WORKING_HOURS_CONFIG  } from '@/config/theme'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import Modal from '@/components/ui/Modal'
@@ -37,13 +37,15 @@ function timeToMinutes(t: string) {
 
 function getDayConfig(date: Date) {
   const key = DAY_KEYS[date.getDay()] as DayKey
-  const wh  = barberShopConfig.workingHours[key]
+  const wh  = WORKING_HOURS_CONFIG[key]
   return {
-    closed:       wh.closed,
-    openMinutes:  timeToMinutes(wh.open),
-    closeMinutes: timeToMinutes(wh.close),
-    openHour:     Math.floor(timeToMinutes(wh.open)  / 60),
-    closeHour:    Math.floor(timeToMinutes(wh.close) / 60),
+    closed:            wh.closed,
+    openMinutes:       timeToMinutes(wh.open),
+    closeMinutes:      timeToMinutes(wh.close),
+    openHour:          Math.floor(timeToMinutes(wh.open)  / 60),
+    closeHour:         Math.floor(timeToMinutes(wh.close) / 60),
+    breakStartMinutes: wh.breakStart ? timeToMinutes(wh.breakStart) : null,
+    breakEndMinutes:   wh.breakEnd   ? timeToMinutes(wh.breakEnd)   : null,
   }
 }
 
@@ -173,6 +175,13 @@ export default function CalendarPage() {
   const TOTAL_SLOTS = (END_H - START_H) * SLOTS_PER_H
   const OPEN_H      = START_H
   const CLOSE_H     = END_H
+  // Pausa: slot index relativo ao início do dia
+  const BREAK_START_SLOT = dayConfig.breakStartMinutes != null
+      ? Math.floor((dayConfig.breakStartMinutes - dayConfig.openMinutes) / SLOT_DURATION)
+      : null
+  const BREAK_END_SLOT = dayConfig.breakEndMinutes != null
+      ? Math.floor((dayConfig.breakEndMinutes - dayConfig.openMinutes) / SLOT_DURATION)
+      : null
 
   // ── Outros estados ───────────────────────────────────────────────────────
   const [ctx, setCtx]       = useState<ContextTarget | null>(null)
@@ -192,6 +201,8 @@ export default function CalendarPage() {
   const [copyTime, setCopyTime]     = useState('')
   const [copySaving, setCopySaving] = useState(false)
   const [copyEmail, setCopyEmail]   = useState(false)
+  const [recurrenceInterval, setRecurrenceInterval] = useState('none')
+  const [recurrenceCount, setRecurrenceCount]       = useState(4)
 
   const [newResForm, setNewResForm]     = useState<Partial<Reservation & { sendEmail: boolean; nota_privada: string }>>({})
   const [newResSaving, setNewResSaving] = useState(false)
@@ -345,14 +356,44 @@ export default function CalendarPage() {
     if (modal?.type !== 'res_copy') return
     setCopySaving(true)
     const src = modal.source
+
+    // Calcular lista de datas a criar (recorrência)
+    const RECURRENCE_DAYS: Record<string, number> = {
+      weekly: 7, biweekly: 14, every3weeks: 21, every4weeks: 28,
+    }
+    const step = RECURRENCE_DAYS[recurrenceInterval]
+    const dates: string[] = [copyDate]
+    if (step && recurrenceCount > 1) {
+      let cur = copyDate
+      for (let i = 1; i < recurrenceCount; i++) {
+        const d = new Date(cur + 'T12:00:00')
+        d.setDate(d.getDate() + step)
+        cur = d.toISOString().slice(0, 10)
+        dates.push(cur)
+      }
+    }
+
     try {
-      await adminApi.post('/api/admin/reservations', {
-        client_id: src.client_id, service_id: src.service_id, barber_id: src.barber_id,
-        date: copyDate, time: copyTime, notes: src.comentario ?? '', send_email: copyEmail,
-      })
-      qc.invalidateQueries({ queryKey: ['cal-reservations'] }); close()
+      await Promise.all(
+          dates.map(date =>
+              adminApi.post('/api/admin/reservations', {
+                client_id:  src.client_id,
+                service_id: src.service_id,
+                barber_id:  src.barber_id,
+                date,
+                time:       copyTime,
+                notes:      src.comentario ?? '',
+                send_email: copyEmail,
+              })
+          )
+      )
+      qc.invalidateQueries({ queryKey: ['cal-reservations'] })
+      // Repor estado de recorrência para os próximos usos
+      setRecurrenceInterval('none')
+      setRecurrenceCount(4)
+      close()
     } catch {}
-    finally { setCopySaving(false) }
+  finally { setCopySaving(false) }
   }
 
   // ── Handler principal: criar nova reserva ────────────────────────────────
@@ -522,17 +563,33 @@ export default function CalendarPage() {
                       const key     = `${b.id}_${slot}`
                       const rList   = resByBarberSlot.get(key) ?? []
                       const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
+                      const isBreakSlot = BREAK_START_SLOT != null && BREAK_END_SLOT != null
+                          && slot >= BREAK_START_SLOT && slot < BREAK_END_SLOT
+
                       const baseCellClasses = isHourEnd
-                        ? 'relative border-l border-b-2 border-slate-400'
-                        : 'relative border-l border-b border-gray-400'
+                          ? 'relative border-l border-b-2 border-slate-400'
+                          : 'relative border-l border-b border-gray-400'
 
                       if (!blocked && rList.length === 0) {
+                        if (isBreakSlot) {
+                          return (
+                              <div key={key}
+                                   className={`${baseCellClasses}`}
+                                   style={{
+                                     height: SLOT_H,
+                                     backgroundImage: `repeating-linear-gradient(135deg, #e5e7eb 0px, #e5e7eb 3px, #f9fafb 3px, #f9fafb 10px)`,
+                                     cursor: 'default',
+                                   }}
+                                   title="Pausa / Intervalo"
+                              />
+                          )
+                        }
                         return (
-                          <div key={key}
-                            className={`${baseCellClasses} hover:brightness-95 transition-all cursor-pointer`}
-                            style={{ height: SLOT_H, background: colBg }}
-                            onClick={e => openCtx(e, { kind: 'slot', barberId: b.id, slot })}
-                          />
+                            <div key={key}
+                                 className={`${baseCellClasses} hover:brightness-95 transition-all cursor-pointer`}
+                                 style={{ height: SLOT_H, background: colBg }}
+                                 onClick={e => openCtx(e, { kind: 'slot', barberId: b.id, slot })}
+                            />
                         )
                       }
 
@@ -643,7 +700,15 @@ export default function CalendarPage() {
                   />
                 )}
                 <CtxItem icon="✏️" label="Editar Reserva" onClick={() => { setModal({ type: 'res_edit',   r }); closeCtx() }} />
-                <CtxItem icon="📋" label="Copiar Reserva" onClick={() => { setCopyDate(selectedDate); setCopyTime(format(new Date(r.data_hora),'HH:mm')); setCopyEmail(true); setModal({ type: 'res_copy', source: r }); closeCtx() }} />
+                <CtxItem icon="📋" label="Copiar Reserva" onClick={() => {
+                  setCopyDate(selectedDate)
+                  setCopyTime(format(new Date(r.data_hora), 'HH:mm'))
+                  setCopyEmail(true)
+                  setRecurrenceInterval('none')
+                  setRecurrenceCount(4)
+                  setModal({ type: 'res_copy', source: r })
+                  closeCtx()
+                }} />
                 <div className="border-t border-gray-100 my-1" />
                 {r.status === 'concluida' && (
                   <CtxItem icon="💳" label="Editar Pagamento" onClick={() => { setModal({ type: 'res_checkout', r, editMode: true }); closeCtx() }} />
@@ -738,19 +803,26 @@ export default function CalendarPage() {
           </>
         }>
         {modal?.type === 'res_copy' ? (
-          <ReservationCopyContent
-            clientName={modal.source.client_name}
-            serviceName={modal.source.service_name}
-            barberName={modal.source.barber_name}
-            copyDate={copyDate}
-            copyTime={copyTime}
-            copyEmail={copyEmail}
-            onChange={(field, value) => {
-              if (field === 'copyDate' && typeof value === 'string') setCopyDate(value)
-              if (field === 'copyTime' && typeof value === 'string') setCopyTime(value)
-              if (field === 'copyEmail' && typeof value === 'boolean') setCopyEmail(value)
-            }}
-          />
+            <ReservationCopyContent
+                clientName={modal.source.client_name}
+                serviceName={modal.source.service_name}
+                barberName={modal.source.barber_name}
+                barberId={modal.source.barber_id ?? 0}
+                copyDate={copyDate}
+                copyTime={copyTime}
+                copyEmail={copyEmail}
+                recurrenceInterval={recurrenceInterval}
+                recurrenceCount={recurrenceCount}
+                reservations={reservations}
+                unavailabilities={unavailable}
+                onChange={(field, value) => {
+                  if (field === 'copyDate'           && typeof value === 'string')  setCopyDate(value)
+                  if (field === 'copyTime'           && typeof value === 'string')  setCopyTime(value)
+                  if (field === 'copyEmail'          && typeof value === 'boolean') setCopyEmail(value)
+                  if (field === 'recurrenceInterval' && typeof value === 'string')  setRecurrenceInterval(value)
+                  if (field === 'recurrenceCount'    && typeof value === 'number')  setRecurrenceCount(value)
+                }}
+            />
         ) : <></>}
       </Modal>
 

@@ -219,45 +219,189 @@ function PlaceholderEmailModal({
   )
 }
 
+// ─── Utilitário: calcular datas recorrentes ───────────────────────────────
+const RECURRENCE_LABELS: Record<string, string> = {
+  none:        'Sem recorrência',
+  weekly:      'Semanal (cada 7 dias)',
+  biweekly:    'Quinzenal (cada 14 dias)',
+  every3weeks: 'De 3 em 3 semanas',
+  every4weeks: 'De 4 em 4 semanas',
+}
+const RECURRENCE_DAYS: Record<string, number> = {
+  weekly: 7, biweekly: 14, every3weeks: 21, every4weeks: 28,
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+function buildOccurrences(
+    startDate: string,
+    time: string,
+    interval: string,
+    count: number,
+    reservations: { data_hora: string; status: string }[],
+    unavailabilities: { data_hora_inicio: string; data_hora_fim: string; barbeiro_id: number }[],
+    barberId: number,
+): import('@/types').CopyOccurrence[] {
+  if (interval === 'none' || count <= 1) {
+    return [{ date: startDate, time, conflict: null }]
+  }
+  const step = RECURRENCE_DAYS[interval] ?? 7
+  const result: import('@/types').CopyOccurrence[] = []
+  let cur = startDate
+  for (let i = 0; i < count; i++) {
+    const isoHour = `${cur}T${time}:00`
+    const hasRes = reservations.some(
+        r => r.status !== 'cancelada' && r.data_hora.slice(0, 16) === isoHour.slice(0, 16)
+    )
+    const hasUnavail = unavailabilities.some(
+        u => u.barbeiro_id === barberId && u.data_hora_inicio <= isoHour && u.data_hora_fim > isoHour
+    )
+    result.push({
+      date: cur,
+      time,
+      conflict: hasRes ? 'reservation' : hasUnavail ? 'unavailable' : null,
+    })
+    cur = addDays(cur, step)
+  }
+  return result
+}
+
 export function ReservationCopyContent({
   clientName,
   serviceName,
   barberName,
+  barberId,
   copyDate,
   copyTime,
   copyEmail,
+  recurrenceInterval,
+  recurrenceCount,
+  reservations,
+  unavailabilities,
   onChange,
 }: {
   clientName: string
   serviceName: string
   barberName: string
+  barberId: number
   copyDate: string
   copyTime: string
   copyEmail: boolean
-  onChange: (field: 'copyDate' | 'copyTime' | 'copyEmail', value: string | boolean) => void
+  recurrenceInterval: string
+  recurrenceCount: number
+  reservations: { data_hora: string; status: string }[]
+  unavailabilities: { data_hora_inicio: string; data_hora_fim: string; barbeiro_id: number }[]
+  onChange: (
+      field: 'copyDate' | 'copyTime' | 'copyEmail' | 'recurrenceInterval' | 'recurrenceCount',
+      value: string | boolean | number
+  ) => void
 }) {
+  const occurrences = buildOccurrences(
+      copyDate, copyTime, recurrenceInterval, recurrenceCount,
+      reservations, unavailabilities, barberId,
+  )
+  const hasConflicts = occurrences.some(o => o.conflict !== null)
+
   return (
-    <div className="space-y-3 text-sm">
-      <div className="bg-gray-50 rounded-lg p-3 space-y-1">
-        <p><span className="text-gray-500">Cliente:</span> <strong>{clientName}</strong></p>
-        <p><span className="text-gray-500">Serviço:</span> <strong>{serviceName}</strong></p>
-        <p><span className="text-gray-500">Barbeiro:</span> <strong>{barberName}</strong></p>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Nova data</label>
-          <input type="date" value={copyDate} onChange={e => onChange('copyDate', e.target.value)} className="input text-sm w-full" />
+      <div className="space-y-4 text-sm">
+        {/* Resumo da reserva de origem */}
+        <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+          <p><span className="text-gray-500">Cliente:</span> <strong>{clientName}</strong></p>
+          <p><span className="text-gray-500">Serviço:</span> <strong>{serviceName}</strong></p>
+          <p><span className="text-gray-500">Barbeiro:</span> <strong>{barberName}</strong></p>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Hora</label>
-          <input type="time" value={copyTime} onChange={e => onChange('copyTime', e.target.value)} className="input text-sm w-full" />
+
+        {/* Data e hora de início */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Data de início</label>
+            <input
+                type="date"
+                value={copyDate}
+                onChange={e => onChange('copyDate', e.target.value)}
+                className="input text-sm w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Hora</label>
+            <input
+                type="time"
+                value={copyTime}
+                onChange={e => onChange('copyTime', e.target.value)}
+                className="input text-sm w-full"
+            />
+          </div>
         </div>
+
+        {/* Recorrência */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Recorrência</label>
+            <select
+                value={recurrenceInterval}
+                onChange={e => onChange('recurrenceInterval', e.target.value)}
+                className="input text-sm w-full"
+            >
+              {Object.entries(RECURRENCE_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+          </div>
+          {recurrenceInterval !== 'none' && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nº de cópias</label>
+                <input
+                    type="number"
+                    min={2}
+                    max={52}
+                    value={recurrenceCount}
+                    onChange={e => onChange('recurrenceCount', Number(e.target.value))}
+                    className="input text-sm w-full"
+                />
+              </div>
+          )}
+        </div>
+
+        {/* Preview das ocorrências */}
+        {occurrences.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-500 mb-1.5 font-medium">
+                {recurrenceInterval === 'none' ? 'Reserva a criar:' : `${occurrences.length} reservas a criar:`}
+              </p>
+              <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                {occurrences.map((o, i) => (
+                    <li key={i} className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-xs ${
+                        o.conflict === 'reservation'  ? 'bg-red-50 text-red-700 border border-red-200' :
+                            o.conflict === 'unavailable'  ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                'bg-green-50 text-green-800 border border-green-200'
+                    }`}>
+                <span className="font-medium">
+                  {new Date(o.date + 'T12:00:00').toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' })} — {o.time}
+                </span>
+                      {o.conflict === 'reservation'  && <span>⛔ Reserva existente</span>}
+                      {o.conflict === 'unavailable'  && <span>⚠️ Indisponibilidade</span>}
+                      {o.conflict === null           && <span>✅ Disponível</span>}
+                    </li>
+                ))}
+              </ul>
+              {hasConflicts && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                    ⚠️ As reservas assinaladas serão criadas na mesma mas podem sobrepor-se a entradas existentes. Verifica o calendário após criar.
+                  </p>
+              )}
+            </div>
+        )}
+
+        {/* Email */}
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={copyEmail} onChange={e => onChange('copyEmail', e.target.checked)} />
+          <span>Enviar email de confirmação ao cliente</span>
+        </label>
       </div>
-      <label className="flex items-center gap-2 text-sm cursor-pointer">
-        <input type="checkbox" checked={copyEmail} onChange={e => onChange('copyEmail', e.target.checked)} />
-        <span>Enviar email de confirmação ao cliente</span>
-      </label>
-    </div>
   )
 }
 

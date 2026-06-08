@@ -12,13 +12,15 @@ export function computeSlots({
   unavailabilities,
   openHour,
   closeHour,
+  breakStart = null,   // hora decimal, ex: 13 = 13:00 | null = sem pausa
+  breakEnd   = null,   // hora decimal, ex: 14 = 14:00 | null = sem pausa
   intervalMinutes = 60,
 }) {
   // Gerar todos os slots do dia
   const allSlots = []
   for (let h = openHour; h < closeHour; h += intervalMinutes / 60) {
     const hh = Math.floor(h).toString().padStart(2, '0')
-    const mm = ((h % 1) * 60).toString().padStart(2, '0')
+    const mm = ((h % 1) * 60).toString().padStart(2, '00')
     allSlots.push(`${hh}:${mm}`)
   }
 
@@ -40,19 +42,27 @@ export function computeSlots({
     }
   })
 
+  // Intervalo de pausa (se existir)
+  const breakInterval = (breakStart != null && breakEnd != null) ? {
+    start: new Date(`${date}T${Math.floor(breakStart).toString().padStart(2,'0')}:${String(Math.round((breakStart % 1) * 60)).padStart(2,'0')}:00`),
+    end:   new Date(`${date}T${Math.floor(breakEnd).toString().padStart(2,'0')}:${String(Math.round((breakEnd   % 1) * 60)).padStart(2,'00')}:00`),
+  } : null
+
   const closeDate = new Date(`${date}T${closeHour.toString().padStart(2, '0')}:00:00`)
-  // Usa hora de Lisboa para respeitar DST (hora de verão/inverno)
   const now = getNowLisboa()
 
   return allSlots.filter(slot => {
     const slotStart = new Date(`${date}T${slot}:00`)
     const slotEnd   = addMinutes(slotStart, serviceDuration)
 
-    // Filtrar slots de horas passadas (incluindo slots do dia atual já ultrapassados)
+    // Filtrar slots de horas passadas
     if (slotStart <= now) return false
 
     // Não ultrapassar horário de fecho
     if (slotEnd > closeDate) return false
+
+    // Sem conflito com pausa de almoço
+    if (breakInterval && overlaps(slotStart, slotEnd, breakInterval.start, breakInterval.end)) return false
 
     // Sem conflito com reservas
     if (bookedIntervals.some(i => overlaps(slotStart, slotEnd, i.start, i.end))) return false
@@ -84,5 +94,10 @@ function parseDateTime(str) {
 export function getOpenClose(dayOfWeek) {
   const day = WORKING_HOURS[dayOfWeek]
   if (!day || day.closed) return null
-  return { open: day.open, close: day.close }
+  return {
+    open:       day.open,
+    close:      day.close,
+    breakStart: day.breakStart ?? null,
+    breakEnd:   day.breakEnd   ?? null,
+  }
 }

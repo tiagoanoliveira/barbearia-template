@@ -49,8 +49,10 @@ export async function onRequest(context) {
       serviceDuration:      service.duracao || 60,
       existingReservations: reservations,
       unavailabilities,
-      openHour:  hours.open,
-      closeHour: hours.close,
+      openHour:   hours.open,
+      closeHour:  hours.close,
+      breakStart: hours.breakStart,
+      breakEnd:   hours.breakEnd,
     })
 
     return ok(slots)
