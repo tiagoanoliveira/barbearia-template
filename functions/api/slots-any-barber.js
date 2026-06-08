@@ -55,6 +55,8 @@ export async function onRequest(context) {
           unavailabilities,
           openHour:  hours.open,
           closeHour: hours.close,
+          breakStart: hours.breakStart,
+          breakEnd:   hours.breakEnd,
         })
         return { barberId: barber.id, slots }
       })
