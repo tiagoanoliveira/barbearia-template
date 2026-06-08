@@ -146,9 +146,11 @@ export default function HomePage() {
       {/* ── HERO ── */}
       <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-black">
 
+        {/* Vídeo principal — UMA única instância, usada como base */}
         <video
             id="hero-video"
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute h-full w-auto object-cover"
+            style={{ maxWidth: '100%' }}
             autoPlay muted loop playsInline
             preload="metadata"
             poster="/hero-poster.webp"
@@ -157,12 +159,12 @@ export default function HomePage() {
           <source src={heroVideo}     type="video/mp4" />
         </video>
 
-        {/* Vinheta lateral — escurece bordas em desktop quando o vídeo tem letterbox */}
+        {/* Efeito blur lateral em desktop — feito via CSS box-shadow, SEM vídeo extra */}
         <div
             aria-hidden="true"
             className="hidden md:block absolute inset-0 pointer-events-none"
             style={{
-              background: 'linear-gradient(to right, rgba(0,0,0,0.6) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.6) 100%)',
+              boxShadow: 'inset 200px 0 120px 0 rgba(0,0,0,0.85), inset -200px 0 120px 0 rgba(0,0,0,0.85)',
             }}
         />
 
