@@ -113,13 +113,17 @@ export default function PagamentosPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total faturado',    value: fmt(d?.totais?.total_faturado) },
-          { label: 'Total gorjetas',    value: fmt(d?.totais?.total_gorjetas) },
-          { label: 'Reservas pagas',    value: d?.totais?.total_reservas ?? '—' },
-          { label: 'Média por reserva', value: fmt(d?.totais?.media_por_reserva) },
+          { label: 'Total faturado',    value: fmt(d?.totais?.total_faturado),  sub: null },
+          { label: 'Total recebido',    value: fmt(d?.totais?.total_recebido),  sub: '(sem ofertas)' },
+          { label: 'Total em ofertas',  value: fmt(d?.totais?.total_ofertas),   sub: null },
+          { label: 'Total gorjetas',    value: fmt(d?.totais?.total_gorjetas),  sub: null },
+          { label: 'Reservas pagas',    value: d?.totais?.total_reservas ?? '—', sub: null },
+          { label: 'Média por reserva', value: fmt(d?.totais?.media_por_reserva), sub: '(c/ ofertas)' },
         ].map(k => (
           <Card key={k.label}>
-            <p className="text-xs text-gray-500 mb-1">{k.label}</p>
+            <p className="text-xs text-gray-500 mb-1">
+              {k.label}{k.sub && <span className="text-gray-400 ml-1">{k.sub}</span>}
+            </p>
             <p className="text-xl font-bold text-gray-900">{k.value}</p>
           </Card>
         ))}
@@ -148,11 +152,16 @@ export default function PagamentosPage() {
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="w-2 h-2 rounded-full inline-block" style={{ background: b.barbeiro_color ?? '#888' }} />
                   <span className="text-sm font-semibold text-gray-800">{b.barbeiro_nome}</span>
+                  {/* Total faturado (recebido + ofertas) */}
                   <span className="ml-auto text-sm font-bold text-gray-900">{fmt(b.total_valor)}</span>
                 </div>
-                <div className="pl-3.5 flex gap-4 text-xs text-gray-500">
+                <div className="pl-3.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
                   <span>💵 {fmt(b.total_dinheiro)}</span>
                   <span>💳 {fmt(b.total_multibanco)}</span>
+                  {b.total_ofertas > 0 && (
+                      <span className="text-amber-600 font-medium">🏷️ Ofertas: {fmt(b.total_ofertas)}</span>
+                  )}
+                  <span className="text-emerald-600 font-medium">✅ Recebido: {fmt(b.total_recebido)}</span>
                   {b.total_gorjetas > 0 && <span>🎁 {fmt(b.total_gorjetas)}</span>}
                 </div>
               </div>
