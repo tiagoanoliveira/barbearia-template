@@ -111,10 +111,10 @@ export default function PagamentosPage() {
       </Card>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-4">
         {[
-          { label: 'Total faturado',    value: fmt(d?.totais?.total_faturado),  sub: null },
-          { label: 'Total recebido',    value: fmt(d?.totais?.total_recebido),  sub: '(sem ofertas)' },
+          { label: 'Total faturado',    value: fmt(d?.totais?.total_faturado),  sub: '(c/ ofertas)' },
+          { label: 'Total cobrado',    value: fmt(d?.totais?.total_recebido),  sub: '(sem ofertas)' },
           { label: 'Total em ofertas',  value: fmt(d?.totais?.total_ofertas),   sub: null },
           { label: 'Total gorjetas',    value: fmt(d?.totais?.total_gorjetas),  sub: null },
           { label: 'Reservas pagas',    value: d?.totais?.total_reservas ?? '—', sub: null },
@@ -158,10 +158,13 @@ export default function PagamentosPage() {
                 <div className="pl-3.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500">
                   <span>💵 {fmt(b.total_dinheiro)}</span>
                   <span>💳 {fmt(b.total_multibanco)}</span>
+                  {b.total_outro > 0 && (
+                      <span>❓ Outro: {fmt(b.total_outro)}</span>
+                  )}
+                  <span className="text-emerald-600 font-medium">Total Cobrado: {fmt(b.total_recebido)}</span>
                   {b.total_ofertas > 0 && (
                       <span className="text-amber-600 font-medium">🏷️ Ofertas: {fmt(b.total_ofertas)}</span>
                   )}
-                  <span className="text-emerald-600 font-medium">✅ Recebido: {fmt(b.total_recebido)}</span>
                   {b.total_gorjetas > 0 && <span>🎁 {fmt(b.total_gorjetas)}</span>}
                 </div>
               </div>

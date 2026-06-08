@@ -28,7 +28,7 @@ export async function onRequest(context) {
   try {
     const { results: porMeio } = await env.DB.prepare(`
       SELECT
-        COALESCE(meio_pagamento, 'oferta') AS meio_pagamento,
+        COALESCE(meio_pagamento, 'Oferta') AS meio_pagamento,
         COUNT(*)                           AS total_reservas,
         SUM(COALESCE(valor_pago, 0) + COALESCE(oferta_valor, 0)) AS total_valor,
         SUM(gorjeta)                       AS total_gorjetas
@@ -36,7 +36,7 @@ export async function onRequest(context) {
       WHERE status = 'concluida'
         AND (meio_pagamento IS NOT NULL OR oferta_valor IS NOT NULL)
         AND date(data_hora) BETWEEN ? AND ?
-      GROUP BY COALESCE(meio_pagamento, 'oferta')
+      GROUP BY COALESCE(meio_pagamento, 'Oferta')
     `).bind(from, to).all()
 
     const { results: porBarbeiro } = await env.DB.prepare(`
@@ -50,6 +50,8 @@ export async function onRequest(context) {
         SUM(r.gorjeta)                                      AS total_gorjetas,
         SUM(CASE WHEN r.meio_pagamento = 'dinheiro'    THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_dinheiro,
         SUM(CASE WHEN r.meio_pagamento = 'multibanco'  THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_multibanco
+        SUM(CASE WHEN r.meio_pagamento NOT IN ('dinheiro','multibanco') AND r.meio_pagamento IS NOT NULL
+         THEN COALESCE(r.valor_pago, 0) ELSE 0 END)                                       AS total_outro
       FROM reservas r
       JOIN barbeiros b ON r.barbeiro_id = b.id
       WHERE r.status = 'concluida'
