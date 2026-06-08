@@ -42,7 +42,7 @@ export const WORKING_HOURS_CONFIG: Record<
     DayHours
 > = {
   //   monday:    { open: '10:00', close: '20:00', closed: false, breakStart: '13:00', breakEnd: '14:00' },
-  monday:    { open: '10:00', close: '20:00', closed: false, breakStart: '13:00', breakEnd: '14:00'},
+  monday:    { open: '10:00', close: '20:00', closed: false},
   tuesday:   { open: '10:00', close: '20:00', closed: false},
   wednesday: { open: '10:00', close: '20:00', closed: false},
   thursday:  { open: '10:00', close: '20:00', closed: false},
