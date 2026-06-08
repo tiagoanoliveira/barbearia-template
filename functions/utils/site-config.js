@@ -90,13 +90,14 @@ export const EMAIL_COLORS = {
  * closed          : true para dias fechados
  */
 export const WORKING_HOURS = {
-  0: { closed: true },                                                          // Domingo
-  1: { open: 10, close: 20, closed: false, breakStart: 13, breakEnd: 14 },     // Segunda
-  2: { open: 10, close: 20, closed: false, breakStart: 13, breakEnd: 14 },     // Terça
-  3: { open: 10, close: 20, closed: false, breakStart: 13, breakEnd: 14 },     // Quarta
-  4: { open: 10, close: 20, closed: false, breakStart: 13, breakEnd: 14 },     // Quinta
-  5: { open: 10, close: 20, closed: false, breakStart: 13, breakEnd: 14 },     // Sexta
-  6: { open:  9, close: 18, closed: false },                                    // Sábado — sem pausa
+  0: { closed: true },                          // Domingo
+  1: { open: 10, close: 20, closed: false},     // Segunda
+  2: { open: 10, close: 20, closed: false},     // Terça
+  3: { open: 10, close: 20, closed: false},     // Quarta
+  4: { open: 10, close: 20, closed: false},     // Quinta
+  5: { open: 10, close: 20, closed: false},     // Sexta
+  //   5: { open: 10, close: 20, closed: false, breakStart: 13, breakEnd: 14 },
+  6: { open:  9, close: 18, closed: false },
 }
 
 /**
