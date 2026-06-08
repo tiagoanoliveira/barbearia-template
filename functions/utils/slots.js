@@ -44,8 +44,8 @@ export function computeSlots({
 
   // Intervalo de pausa (se existir)
   const breakInterval = (breakStart != null && breakEnd != null) ? {
-    start: new Date(`${date}T${Math.floor(breakStart).toString().padStart(2,'0')}:${String(Math.round((breakStart % 1) * 60)).padStart(2,'0')}:00`),
-    end:   new Date(`${date}T${Math.floor(breakEnd).toString().padStart(2,'0')}:${String(Math.round((breakEnd   % 1) * 60)).padStart(2,'00')}:00`),
+    start: new Date(`${date}T${String(breakStart).padStart(2,'0')}:00:00`),
+    end:   new Date(`${date}T${String(breakEnd).padStart(2,'0')}:00:00`),
   } : null
 
   const closeDate = new Date(`${date}T${closeHour.toString().padStart(2, '0')}:00:00`)
