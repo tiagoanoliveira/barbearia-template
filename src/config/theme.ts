@@ -42,13 +42,13 @@ export const WORKING_HOURS_CONFIG: Record<
     DayHours
 > = {
   //   monday:    { open: '10:00', close: '20:00', closed: false, breakStart: '13:00', breakEnd: '14:00' },
-  monday:    { open: '10', close: '20', closed: false},
-  tuesday:   { open: '10', close: '20', closed: false},
-  wednesday: { open: '10', close: '20', closed: false},
-  thursday:  { open: '10', close: '20', closed: false},
-  friday:    { open: '10', close: '20', closed: false},
-  saturday:  { open: '09', close: '18', closed: false },
-  sunday:    { open: '00', close: '00', closed: true  },
+  monday:    { open: '1000', close: '20:00', closed: false, breakStart: 13, breakEnd: 14},
+  tuesday:   { open: '10:00', close: '20:00', closed: false},
+  wednesday: { open: '10:00', close: '20:00', closed: false},
+  thursday:  { open: '10:00', close: '20:00', closed: false},
+  friday:    { open: '10:00', close: '20:00', closed: false},
+  saturday:  { open: '09:00', close: '18:00', closed: false },
+  sunday:    { open: '00:00', close: '00:00', closed: true  },
 }
 
 export const barberShopConfig = {

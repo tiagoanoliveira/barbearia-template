@@ -91,7 +91,7 @@ export const EMAIL_COLORS = {
  */
 export const WORKING_HOURS = {
   0: { closed: true },                          // Domingo
-  1: { open: 10, close: 20, closed: false},     // Segunda
+  1: { open: 10, close: 20, closed: false, breakStart: 13, breakEnd: 14},     // Segunda
   2: { open: 10, close: 20, closed: false},     // Terça
   3: { open: 10, close: 20, closed: false},     // Quarta
   4: { open: 10, close: 20, closed: false},     // Quinta
