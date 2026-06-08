@@ -589,7 +589,11 @@ export default function ProfilePage() {
           <Card>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Métodos de autenticação</h3>
             <p className="text-xs text-gray-500 mb-3">
-              Podes associar a tua conta do Google ou Facebook. Para remover todos os métodos sociais, é obrigatório ter uma password definida.
+              {barberShopConfig.facebookEnabled
+                  ? 'Podes associar a tua conta do Google ou Facebook.'
+                  : 'Podes associar a tua conta do Google.'
+              }{' '}
+              Para remover todos os métodos sociais, é obrigatório ter uma password definida.
             </p>
             <div className="space-y-2">
               <div className="flex items-center justify-between py-2 border-b border-gray-50">
@@ -621,6 +625,7 @@ export default function ProfilePage() {
                     </button>
                 }
               </div>
+              {barberShopConfig.facebookEnabled && (
               <div className="flex items-center justify-between py-2">
                 <div>
                   <p className="text-sm font-medium text-gray-900">Facebook</p>
@@ -635,6 +640,7 @@ export default function ProfilePage() {
                     </button>
                 }
               </div>
+              )}
             </div>
             {linkError && <p className="mt-3 text-xs text-red-500">{linkError}</p>}
           </Card>
