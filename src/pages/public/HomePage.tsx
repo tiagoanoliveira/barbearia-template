@@ -146,33 +146,38 @@ export default function HomePage() {
       {/* ── HERO ── */}
       <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-black">
 
-        {/* Vídeo principal — UMA única instância, usada como base */}
+        {/* Vídeo de fundo — ocupa largura total, desfocado, serve de espelho lateral */}
+        <video
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ filter: 'blur(18px) brightness(0.45)', transform: 'scale(1.08)' }}
+            autoPlay muted loop playsInline
+            preload="none"
+            tabIndex={-1}
+        >
+          <source src={heroVideoWebm} type="video/webm" />
+        </video>
+
+        {/* Vídeo principal — centrado, altura total, largura automática */}
         <video
             id="hero-video"
-            className="absolute h-full w-auto object-cover"
+            className="absolute h-full w-auto object-cover z-10"
             style={{ maxWidth: '100%' }}
             autoPlay muted loop playsInline
             preload="metadata"
             poster="/hero-poster.webp"
         >
           <source src={heroVideoWebm} type="video/webm" />
-          <source src={heroVideo}     type="video/mp4" />
         </video>
 
-        {/* Efeito blur lateral em desktop — feito via CSS box-shadow, SEM vídeo extra */}
-        <div
-            aria-hidden="true"
-            className="hidden md:block absolute inset-0 pointer-events-none"
-            style={{
-              boxShadow: 'inset 200px 0 120px 0 rgba(0,0,0,0.85), inset -200px 0 120px 0 rgba(0,0,0,0.85)',
-            }}
-        />
+        {/* Gradiente vertical sobre tudo */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/75 z-20" />
 
-        {/* Gradiente e botões */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/75" />
-        <div className="absolute bottom-20 left-0 right-0 z-10 text-center px-4 max-w-3xl mx-auto text-white">
+        {/* Botões e CTA */}
+        <div className="absolute bottom-20 left-0 right-0 z-30 text-center px-4 max-w-3xl mx-auto text-white">
           <div className="flex flex-col xs:flex-row items-center justify-center gap-4">
-            <a href="#servicos" className="flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-semibold rounded-2xl hover:bg-white/20 transition-all backdrop-blur-sm text-base">
+            <a href="#servicos"
+               className="flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-semibold rounded-2xl hover:bg-white/20 transition-all backdrop-blur-sm text-base">
               Ver serviços
             </a>
             <Link to={ROUTES.BOOKING}
@@ -184,7 +189,7 @@ export default function HomePage() {
 
         <a href="#about"
            aria-label="Scroll para a secção Sobre nós"
-           className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors z-10">
+           className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-gray-400 hover:text-white transition-colors z-30">
           <ChevronDown size={20} className="animate-bounce" />
         </a>
       </section>
