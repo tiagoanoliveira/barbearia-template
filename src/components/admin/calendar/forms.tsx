@@ -277,7 +277,6 @@ export function ReservationCopyContent({
   barberId,
   copyDate,
   copyTime,
-  copyEmail,
   recurrenceInterval,
   recurrenceCount,
   reservations,
@@ -290,13 +289,12 @@ export function ReservationCopyContent({
   barberId: number
   copyDate: string
   copyTime: string
-  copyEmail: boolean
   recurrenceInterval: string
   recurrenceCount: number
   reservations: { data_hora: string; status: string }[]
   unavailabilities: { data_hora_inicio: string; data_hora_fim: string; barbeiro_id: number }[]
   onChange: (
-      field: 'copyDate' | 'copyTime' | 'copyEmail' | 'recurrenceInterval' | 'recurrenceCount',
+      field: 'copyDate' | 'copyTime' | 'recurrenceInterval' | 'recurrenceCount',
       value: string | boolean | number
   ) => void
 }) {
@@ -395,12 +393,6 @@ export function ReservationCopyContent({
               )}
             </div>
         )}
-
-        {/* Email */}
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={copyEmail} onChange={e => onChange('copyEmail', e.target.checked)} />
-          <span>Enviar email de confirmação ao cliente</span>
-        </label>
       </div>
   )
 }

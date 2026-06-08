@@ -45,7 +45,7 @@ const LogoMark = memo(function LogoMark() {
     ? <img
         src={LOGO_URL}
         alt={barberShopConfig.name}
-        className="w-8 h-8 object-contain"
+        className="w-10 h-10 object-contain rounded-md"
         loading="eager"
         width={32}
         height={32}

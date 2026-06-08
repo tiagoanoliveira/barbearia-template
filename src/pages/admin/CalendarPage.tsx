@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO, addMinutes } from 'date-fns'
 import { pt } from 'date-fns/locale'
@@ -200,7 +200,6 @@ export default function CalendarPage() {
   const [copyDate, setCopyDate]     = useState('')
   const [copyTime, setCopyTime]     = useState('')
   const [copySaving, setCopySaving] = useState(false)
-  const [copyEmail, setCopyEmail]   = useState(false)
   const [recurrenceInterval, setRecurrenceInterval] = useState('none')
   const [recurrenceCount, setRecurrenceCount]       = useState(4)
 
@@ -263,14 +262,16 @@ export default function CalendarPage() {
   const close    = () => setModal(null)
 
   const openNewReservation = (barberId: number, slot: number) => {
+    if (BREAK_START_SLOT != null && BREAK_END_SLOT != null && slot >= BREAK_START_SLOT && slot < BREAK_END_SLOT) return
     setNewResForm({ barber_id: barberId, data_hora: slotToISO(selectedDate, slot, START_H), status: 'confirmada', sendEmail: true })
     setModal({ type: 'res_new', barberId, slot }); closeCtx()
   }
   const openNewUnavailable = (barberId: number, slot: number) => {
+    if (BREAK_START_SLOT != null && BREAK_END_SLOT != null && slot >= BREAK_START_SLOT && slot < BREAK_END_SLOT) return
     const startIso = slotToISO(selectedDate, slot, START_H)
     const endIso   = slotToISO(selectedDate, slot + (60 / SLOT_DURATION), START_H)
     setUForm({ barbeiro_id: barberId, data_hora_inicio: startIso,
-               data_hora_fim: endIso, is_all_day: 0, tipo: 'folga', motivo: '', recurrence_type: 'none' })
+      data_hora_fim: endIso, is_all_day: 0, tipo: 'folga', motivo: '', recurrence_type: 'none' })
     setUError(null); setModal({ type: 'unavail', data: {}, isNew: true }); closeCtx()
   }
   const openEditUnavailable = (u: Unavailable) => {
@@ -383,7 +384,7 @@ export default function CalendarPage() {
                 date,
                 time:       copyTime,
                 notes:      src.comentario ?? '',
-                send_email: copyEmail,
+                send_email: false,
               })
           )
       )
@@ -546,8 +547,8 @@ export default function CalendarPage() {
               {timeSlots.map(slot => {
                 const isHourEnd = (slot + 1) % SLOTS_PER_H === 0
                 return (
-                  <>
-                    <div key={`t_${slot}`}
+                  <React.Fragment key={slot}>
+                    <div
                       className={`flex items-top justify-center ${
                         isHourEnd ? 'border-b-2 border-slate-400' : 'border-b border-slate-200'
                       }`}
@@ -661,7 +662,7 @@ export default function CalendarPage() {
                         </div>
                       )
                     })}
-                  </>
+                  </React.Fragment>
                 )
               })}
             </div>
@@ -703,7 +704,6 @@ export default function CalendarPage() {
                 <CtxItem icon="📋" label="Copiar Reserva" onClick={() => {
                   setCopyDate(selectedDate)
                   setCopyTime(format(new Date(r.data_hora), 'HH:mm'))
-                  setCopyEmail(true)
                   setRecurrenceInterval('none')
                   setRecurrenceCount(4)
                   setModal({ type: 'res_copy', source: r })
@@ -810,7 +810,6 @@ export default function CalendarPage() {
                 barberId={modal.source.barber_id ?? 0}
                 copyDate={copyDate}
                 copyTime={copyTime}
-                copyEmail={copyEmail}
                 recurrenceInterval={recurrenceInterval}
                 recurrenceCount={recurrenceCount}
                 reservations={reservations}
@@ -818,7 +817,6 @@ export default function CalendarPage() {
                 onChange={(field, value) => {
                   if (field === 'copyDate'           && typeof value === 'string')  setCopyDate(value)
                   if (field === 'copyTime'           && typeof value === 'string')  setCopyTime(value)
-                  if (field === 'copyEmail'          && typeof value === 'boolean') setCopyEmail(value)
                   if (field === 'recurrenceInterval' && typeof value === 'string')  setRecurrenceInterval(value)
                   if (field === 'recurrenceCount'    && typeof value === 'number')  setRecurrenceCount(value)
                 }}
