@@ -49,7 +49,7 @@ export async function onRequest(context) {
         SUM(COALESCE(r.oferta_valor, 0))                    AS total_ofertas,
         SUM(r.gorjeta)                                      AS total_gorjetas,
         SUM(CASE WHEN r.meio_pagamento = 'dinheiro'    THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_dinheiro,
-        SUM(CASE WHEN r.meio_pagamento = 'multibanco'  THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_multibanco
+        SUM(CASE WHEN r.meio_pagamento = 'multibanco'  THEN COALESCE(r.valor_pago, 0) ELSE 0 END) AS total_multibanco,
         SUM(CASE WHEN r.meio_pagamento NOT IN ('dinheiro','multibanco') AND r.meio_pagamento IS NOT NULL
          THEN COALESCE(r.valor_pago, 0) ELSE 0 END)                                       AS total_outro
       FROM reservas r
