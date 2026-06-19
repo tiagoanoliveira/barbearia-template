@@ -67,13 +67,16 @@ CREATE INDEX IF NOT EXISTS idx_barbeiros_ativo ON barbeiros(ativo);
 -- SERVIÇOS
 -- ================================================
 CREATE TABLE IF NOT EXISTS servicos (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  nome       TEXT    NOT NULL,
-  preco      INTEGER NOT NULL DEFAULT 0,
-  duracao    INTEGER DEFAULT 60,
-  svg        TEXT    NOT NULL DEFAULT 'null',
-  abreviacao TEXT    NOT NULL DEFAULT 'null',
-  color      TEXT    NOT NULL DEFAULT '#000000'
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome               TEXT    NOT NULL,
+  preco              INTEGER NOT NULL DEFAULT 0,
+  duracao            INTEGER DEFAULT 60,
+  svg                TEXT    NOT NULL DEFAULT 'null',
+  abreviacao         TEXT    NOT NULL DEFAULT 'null',
+  color              TEXT    NOT NULL DEFAULT '#000000',
+  -- Se 1 (default), reservas concluídas com este serviço incrementam
+  -- o contador de fidelização do cliente. Se 0, são excluídas.
+  conta_fidelizacao  INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE servico_barbeiro (
@@ -303,6 +306,11 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_data_range ON daily_stats(data, barbe
 -- ──────────────────────────────────────────────────────────────────────
 
 -- ── reservas_concluidas ───────────────────────────────────────────
+--
+-- Só incrementa reservas_concluidas se o serviço da reserva
+-- tiver conta_fidelizacao = 1. Serviços com conta_fidelizacao = 0
+-- são excluídos do cartão de fidelização.
+-- last_appointment_date é sempre atualizado, independentemente do serviço.
 CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_increment
 AFTER UPDATE ON reservas FOR EACH ROW
 WHEN NEW.status = 'concluida' AND OLD.status != 'concluida'
@@ -311,7 +319,15 @@ BEGIN
   SET reservas_concluidas = reservas_concluidas + 1,
       last_appointment_date = NEW.data_hora,
       atualizado_em = CURRENT_TIMESTAMP
-  WHERE id = NEW.cliente_id;
+  WHERE id = NEW.cliente_id
+    AND (SELECT conta_fidelizacao FROM servicos WHERE id = NEW.servico_id) = 1;
+
+  -- Atualizar last_appointment_date mesmo que o serviço não conte para fidelização
+  UPDATE clientes
+  SET last_appointment_date = NEW.data_hora,
+      atualizado_em = CURRENT_TIMESTAMP
+  WHERE id = NEW.cliente_id
+    AND (SELECT conta_fidelizacao FROM servicos WHERE id = NEW.servico_id) != 1;
 END;
 
 CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_decrement
@@ -474,6 +490,7 @@ END;
 -- ================================================
 -- Ver ficheiro migrations/0011_descontos.sql
 -- Ver ficheiro migrations/0012_descontos_servicos_ids.sql
+-- Ver ficheiro migrations/0013_servicos_conta_fidelizacao.sql
 
 -- ================================================
 -- VIEWS
@@ -503,12 +520,13 @@ SELECT
   b.nome  AS barbeiro_nome,
   b.foto  AS barbeiro_foto,
   b.color AS barbeiro_color,
-  s.nome       AS servico_nome,
-  s.preco      AS servico_preco,
-  s.duracao    AS servico_duracao,
-  s.abreviacao AS servico_abreviacao,
-  s.svg        AS servico_svg,
-  s.color      AS servico_color,
+  s.nome              AS servico_nome,
+  s.preco             AS servico_preco,
+  s.duracao           AS servico_duracao,
+  s.abreviacao        AS servico_abreviacao,
+  s.svg               AS servico_svg,
+  s.color             AS servico_color,
+  s.conta_fidelizacao AS servico_conta_fidelizacao,
   COALESCE(r.duracao_minutos, s.duracao) AS duracao_efetiva,
   d.nome              AS desconto_nome,
   d.tipo              AS desconto_tipo,

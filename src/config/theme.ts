@@ -140,6 +140,13 @@ export const barberShopConfig = {
      *     Se alterar aqui, actualizar também o schema.sql e o site-config.js.
      */
     everyN: 10,
+    /**
+     * IDs de serviços excluídos do cartão de fidelização.
+     * Usado apenas para referência no frontend (ex: mostrar badge "não conta").
+     * A exclusão efectiva é controlada pela coluna `conta_fidelizacao`
+     * na tabela `servicos` da base de dados (ver migrations/0013).
+     */
+    excludedServiceIds: [] as number[],
   },
 
   // ─ Sistema de descontos ──────────────────────────────────────────────────
