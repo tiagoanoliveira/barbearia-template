@@ -18,6 +18,8 @@ import PagamentosPage from '@/pages/admin/PagamentosPage'
 import DiscountsPage from '@/pages/admin/DiscountsPage'
 import LoginPage from '@/pages/admin/LoginPage'
 import AdminResetPasswordPage from '@/pages/admin/AdminResetPasswordPage'
+import VendasProdutosPage from '@/pages/admin/VendasProdutosPage'
+import HistoricoVendasPage from '@/pages/admin/HistoricoVendasPage'
 
 // Public pages
 import HomePage from '@/pages/public/HomePage'
@@ -65,7 +67,7 @@ export default function App() {
           <Route path="/condicoes-reserva"  element={<BookingConditionsPage />} />
           <Route path="/suporte"            element={<SupportPage />} />
           <Route path="/aviso-legal"        element={<LegalNoticePage />} />
-          <Route path="/ral"  element={<RalPage />} />
+          <Route path="/ral"                element={<RalPage />} />
         </Route>
 
         {/* Admin auth */}
@@ -83,8 +85,11 @@ export default function App() {
           <Route path="indisponibilidades" element={<UnavailablePage />} />
           <Route path="configuracao"       element={<ConfiguracaoPage />} />
           <Route path="pagamentos"         element={<PagamentosPage />} />
-          {/* Gestão de descontos — apenas superAdmin (verificado dentro da página) */}
           <Route path="descontos"          element={<DiscountsPage />} />
+          {/* Vendas de Produtos — admin e superAdmin */}
+          <Route path="vendas-produtos"    element={<VendasProdutosPage />} />
+          {/* Histórico de Vendas — apenas superAdmin (verificado dentro da página) */}
+          <Route path="historico-vendas"   element={<HistoricoVendasPage />} />
         </Route>
 
         {/* Fallback */}

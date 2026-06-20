@@ -17,6 +17,8 @@ export const ROUTES = {
   ADMIN_SETTINGS: '/admin/configuracao',
   ADMIN_PAYMENTS:  '/admin/pagamentos',
   ADMIN_DISCOUNTS: '/admin/descontos',
+  ADMIN_PRODUCT_SALES: '/admin/vendas-produtos',
+  ADMIN_PRODUCT_SALES_HISTORY: '/admin/historico-vendas',
   ADMIN_LOGIN: '/admin/login',
   ADMIN_RESET_PASSWORD: '/admin/reset-password',
 } as const

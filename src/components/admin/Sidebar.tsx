@@ -2,23 +2,24 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
     LayoutDashboard, CalendarDays, ClipboardList, Users,
     CalendarOff, Scissors, LogOut, ChevronRight, Settings,
-    X, PanelLeftClose, PanelLeftOpen, CreditCard, Tag,
+    X, PanelLeftClose, PanelLeftOpen, CreditCard, Tag, ShoppingCart, History,
 } from 'lucide-react'
 import { ROUTES } from '@/config/routes'
 import { barberShopConfig, LOGO_URL } from '@/config/theme'
 import { authApi } from '@/api/auth'
 import { useAdminUser, isSuperAdmin } from '@/hooks/useAdminUser'
 
-// ← superAdminOnly adicionado ao tipo de cada item
-const navItems: { to: string; label: string; icon: React.ElementType; superAdminOnly?: boolean }[] = [
-    { to: ROUTES.ADMIN_DASHBOARD,    label: 'Dashboard',          icon: LayoutDashboard },
-    { to: ROUTES.ADMIN_CALENDAR,     label: 'Calendário',         icon: CalendarDays },
-    { to: ROUTES.ADMIN_RESERVATIONS, label: 'Reservas',           icon: ClipboardList },
-    { to: ROUTES.ADMIN_CLIENTS,      label: 'Clientes',           icon: Users },
-    { to: ROUTES.ADMIN_UNAVAILABLE,  label: 'Indisponibilidades', icon: CalendarOff },
-    { to: ROUTES.ADMIN_SETTINGS,     label: 'Configuração',       icon: Settings,    superAdminOnly: true },
-    { to: ROUTES.ADMIN_PAYMENTS,     label: 'Pagamentos',         icon: CreditCard,  superAdminOnly: true },
-    { to: ROUTES.ADMIN_DISCOUNTS,    label: 'Descontos',          icon: Tag,         superAdminOnly: true },
+const navItems: { to: string; label: string; icon: React.ElementType; superAdminOnly?: boolean; hideFromBarber?: boolean }[] = [
+    { to: ROUTES.ADMIN_DASHBOARD,             label: 'Dashboard',          icon: LayoutDashboard },
+    { to: ROUTES.ADMIN_CALENDAR,              label: 'Calendário',         icon: CalendarDays },
+    { to: ROUTES.ADMIN_RESERVATIONS,          label: 'Reservas',           icon: ClipboardList },
+    { to: ROUTES.ADMIN_CLIENTS,               label: 'Clientes',           icon: Users,         hideFromBarber: true },
+    { to: ROUTES.ADMIN_UNAVAILABLE,           label: 'Indisponibilidades', icon: CalendarOff },
+    { to: ROUTES.ADMIN_PRODUCT_SALES,         label: 'Venda de Produtos',  icon: ShoppingCart },
+    { to: ROUTES.ADMIN_SETTINGS,              label: 'Configuração',       icon: Settings,      superAdminOnly: true },
+    { to: ROUTES.ADMIN_PAYMENTS,              label: 'Pagamentos',         icon: CreditCard,    superAdminOnly: true },
+    { to: ROUTES.ADMIN_DISCOUNTS,             label: 'Descontos',          icon: Tag,           superAdminOnly: true },
+    { to: ROUTES.ADMIN_PRODUCT_SALES_HISTORY, label: 'Histórico Vendas',   icon: History,       superAdminOnly: true },
 ]
 
 const LogoMark = () => (
@@ -43,8 +44,8 @@ export default function Sidebar({ open, expanded, onToggle, onExpand }: SidebarP
     const isSA      = isSuperAdmin(adminUser)
 
     const visibleNavItems = navItems.filter(item => {
-        if (item.superAdminOnly)              return isSA
-        if (item.to === ROUTES.ADMIN_CLIENTS) return !isBarber
+        if (item.superAdminOnly) return isSA
+        if (item.hideFromBarber) return !isBarber
         return true
     })
 
