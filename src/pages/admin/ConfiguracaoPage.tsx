@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Scissors, Sparkles, Users, Plus, Pencil, Trash2, Eye, EyeOff, Check, X, Upload, Link as LinkIcon, ShoppingBag } from 'lucide-react'
+import { Scissors, Sparkles, Users, Plus, Pencil, Trash2, Eye, EyeOff, Check, X, Upload, Link as LinkIcon, ShoppingBag, Package, Tag } from 'lucide-react'
 import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -20,6 +20,8 @@ export default function ConfiguracaoPage() {
   return (
       <div className="space-y-8">
         <ServicosSection />
+        <CategoriasSection />
+        <ProdutosSection />
         <BarbeirosSection />
         <MarcasSection />
         <AdminUsersSection />
@@ -165,7 +167,6 @@ function ServicosSection() {
   const services: (Service & { barber_overrides?: BarberOverride[]; conta_fidelizacao?: boolean })[] =
       (data?.data as unknown as (Service & { barber_overrides?: BarberOverride[]; conta_fidelizacao?: boolean })[]) ?? []
 
-  // Buscar barbeiros para o formulário de overrides
   const { data: barbersData } = useQuery({
     queryKey: ['admin-barbers-cfg'],
     queryFn:  () => adminApi.get<Barber[]>('/api/admin/barbers?include_inactive=1'),
@@ -328,7 +329,6 @@ function ServicosSection() {
             <div className="mt-4 border-t border-gray-100 pt-4 space-y-4">
               <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar serviço' : 'Novo serviço'}</p>
 
-              {/* Campos base */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs text-gray-500 mb-1">Nome *</label>
@@ -377,7 +377,6 @@ function ServicosSection() {
                 </div>
               </div>
 
-              {/* Overrides por barbeiro */}
               {form.barber_overrides.length > 0 && (
                   <div>
                     <button type="button" onClick={() => setShowOverrides(v => !v)}
@@ -442,6 +441,361 @@ function ServicosSection() {
             </div>
         )}
       </Card>
+  )
+}
+
+// ─── CATEGORIAS DE PRODUTOS ───────────────────────────────────────────────────
+interface ProdutoCategoria {
+  id: number; nome: string; descricao: string | null; ordem: number; ativo: number
+}
+
+interface CategoriaProdutoForm {
+  id?: number; nome: string; descricao: string; ordem: string; ativo: number
+}
+
+const emptyCategoria = (): CategoriaProdutoForm => ({ nome: '', descricao: '', ordem: '0', ativo: 1 })
+
+function CategoriasSection() {
+  const qc = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['produto-categorias'],
+    queryFn:  () => adminApi.get<ProdutoCategoria[]>('/api/admin/produto-categorias'),
+  })
+  const categorias: ProdutoCategoria[] = (data?.data as unknown as ProdutoCategoria[]) ?? []
+
+  const [form, setForm]         = useState<CategoriaProdutoForm | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [saving, setSaving]     = useState(false)
+  const [err, setErr]           = useState<string | null>(null)
+
+  const openNew  = () => { setForm(emptyCategoria()); setErr(null) }
+  const openEdit = (c: ProdutoCategoria) => {
+    setForm({ id: c.id, nome: c.nome, descricao: c.descricao ?? '', ordem: String(c.ordem), ativo: c.ativo })
+    setErr(null)
+  }
+
+  const save = async () => {
+    if (!form) return
+    if (!form.nome.trim()) { setErr('Nome é obrigatório'); return }
+    setSaving(true); setErr(null)
+    try {
+      const body = { nome: form.nome.trim(), descricao: form.descricao || null, ordem: parseInt(form.ordem) || 0, ativo: form.ativo }
+      if (form.id) await adminApi.put(`/api/admin/produto-categorias/${form.id}`, body)
+      else         await adminApi.post('/api/admin/produto-categorias', body)
+      qc.invalidateQueries({ queryKey: ['produto-categorias'] })
+      qc.invalidateQueries({ queryKey: ['produtos-ativos'] })
+      setForm(null)
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
+    finally { setSaving(false) }
+  }
+
+  const del = async (id: number) => {
+    try {
+      await adminApi.delete(`/api/admin/produto-categorias/${id}`)
+      qc.invalidateQueries({ queryKey: ['produto-categorias'] })
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao eliminar — verifique se não tem produtos associados') }
+    setDeleteId(null)
+  }
+
+  return (
+    <Card>
+      <SectionHeader icon={Tag} title="Categorias de Produtos" subtitle="Organiza os produtos por categoria para a venda" />
+      {isLoading ? <LoadingSpinner size="sm" /> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs text-gray-500">
+                <th className="text-left py-2 pr-3 font-medium">Nome</th>
+                <th className="text-left py-2 pr-3 font-medium">Descrição</th>
+                <th className="text-left py-2 pr-3 font-medium">Ordem</th>
+                <th className="text-left py-2 font-medium">Estado</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {categorias.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-gray-400 text-sm">Nenhuma categoria criada ainda.</td>
+                </tr>
+              )}
+              {categorias.map(c => (
+                <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="py-2.5 pr-3 font-medium">{c.nome}</td>
+                  <td className="py-2.5 pr-3 text-gray-500 text-xs max-w-[200px] truncate">{c.descricao ?? '—'}</td>
+                  <td className="py-2.5 pr-3 text-gray-500">{c.ordem}</td>
+                  <td className="py-2.5">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ c.ativo ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500' }`}>
+                      {c.ativo ? 'Ativa' : 'Inativa'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 pl-3 whitespace-nowrap">
+                    {deleteId === c.id
+                      ? <ConfirmDelete onConfirm={() => del(c.id)} onCancel={() => setDeleteId(null)} />
+                      : <span className="flex items-center gap-1">
+                          <button onClick={() => openEdit(c)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil size={14} /></button>
+                          <button onClick={() => setDeleteId(c.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                        </span>
+                    }
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button onClick={openNew} className="mt-4 flex items-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium">
+            <Plus size={16} /> Nova categoria
+          </button>
+        </div>
+      )}
+      {err && !form && <p className="mt-2 text-xs text-red-500">{err}</p>}
+      {form && (
+        <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar categoria' : 'Nova categoria'}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-gray-500 mb-1">Nome *</label>
+              <input className="input text-sm w-full" placeholder="Ex: Pomadas, Óleos, Acessórios"
+                value={form.nome} onChange={e => setForm(f => f && ({ ...f, nome: e.target.value }))} />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-gray-500 mb-1">Descrição (opcional)</label>
+              <input className="input text-sm w-full"
+                value={form.descricao} onChange={e => setForm(f => f && ({ ...f, descricao: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Ordem (menor = primeiro)</label>
+              <input type="number" min={0} className="input text-sm w-full"
+                value={form.ordem} onChange={e => setForm(f => f && ({ ...f, ordem: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Estado</label>
+              <select className="input text-sm w-full" value={form.ativo}
+                onChange={e => setForm(f => f && ({ ...f, ativo: parseInt(e.target.value) }))}>
+                <option value={1}>Ativa</option>
+                <option value={0}>Inativa</option>
+              </select>
+            </div>
+          </div>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => { setForm(null); setErr(null) }} className="btn-secondary text-xs">Cancelar</button>
+            <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">
+              {saving ? 'A guardar...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ─── PRODUTOS ─────────────────────────────────────────────────────────────────
+interface Produto {
+  id: number; nome: string; descricao: string | null
+  preco_centimos: number; categoria_id: number; categoria_nome: string
+  ordem: number; ativo: number
+}
+
+interface ProdutoForm {
+  id?: number; nome: string; descricao: string
+  preco_euros: string; categoria_id: string
+  ordem: string; ativo: number
+}
+
+const emptyProduto = (): ProdutoForm => ({ nome: '', descricao: '', preco_euros: '0', categoria_id: '', ordem: '0', ativo: 1 })
+
+function ProdutosSection() {
+  const qc = useQueryClient()
+
+  const { data: catData } = useQuery({
+    queryKey: ['produto-categorias'],
+    queryFn:  () => adminApi.get<ProdutoCategoria[]>('/api/admin/produto-categorias'),
+  })
+  const categorias: ProdutoCategoria[] = (catData?.data as unknown as ProdutoCategoria[]) ?? []
+  const categoriasAtivas = categorias.filter(c => c.ativo)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-produtos'],
+    queryFn:  () => adminApi.get<Produto[]>('/api/admin/produtos'),
+  })
+  const produtos: Produto[] = (data?.data as unknown as Produto[]) ?? []
+
+  const [form, setForm]         = useState<ProdutoForm | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [saving, setSaving]     = useState(false)
+  const [err, setErr]           = useState<string | null>(null)
+
+  const openNew = () => {
+    setForm({ ...emptyProduto(), categoria_id: categoriasAtivas[0] ? String(categoriasAtivas[0].id) : '' })
+    setErr(null)
+  }
+  const openEdit = (p: Produto) => {
+    setForm({
+      id:           p.id,
+      nome:         p.nome,
+      descricao:    p.descricao ?? '',
+      preco_euros:  (p.preco_centimos / 100).toFixed(2),
+      categoria_id: String(p.categoria_id),
+      ordem:        String(p.ordem),
+      ativo:        p.ativo,
+    })
+    setErr(null)
+  }
+
+  const save = async () => {
+    if (!form) return
+    if (!form.nome.trim())      { setErr('Nome é obrigatório'); return }
+    if (!form.categoria_id)    { setErr('Seleciona uma categoria'); return }
+    if (form.preco_euros === '') { setErr('Preço é obrigatório'); return }
+    setSaving(true); setErr(null)
+    try {
+      const body = {
+        nome:           form.nome.trim(),
+        descricao:      form.descricao || null,
+        preco_centimos: Math.round(parseFloat(form.preco_euros) * 100),
+        categoria_id:   parseInt(form.categoria_id),
+        ordem:          parseInt(form.ordem) || 0,
+        ativo:          form.ativo,
+      }
+      if (form.id) await adminApi.put(`/api/admin/produtos/${form.id}`, body)
+      else         await adminApi.post('/api/admin/produtos', body)
+      qc.invalidateQueries({ queryKey: ['admin-produtos'] })
+      qc.invalidateQueries({ queryKey: ['produtos-ativos'] })
+      setForm(null)
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao guardar') }
+    finally { setSaving(false) }
+  }
+
+  const del = async (id: number) => {
+    try {
+      await adminApi.delete(`/api/admin/produtos/${id}`)
+      qc.invalidateQueries({ queryKey: ['admin-produtos'] })
+      qc.invalidateQueries({ queryKey: ['produtos-ativos'] })
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Erro ao eliminar — verifique se não tem vendas associadas') }
+    setDeleteId(null)
+  }
+
+  return (
+    <Card>
+      <SectionHeader icon={Package} title="Produtos" subtitle="Produtos disponíveis para venda no balcão" />
+      {categoriasAtivas.length === 0 && !isLoading && (
+        <div className="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          ⚠️ Cria primeiro pelo menos uma categoria ativa antes de adicionar produtos.
+        </div>
+      )}
+      {isLoading ? <LoadingSpinner size="sm" /> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs text-gray-500">
+                <th className="text-left py-2 pr-3 font-medium">Nome</th>
+                <th className="text-left py-2 pr-3 font-medium">Categoria</th>
+                <th className="text-left py-2 pr-3 font-medium">Preço</th>
+                <th className="text-left py-2 pr-3 font-medium">Ordem</th>
+                <th className="text-left py-2 font-medium">Estado</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {produtos.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-6 text-center text-gray-400 text-sm">Nenhum produto adicionado ainda.</td>
+                </tr>
+              )}
+              {produtos.map(p => (
+                <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="py-2.5 pr-3 font-medium">
+                    <div>
+                      <span>{p.nome}</span>
+                      {p.descricao && <p className="text-xs text-gray-400 truncate max-w-[160px]">{p.descricao}</p>}
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-medium">{p.categoria_nome}</span>
+                  </td>
+                  <td className="py-2.5 pr-3 font-semibold text-gray-800">{(p.preco_centimos / 100).toFixed(2)} €</td>
+                  <td className="py-2.5 pr-3 text-gray-500">{p.ordem}</td>
+                  <td className="py-2.5">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ p.ativo ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500' }`}>
+                      {p.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="py-2.5 pl-3 whitespace-nowrap">
+                    {deleteId === p.id
+                      ? <ConfirmDelete onConfirm={() => del(p.id)} onCancel={() => setDeleteId(null)} />
+                      : <span className="flex items-center gap-1">
+                          <button onClick={() => openEdit(p)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil size={14} /></button>
+                          <button onClick={() => setDeleteId(p.id)} className="p-1 rounded hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                        </span>
+                    }
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button
+            onClick={openNew}
+            disabled={categoriasAtivas.length === 0}
+            className="mt-4 flex items-center gap-2 text-sm text-brand-600 hover:text-brand-700 font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+            <Plus size={16} /> Novo produto
+          </button>
+        </div>
+      )}
+      {err && !form && <p className="mt-2 text-xs text-red-500">{err}</p>}
+      {form && (
+        <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-700">{form.id ? 'Editar produto' : 'Novo produto'}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-gray-500 mb-1">Nome *</label>
+              <input className="input text-sm w-full" placeholder="Ex: Pomada Matte, Óleo de Barba"
+                value={form.nome} onChange={e => setForm(f => f && ({ ...f, nome: e.target.value }))} />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs text-gray-500 mb-1">Categoria *</label>
+              <select className="input text-sm w-full" value={form.categoria_id}
+                onChange={e => setForm(f => f && ({ ...f, categoria_id: e.target.value }))}>
+                <option value="">— Selecionar —</option>
+                {categoriasAtivas.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Preço (€) *</label>
+              <input type="number" min={0} step={0.01} className="input text-sm w-full"
+                placeholder="0.00"
+                value={form.preco_euros}
+                onChange={e => setForm(f => f && ({ ...f, preco_euros: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Ordem</label>
+              <input type="number" min={0} className="input text-sm w-full"
+                value={form.ordem} onChange={e => setForm(f => f && ({ ...f, ordem: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">Descrição (opcional)</label>
+              <input className="input text-sm w-full" placeholder="Breve descrição do produto"
+                value={form.descricao} onChange={e => setForm(f => f && ({ ...f, descricao: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Estado</label>
+              <select className="input text-sm w-full" value={form.ativo}
+                onChange={e => setForm(f => f && ({ ...f, ativo: parseInt(e.target.value) }))}>
+                <option value={1}>Ativo</option>
+                <option value={0}>Inativo</option>
+              </select>
+            </div>
+          </div>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => { setForm(null); setErr(null) }} className="btn-secondary text-xs">Cancelar</button>
+            <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">
+              {saving ? 'A guardar...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
 
