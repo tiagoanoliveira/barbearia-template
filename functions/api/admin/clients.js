@@ -32,6 +32,7 @@ export async function onRequest(context) {
       const search  = url.searchParams.get('search') ?? ''
       const pageRaw = parseInt(url.searchParams.get('page') ?? '1')
       const perRaw  = parseInt(url.searchParams.get('perPage') ?? '20')
+      const blockedFilter = url.searchParams.get('blocked') ?? ''
 
       const page    = Number.isNaN(pageRaw) || pageRaw < 1 ? 1 : pageRaw
       const perPage = Math.min(Number.isNaN(perRaw) || perRaw < 1 ? 20 : perRaw, 100)
@@ -41,9 +42,15 @@ export async function onRequest(context) {
       const params = []
 
       if (search) {
-        where.push('c.nome LIKE ? OR c.email LIKE ? OR c.telefone LIKE ?')
+        where.push('(c.nome LIKE ? OR c.email LIKE ? OR c.telefone LIKE ?)')
         const like = `%${search}%`
         params.push(like, like, like)
+      }
+
+      if (blockedFilter === '1') {
+        where.push('c.bloqueado = 1')
+      } else if (blockedFilter === '0') {
+        where.push('c.bloqueado = 0')
       }
 
       const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
@@ -67,14 +74,22 @@ export async function onRequest(context) {
            c.next_appointment_date,
            c.last_appointment_date,
            c.notas       AS notes,
-           c.criado_em   AS created_at
+           c.criado_em   AS created_at,
+           c.bloqueado   AS blocked,
+           c.bloqueado_motivo AS blocked_reason
          FROM clientes c
          ${whereClause}
          ORDER BY c.nome COLLATE NOCASE
          LIMIT ? OFFSET ?`
       ).bind(...params, perPage, offset).all()
 
-      return ok({ items: results, total, page, perPage, totalPages })
+      // Normalizar bloqueado para boolean
+      const items = results.map(r => ({
+        ...r,
+        blocked: r.blocked === 1,
+      }))
+
+      return ok({ items, total, page, perPage, totalPages })
     } catch (e) {
       return serverError('Erro ao listar clientes', e.message)
     }
@@ -101,11 +116,16 @@ export async function onRequest(context) {
         `SELECT c.id, c.nome AS name, c.email, c.telefone AS phone,
                 c.nif, c.foto_perfil AS photo_url, c.reservas_concluidas,
                 c.next_appointment_date, c.last_appointment_date,
-                c.notas AS notes, c.criado_em AS created_at
+                c.notas AS notes, c.criado_em AS created_at,
+                c.bloqueado AS blocked,
+                c.bloqueado_motivo AS blocked_reason
          FROM clientes c WHERE c.id = ?`
       ).bind(result.meta.last_row_id).first()
 
-      return created(createdClient)
+      return created({
+        ...createdClient,
+        blocked: createdClient?.blocked === 1,
+      })
     } catch (e) {
       return serverError('Erro ao criar cliente', e.message)
     }

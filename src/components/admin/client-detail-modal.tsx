@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow, parseISO, isFuture, isPast } from 'date-fns'
 import { pt } from 'date-fns/locale'
-import { Mail, Pencil, Phone, Star, CalendarClock, CalendarCheck, Gift } from 'lucide-react'
+import { Mail, Pencil, Phone, Star, CalendarClock, CalendarCheck, Gift, ShieldAlert, Lock, Unlock } from 'lucide-react'
 import { clientsApi } from '@/api/clients'
 import Modal from '@/components/ui/Modal'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -35,7 +35,22 @@ type ClientModalData = {
   reservas_gratuitas_disponiveis?: number
   next_appointment_date?: string
   last_appointment_date?: string
+  blocked?: boolean
+  blocked_reason?: string | null
+  blocked_at?: string | null
   reservations?: ClientReservation[]
+}
+
+type ClientUpdatePayload = {
+  name?: string
+  email?: string
+  phone?: string
+  nif?: number | ''
+  notes?: string | null
+  reservas_concluidas?: number
+  reservas_gratuitas_disponiveis?: number
+  blocked?: boolean
+  blocked_reason?: string | null
 }
 
 type ClientReservation = {
@@ -174,6 +189,8 @@ export function ClientDetailModal({
     notes: currentClient?.notes ?? '',
     reservas_concluidas: currentClient?.reservas_concluidas ?? 0,
     reservas_gratuitas_disponiveis: currentClient?.reservas_gratuitas_disponiveis ?? 0,
+    blocked: currentClient?.blocked ?? false,
+    blocked_reason: currentClient?.blocked_reason ?? '',
   })
   const [saving, setSaving]       = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -188,6 +205,8 @@ export function ClientDetailModal({
       notes: currentClient?.notes ?? '',
       reservas_concluidas: currentClient?.reservas_concluidas ?? 0,
       reservas_gratuitas_disponiveis: currentClient?.reservas_gratuitas_disponiveis ?? 0,
+      blocked: currentClient?.blocked ?? false,
+      blocked_reason: currentClient?.blocked_reason ?? '',
     })
     setEditMode(false)
     setSaveError(null)
@@ -202,15 +221,23 @@ export function ClientDetailModal({
     setSaving(true); setSaveError(null)
     try {
       const nifPayload = form.nif.trim() === '' ? '' : form.nif
-      const res = await clientsApi.update(clientId, {
+      const payload: ClientUpdatePayload = {
         name:  form.name,
         email: form.email,
         phone: form.phone,
-        nif:   nifPayload as unknown as number,
+        nif:   (nifPayload === '' ? '' : Number(nifPayload)) as number | '',
         notes: form.notes,
         reservas_concluidas: form.reservas_concluidas,
         reservas_gratuitas_disponiveis: form.reservas_gratuitas_disponiveis,
-      })
+      }
+
+      // Enviar apenas se houver alteração no estado de bloqueio
+      if (clientData?.blocked !== form.blocked || (form.blocked && form.blocked_reason !== clientData?.blocked_reason)) {
+        payload.blocked = form.blocked
+        payload.blocked_reason = form.blocked ? (form.blocked_reason || null) : null
+      }
+
+      const res = await clientsApi.update(clientId, payload)
       if (!res.success || !res.data) throw new Error(res.error ?? 'Não foi possível guardar as alterações.')
       qc.invalidateQueries({ queryKey: ['clients'] })
       qc.invalidateQueries({ queryKey: ['client', clientId] })
@@ -246,9 +273,6 @@ export function ClientDetailModal({
   const concluded       = clientData?.reservas_concluidas ?? 0
   const freeAvailable   = clientData?.reservas_gratuitas_disponiveis ?? 0
   const progressInCycle = concluded % LOYALTY.everyN
-  // Quantas reservas faltam para a próxima gratuita:
-  //   - Se progressInCycle === STAMPS_NEEDED, a próxima JA É gratuita (faltam 0 normais)
-  //   - Caso contrário, faltam STAMPS_NEEDED - progressInCycle
   const isNextFree  = progressInCycle === STAMPS_NEEDED
   const faltamNoCiclo = isNextFree ? 0 : STAMPS_NEEDED - progressInCycle
 
@@ -266,6 +290,11 @@ export function ClientDetailModal({
         <span className="flex items-center gap-2">
           {clientData.name}
           <span className="text-xs font-normal text-gray-400">#{clientData.id}</span>
+          {clientData.blocked && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-[11px] font-semibold text-red-700">
+              <ShieldAlert size={11} /> Bloqueado
+            </span>
+          )}
         </span>
       )
 
@@ -290,24 +319,31 @@ export function ClientDetailModal({
                   className="text-xs text-red-500 hover:text-red-700 mr-auto disabled:opacity-50">
                   {deleteM.isPending ? 'A eliminar...' : '🗑️ Eliminar'}
                 </button>
-                <button onClick={() => setEditMode(true)} className="btn-secondary"><Pencil size={14} className="inline mr-1" />Editar</button>
+                <button
+                  onClick={() => setEditMode(true)}
+                  className="btn-secondary flex items-center gap-1"
+                >
+                  <Pencil size={14} /> Editar
+                </button>
                 <button onClick={onClose} className="btn-secondary">Fechar</button>
               </>
         }
       >
         {editMode ? (
           <div className="space-y-3 text-sm">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Nome <span className="text-red-400">*</span></label>
-              <input type="text" value={form.name}
-                onChange={e => { setForm(f => ({...f, name: e.target.value})); setSaveError(null) }}
-                className="input text-sm w-full" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Email</label>
-              <input type="email" value={form.email}
-                onChange={e => { setForm(f => ({...f, email: e.target.value})); setSaveError(null) }}
-                className="input text-sm w-full" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nome <span className="text-red-400">*</span></label>
+                <input type="text" value={form.name}
+                  onChange={e => { setForm(f => ({...f, name: e.target.value})); setSaveError(null) }}
+                  className="input text-sm w-full" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Email</label>
+                <input type="email" value={form.email}
+                  onChange={e => { setForm(f => ({...f, email: e.target.value})); setSaveError(null) }}
+                  className="input text-sm w-full" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -343,18 +379,77 @@ export function ClientDetailModal({
                 onChange={e => { setForm(f => ({...f, notes: e.target.value})); setSaveError(null) }}
                 className="input text-sm w-full resize-none" />
             </div>
+
+            <div className="border-t border-gray-100 pt-3 mt-2 space-y-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                <ShieldAlert size={12} className="text-red-500" /> Bloqueio de reservas
+              </p>
+              <label className="flex items-start gap-3 text-xs text-gray-700 cursor-pointer select-none">
+                <span className="mt-0.5">
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={form.blocked}
+                    onChange={e => {
+                      const checked = e.target.checked
+                      setForm(f => ({ ...f, blocked: checked }))
+                      if (!checked) {
+                        setForm(f => ({ ...f, blocked_reason: '' }))
+                      }
+                      setSaveError(null)
+                    }}
+                  />
+                </span>
+                <span>
+                  <span className="font-medium flex items-center gap-1">
+                    {form.blocked ? <Lock size={11} /> : <Unlock size={11} />}
+                    {form.blocked ? 'Cliente bloqueado' : 'Cliente ativo'}
+                  </span>
+                  <span className="block text-[11px] text-gray-500 mt-0.5">
+                    Se bloqueado, o cliente deixa de conseguir criar novas reservas online.
+                  </span>
+                </span>
+              </label>
+              {form.blocked && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Motivo do bloqueio (visível na mensagem de erro)</label>
+                  <textarea
+                    rows={2}
+                    value={form.blocked_reason}
+                    onChange={e => { setForm(f => ({ ...f, blocked_reason: e.target.value })); setSaveError(null) }}
+                    className="input text-xs w-full resize-none"
+                    placeholder="Ex.: Faltas recorrentes sem aviso prévio."
+                  />
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    Esta mensagem aparece para o cliente quando tentar reservar online.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {saveError && <p className="text-xs text-red-500">{saveError}</p>}
           </div>
         ) : (
           <div className="space-y-4 text-sm">
             <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
               <ClientAvatar client={clientData} size={16} />
-              <div>
-                <p className="font-semibold text-gray-900 text-base">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-900 text-base flex items-center gap-2 flex-wrap">
                   {clientData.name}
-                  <span className="ml-2 text-xs font-normal text-gray-400">#{clientData.id}</span>
+                  <span className="text-xs font-normal text-gray-400">#{clientData.id}</span>
+                  {clientData.blocked && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-[11px] font-semibold text-red-700">
+                      <ShieldAlert size={11} /> Bloqueado
+                    </span>
+                  )}
                 </p>
                 {clientData.email && <p className="text-xs text-gray-500">{clientData.email}</p>}
+                {clientData.blocked && clientData.blocked_reason && (
+                  <p className="mt-1 text-[11px] text-red-700 bg-red-50 rounded-md px-2 py-1 flex items-start gap-1.5">
+                    <ShieldAlert size={11} className="mt-0.5" />
+                    <span>{clientData.blocked_reason}</span>
+                  </p>
+                )}
               </div>
             </div>
 
@@ -417,14 +512,6 @@ export function ClientDetailModal({
                       )}
                     </div>
                     <FidelityStamps count={concluded} everyN={LOYALTY.everyN} />
-                    {/*
-                      Lógica do texto:
-                        - isNextFree (progressInCycle === STAMPS_NEEDED):
-                          a próxima reserva JÁ é gratuita
-                        - progressInCycle === 0 && concluded === 0:
-                          ainda não tem nenhuma visita
-                        - caso geral: faltam X visitas
-                    */}
                     <p className="text-xs text-gray-400 mt-1">
                       {isNextFree
                         ? <span className="text-emerald-600 font-semibold">✨ A próxima visita é gratuita!</span>
@@ -454,6 +541,26 @@ export function ClientDetailModal({
                     </div>
                   </div>
                 </section>
+
+                {clientData.blocked && (
+                  <section>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                      <ShieldAlert size={12} className="text-red-500" /> Estado de bloqueio
+                    </p>
+                    <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2 text-[11px] text-red-700 space-y-0.5">
+                      <p className="font-semibold flex items-center gap-1">
+                        <Lock size={11} /> Cliente bloqueado para novas reservas online
+                      </p>
+                      {clientData.blocked_reason && (
+                        <p>Motivo: {clientData.blocked_reason}</p>
+                      )}
+                      {clientData.blocked_at && (
+                        <p className="text-red-600/80">Desde {fmtDate(clientData.blocked_at)}</p>
+                      )}
+                    </div>
+                  </section>
+                )}
+
                 {clientData.notes && (
                   <section>
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Notas</p>

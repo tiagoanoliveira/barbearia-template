@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Users, ChevronRight, Phone, Mail } from 'lucide-react'
+import { Search, Users, ChevronRight, Phone, Mail, ShieldAlert } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
@@ -55,10 +55,16 @@ export default function ClientsPage() {
   const [search, setSearch]     = useState('')
   const [page, setPage]         = useState(1)
   const [selected, setSelected] = useState<Client | null>(null)
+  const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['clients', { search, page }],
-    queryFn:  () => clientsApi.list({ search, page, perPage: 20 }),
+    queryKey: ['clients', { search, page, blockedFilter }],
+    queryFn:  () => clientsApi.list({
+      search,
+      page,
+      perPage: 20,
+      blocked: blockedFilter === 'all' ? undefined : blockedFilter === 'blocked' ? 1 : 0,
+    }),
     placeholderData: (prev) => prev,
   })
 
@@ -73,14 +79,49 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
         <div className="relative max-w-sm flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Pesquisar por nome, email ou telefone..."
-            value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-            className="input pl-9 w-full" />
+          <input
+            type="text"
+            placeholder="Pesquisar por nome, email ou telefone..."
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            className="input pl-9 w-full"
+          />
         </div>
-        <span className="text-sm text-gray-500 whitespace-nowrap">{total} clientes</span>
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="inline-flex items-center rounded-full bg-gray-50 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => { setBlockedFilter('all'); setPage(1) }}
+              className={`px-3 py-1.5 rounded-full transition-colors ${
+                blockedFilter === 'all' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => { setBlockedFilter('unblocked'); setPage(1) }}
+              className={`px-3 py-1.5 rounded-full transition-colors ${
+                blockedFilter === 'unblocked' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Ativos
+            </button>
+            <button
+              type="button"
+              onClick={() => { setBlockedFilter('blocked'); setPage(1) }}
+              className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1 ${
+                blockedFilter === 'blocked' ? 'bg-white shadow-sm text-red-700' : 'text-gray-500 hover:text-red-700'
+              }`}
+            >
+              <ShieldAlert size={12} /> Bloqueados
+            </button>
+          </div>
+          <span className="text-sm text-gray-500 whitespace-nowrap">{total} clientes</span>
+        </div>
       </div>
 
       <Card padding="none">
@@ -103,17 +144,29 @@ export default function ClientsPage() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Última visita</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell">Próxima reserva</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell">Cliente desde</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Estado</th>
                   <th className="w-8" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {clients.map(c => (
-                  <tr key={c.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelected(c)}>
+                  <tr
+                    key={c.id}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => setSelected(c)}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <ClientAvatar client={c} size={8} />
                         <div>
-                          <p className="font-medium text-gray-900">{c.name}</p>
+                          <p className="font-medium text-gray-900 flex items-center gap-1.5">
+                            {c.name}
+                            {c.blocked && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-50 text-[10px] font-semibold text-red-700">
+                                <ShieldAlert size={10} /> Bloqueado
+                              </span>
+                            )}
+                          </p>
                           {c.email && <p className="text-xs text-gray-400 md:hidden">{c.email}</p>}
                         </div>
                       </div>
@@ -141,6 +194,17 @@ export default function ClientsPage() {
                         : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400 hidden xl:table-cell">{fmtDate(c.created_at)}</td>
+                    <td className="px-4 py-3 text-xs hidden md:table-cell">
+                      {c.blocked ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-[11px] font-semibold text-red-700">
+                          <ShieldAlert size={10} /> Bloqueado
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-[11px] font-semibold text-emerald-700">
+                          Ativo
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3"><ChevronRight size={14} className="text-gray-400" /></td>
                   </tr>
                 ))}

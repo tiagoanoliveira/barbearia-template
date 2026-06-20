@@ -162,6 +162,10 @@ export interface Client {
    * Populado nas respostas da API quando solicitado (ex: perfil, checkout).
    */
   discounts?: Discount[]
+  /** Indica se o cliente está bloqueado para criar novas reservas. */
+  blocked?: boolean
+  /** Motivo de bloqueio (texto guardado pelo admin). */
+  blocked_reason?: string | null
 }
 
 // ─── Reserva ─────────────────────────────────────────────────────────────────────────────

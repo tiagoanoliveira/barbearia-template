@@ -26,7 +26,10 @@ export async function onRequest(context) {
           `SELECT id, nome AS name, email, telefone AS phone, nif,
                   foto_perfil AS photo_url, reservas_concluidas,
                   reservas_gratuitas_disponiveis,
-                  next_appointment_date, last_appointment_date, notas AS notes, criado_em AS created_at
+                  next_appointment_date, last_appointment_date, notas AS notes, criado_em AS created_at,
+                  bloqueado AS blocked,
+                  bloqueado_motivo AS blocked_reason,
+                  bloqueado_em AS blocked_at
            FROM clientes WHERE id = ?`
         ).bind(id).first(),
         env.DB.prepare(`
@@ -100,6 +103,28 @@ export async function onRequest(context) {
         vals.push(v)
       }
 
+      if (body.blocked !== undefined) {
+        const blocked = !!body.blocked
+        updates.push('bloqueado = ?')
+        vals.push(blocked ? 1 : 0)
+
+        if (blocked) {
+          // Bloquear: guardar motivo e admin responsável
+          updates.push('bloqueado_motivo = ?')
+          vals.push(body.blocked_reason ? sanitize(String(body.blocked_reason), 1000) : null)
+
+          updates.push('bloqueado_por_admin = ?')
+          vals.push(auth.user?.id ?? null)
+
+          updates.push('bloqueado_em = CURRENT_TIMESTAMP')
+        } else {
+          // Desbloquear: limpar campos de bloqueio
+          updates.push('bloqueado_motivo = NULL')
+          updates.push('bloqueado_por_admin = NULL')
+          updates.push('bloqueado_em = NULL')
+        }
+      }
+
       if (!updates.length) return badRequest('Nada para actualizar')
 
       updates.push('atualizado_em = CURRENT_TIMESTAMP')
@@ -113,7 +138,10 @@ export async function onRequest(context) {
         `SELECT id, nome AS name, email, telefone AS phone, nif,
                 foto_perfil AS photo_url, reservas_concluidas,
                 reservas_gratuitas_disponiveis,
-                next_appointment_date, last_appointment_date, notas AS notes, criado_em AS created_at
+                next_appointment_date, last_appointment_date, notas AS notes, criado_em AS created_at,
+                bloqueado AS blocked,
+                bloqueado_motivo AS blocked_reason,
+                bloqueado_em AS blocked_at
          FROM clientes WHERE id = ?`
       ).bind(id).first()
 

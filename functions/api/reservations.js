@@ -1,7 +1,7 @@
 import { authenticateClient } from '../utils/auth.js'
 import {
   ok, created, badRequest, unauthorized, notFound,
-  conflict, serverError, corsOptions
+  conflict, serverError, corsOptions, forbidden,
 } from '../utils/response.js'
 import { isValidDate, isValidTime, isValidId, sanitize } from '../utils/validators.js'
 import { sendReservationConfirmation } from '../utils/reservationEmails.js'
@@ -27,6 +27,18 @@ export async function onRequest(context) {
       if (!anyBarber && !isValidId(barber_id)) return badRequest('ID do barbeiro inválido')
       if (!isValidDate(date))     return badRequest('Data inválida')
       if (!isValidTime(time))     return badRequest('Hora inválida')
+
+      // Impedir que clientes bloqueados criem novas reservas
+      const blockedRow = await env.DB.prepare(
+        'SELECT bloqueado, bloqueado_motivo FROM clientes WHERE id = ?'
+      ).bind(auth.clientId).first()
+
+      if (blockedRow?.bloqueado === 1) {
+        const msg = blockedRow.bloqueado_motivo
+          ? `A tua conta está temporariamente bloqueada: ${blockedRow.bloqueado_motivo}`
+          : 'A tua conta está temporariamente bloqueada. Fala com a barbearia para mais detalhes.'
+        return forbidden(msg)
+      }
 
       const dataHora = `${date}T${time}:00`
       if (new Date(dataHora) <= getNowLisboa()) return badRequest('Não pode reservar para datas passadas')
