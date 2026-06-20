@@ -140,17 +140,19 @@ interface BarberOverride {
 }
 
 interface ServiceForm {
-  id?:              number
-  name:             string
-  duration:         string
-  price:            string
-  abreviacao:       string
-  color:            string
-  barber_overrides: BarberOverride[]
+  id?:                number
+  name:               string
+  duration:           string
+  price:              string
+  abreviacao:         string
+  color:              string
+  conta_fidelizacao:  boolean
+  barber_overrides:   BarberOverride[]
 }
 
 const emptyService = (): ServiceForm => ({
-  name: '', duration: '30', price: '0', abreviacao: '', color: '#0f7e44', barber_overrides: [],
+  name: '', duration: '30', price: '0', abreviacao: '', color: '#0f7e44',
+  conta_fidelizacao: true, barber_overrides: [],
 })
 
 function ServicosSection() {
@@ -160,8 +162,8 @@ function ServicosSection() {
     queryKey: ['admin-services'],
     queryFn:  () => adminApi.get<Service[]>('/api/admin/services'),
   })
-  const services: (Service & { barber_overrides?: BarberOverride[] })[] =
-      (data?.data as unknown as (Service & { barber_overrides?: BarberOverride[] })[]) ?? []
+  const services: (Service & { barber_overrides?: BarberOverride[]; conta_fidelizacao?: boolean })[] =
+      (data?.data as unknown as (Service & { barber_overrides?: BarberOverride[]; conta_fidelizacao?: boolean })[]) ?? []
 
   // Buscar barbeiros para o formulário de overrides
   const { data: barbersData } = useQuery({
@@ -177,7 +179,6 @@ function ServicosSection() {
   const [showOverrides, setShowOverrides] = useState(false)
 
   const openNew = () => {
-    // Inicializar overrides com todos os barbeiros activos (ativo=true, preco/duracao null → herda base)
     const overrides: BarberOverride[] = barbers
         .filter(b => (b as unknown as { active?: number }).active !== 0)
         .map(b => ({ barbeiro_id: b.id, barber_name: b.name, preco: null, duracao: null, ativo: true }))
@@ -186,8 +187,7 @@ function ServicosSection() {
     setErr(null)
   }
 
-  const openEdit = (s: Service & { barber_overrides?: BarberOverride[] }) => {
-    // Merge: barbeiros que já têm override + barbeiros sem override (herdam base)
+  const openEdit = (s: Service & { barber_overrides?: BarberOverride[]; conta_fidelizacao?: boolean }) => {
     const existingMap: Record<number, BarberOverride> = {}
     for (const ov of s.barber_overrides ?? []) existingMap[ov.barbeiro_id] = ov
 
@@ -204,6 +204,7 @@ function ServicosSection() {
       price:            String(s.price),
       abreviacao:       (s as unknown as { abreviacao?: string }).abreviacao ?? '',
       color:            (s as unknown as { color?: string }).color ?? '#0f7e44',
+      conta_fidelizacao: s.conta_fidelizacao !== false,
       barber_overrides: overrides,
     })
     setShowOverrides(false)
@@ -230,7 +231,7 @@ function ServicosSection() {
         price:    parseInt(form.price),
         abreviacao: form.abreviacao,
         color:    form.color,
-        // Só enviar overrides que difiram da base ou que estejam inactivos
+        conta_fidelizacao: form.conta_fidelizacao,
         barber_overrides: form.barber_overrides
             .filter(ov => !ov.ativo || ov.preco !== null || ov.duracao !== null)
             .map(ov => ({
@@ -271,6 +272,7 @@ function ServicosSection() {
                   <th className="text-left py-2 pr-3 font-medium">Preço base</th>
                   <th className="text-left py-2 pr-3 font-medium">Abrev.</th>
                   <th className="text-left py-2 pr-3 font-medium">Cor</th>
+                  <th className="text-left py-2 pr-3 font-medium">Fidelização</th>
                   <th className="text-left py-2 font-medium">Por barbeiro</th>
                   <th />
                 </tr>
@@ -287,8 +289,14 @@ function ServicosSection() {
                         <td className="py-2.5 pr-3 text-gray-600">{s.price}€</td>
                         <td className="py-2.5 pr-3 text-gray-500">{(s as unknown as { abreviacao?: string }).abreviacao ?? '—'}</td>
                         <td className="py-2.5 pr-3">
-                      <span className="inline-block w-5 h-5 rounded border border-gray-200"
-                            style={{ background: (s as unknown as { color?: string }).color ?? '#0f7e44' }} />
+                          <span className="inline-block w-5 h-5 rounded border border-gray-200"
+                                style={{ background: (s as unknown as { color?: string }).color ?? '#0f7e44' }} />
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          {s.conta_fidelizacao !== false
+                            ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">Conta</span>
+                            : <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">Não conta</span>
+                          }
                         </td>
                         <td className="py-2.5 pr-3">
                           {hasOverrides
@@ -346,6 +354,26 @@ function ServicosSection() {
                   <label className="block text-xs text-gray-500 mb-1">Cor</label>
                   <input type="color" className="h-9 w-full rounded border border-gray-200 cursor-pointer"
                          value={form.color} onChange={e => setForm(f => f && ({ ...f, color: e.target.value }))} />
+                </div>
+                <div className="col-span-2 sm:col-span-3">
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <span className="relative inline-flex items-center">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={form.conta_fidelizacao}
+                        onChange={e => setForm(f => f && ({ ...f, conta_fidelizacao: e.target.checked }))}
+                      />
+                      <div className="w-9 h-5 rounded-full border border-gray-300 bg-gray-200 peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-colors" />
+                      <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
+                    </span>
+                    <span className="text-sm text-gray-700">
+                      Conta para fidelização
+                      <span className="block text-xs text-gray-400 font-normal">
+                        Se desligado, este serviço não incrementa o contador do cartão de fidelidade
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </div>
 

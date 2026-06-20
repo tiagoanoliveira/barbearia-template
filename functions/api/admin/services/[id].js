@@ -12,12 +12,13 @@ export async function onRequest(context) {
   const id = parseInt(params.id)
 
   if (request.method === 'PUT') {
-    const { name, duration, price, svg, abreviacao, color, barber_overrides } = await request.json()
+    const { name, duration, price, svg, abreviacao, color, conta_fidelizacao, barber_overrides } = await request.json()
     await env.DB.prepare(
-        'UPDATE servicos SET nome = ?, duracao = ?, preco = ?, svg = ?, abreviacao = ?, color = ? WHERE id = ?'
+        'UPDATE servicos SET nome = ?, duracao = ?, preco = ?, svg = ?, abreviacao = ?, color = ?, conta_fidelizacao = ? WHERE id = ?'
     ).bind(
         sanitize(name, 100), parseInt(duration), parseInt(price),
         svg ?? 'null', sanitize(abreviacao ?? 'null', 10), color ?? '#0f7e44',
+        conta_fidelizacao === false ? 0 : 1,
         id
     ).run()
 

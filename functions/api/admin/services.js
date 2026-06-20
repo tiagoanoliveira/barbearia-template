@@ -11,7 +11,7 @@ export async function onRequest(context) {
 
   if (request.method === 'GET') {
     const { results: services } = await env.DB.prepare(
-        'SELECT id, nome AS name, duracao AS duration, preco AS price, svg, abreviacao, color FROM servicos ORDER BY id'
+        'SELECT id, nome AS name, duracao AS duration, preco AS price, svg, abreviacao, color, conta_fidelizacao FROM servicos ORDER BY id'
     ).all()
 
     // Buscar todos os overrides por barbeiro
@@ -35,18 +35,23 @@ export async function onRequest(context) {
       })
     }
 
-    return ok(services.map(s => ({ ...s, barber_overrides: overrideMap[s.id] ?? [] })))
+    return ok(services.map(s => ({
+      ...s,
+      conta_fidelizacao: s.conta_fidelizacao === 1,
+      barber_overrides: overrideMap[s.id] ?? [],
+    })))
   }
 
   if (request.method === 'POST') {
-    const { name, duration, price, svg, abreviacao, color, barber_overrides } = await request.json()
+    const { name, duration, price, svg, abreviacao, color, conta_fidelizacao, barber_overrides } = await request.json()
     if (!name || !duration || price == null) return badRequest('Nome, duração e preço são obrigatórios')
 
     const r = await env.DB.prepare(
-        'INSERT INTO servicos (nome, duracao, preco, svg, abreviacao, color) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO servicos (nome, duracao, preco, svg, abreviacao, color, conta_fidelizacao) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).bind(
         sanitize(name, 100), parseInt(duration), parseInt(price),
-        svg ?? 'null', sanitize(abreviacao ?? 'null', 10), color ?? '#0f7e44'
+        svg ?? 'null', sanitize(abreviacao ?? 'null', 10), color ?? '#0f7e44',
+        conta_fidelizacao === false ? 0 : 1
     ).run()
 
     const serviceId = r.meta.last_row_id
