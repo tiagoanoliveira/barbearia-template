@@ -377,7 +377,7 @@ function VendasProdutosContent() {
                     value={adminUserSel?.id ?? ''}
                     onChange={e => setAdminUserSel(adminUsers.find(u => u.id === Number(e.target.value)) ?? null)}
                   >
-                    <option value="">— {adminUser?.nome ?? 'Eu'} (utilizador logado) —</option>
+                    <option value="">— {adminUser?.name ?? 'Eu'} (utilizador logado) —</option>
                     {adminUsers.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
                   </select>
                 </div>
