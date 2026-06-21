@@ -97,10 +97,66 @@ function parseHistorico(raw: Reservation['historico_edicoes']): ReservationHisto
  * o que falha em new Date() em alguns motores JS.
  */
 function parseTimestamp(ts: string): Date {
-  // Substitui o espaço separador por 'T' se necessário
-  const normalized = ts.replace(' ', 'T')
-  const d = new Date(normalized)
-  return d
+  return new Date(ts.replace(' ', 'T'))
+}
+
+// Campos a ignorar no snapshot do formato novo (metadados, não alterações de dados)
+const SNAPSHOT_SKIP_KEYS = new Set(['ts', 'by'])
+
+/**
+ * Shape canónica de uma entrada do histórico após normalização.
+ * Suporta dois formatos que existem na BD:
+ *
+ * Formato legado (cliente):
+ *   { date, changed_by, changes: { campo: { anterior, novo } } }
+ *
+ * Formato novo (admin snapshot):
+ *   { ts, by, data_hora, barbeiro_id, servico_id, ... }
+ */
+interface HistoricoEntrada {
+  timestamp: string
+  autor: string
+  /** Mapa de campo → { de, para } — pode estar vazio para snapshots sem diff */
+  alteracoes: Record<string, { de: unknown; para: unknown }>
+  /** Snapshot completo dos campos (usado quando não há diff explícito) */
+  snapshot?: Record<string, unknown>
+}
+
+function normalizeHistoricoEntry(raw: any): HistoricoEntrada {
+  // ── Formato legado: { date, changed_by, changes: { campo: { anterior, novo } } }
+  if (raw.changes && typeof raw.changes === 'object') {
+    const alteracoes: Record<string, { de: unknown; para: unknown }> = {}
+    for (const [campo, val] of Object.entries(raw.changes as Record<string, any>)) {
+      alteracoes[campo] = { de: val?.anterior ?? val?.de, para: val?.novo ?? val?.para }
+    }
+    return {
+      timestamp: raw.date ?? raw.timestamp ?? '',
+      autor:     raw.changed_by ?? raw.editado_por ?? '',
+      alteracoes,
+    }
+  }
+
+  // ── Formato novo (admin snapshot): { ts, by, data_hora, barbeiro_id, ... }
+  if (raw.ts) {
+    const snapshot: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(raw)) {
+      if (!SNAPSHOT_SKIP_KEYS.has(k)) snapshot[k] = v
+    }
+    return {
+      timestamp: raw.ts,
+      autor:     raw.by ?? '',
+      alteracoes: {},
+      snapshot,
+    }
+  }
+
+  // ── Formato canónico já normalizado: { timestamp, editado_por, alteracoes }
+  return {
+    timestamp:  raw.timestamp ?? '',
+    autor:      raw.editado_por ?? raw.autor ?? '',
+    alteracoes: raw.alteracoes ?? {},
+    snapshot:   raw.snapshot,
+  }
 }
 
 // Nomes amigáveis para os campos mais comuns
@@ -108,8 +164,10 @@ const FIELD_LABELS: Record<string, string> = {
   status:           'Estado',
   data_hora:        'Data/Hora',
   barber_id:        'Barbeiro',
+  barbeiro_id:      'Barbeiro',
   barber_name:      'Barbeiro',
   service_id:       'Serviço',
+  servico_id:       'Serviço',
   service_name:     'Serviço',
   service_duration: 'Duração (min)',
   nota_privada:     'Nota privada',
@@ -159,8 +217,10 @@ function HistoricoEdicoes({ historico }: { historico: ReservationHistoricoItem[]
   const [open, setOpen] = useState(false)
   if (historico.length === 0) return null
 
+  const entries = historico.map(normalizeHistoricoEntry)
+
   // Ordem cronológica invertida: mais recente no topo
-  const sorted = [...historico].sort(
+  const sorted = [...entries].sort(
     (a, b) => parseTimestamp(b.timestamp).getTime() - parseTimestamp(a.timestamp).getTime()
   )
 
@@ -177,40 +237,64 @@ function HistoricoEdicoes({ historico }: { historico: ReservationHistoricoItem[]
 
       {open && (
         <div className="px-3 pb-3 space-y-3 border-t border-gray-100">
-          {sorted.map((item, idx) => (
-            <div key={idx} className="pt-2">
-              {/* Cabeçalho da entrada */}
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-semibold text-gray-700">
-                  {item.editado_por ? `✏️ ${item.editado_por}` : '✏️ Edição'}
-                </span>
-                <span className="text-[10px] text-gray-400">
-                  {(() => {
-                    try {
-                      return format(parseTimestamp(item.timestamp), "d MMM yyyy, HH:mm", { locale: pt })
-                    } catch {
-                      return item.timestamp
-                    }
-                  })()}
-                </span>
-              </div>
+          {sorted.map((entry, idx) => {
+            const hasDiff    = Object.keys(entry.alteracoes).length > 0
+            const hasSnapshot = entry.snapshot && Object.keys(entry.snapshot).length > 0
 
-              {/* Campos alterados */}
-              <div className="space-y-0.5">
-                {Object.entries(item.alteracoes).map(([campo, { de, para }]) => (
-                  <div key={campo} className="grid grid-cols-[auto_1fr_1fr] gap-x-2 text-[11px]">
-                    <span className="text-gray-400 font-medium min-w-[80px]">{fieldLabel(campo)}</span>
-                    <span className="text-red-500 line-through truncate" title={formatFieldValue(campo, de)}>
-                      {formatFieldValue(campo, de)}
-                    </span>
-                    <span className="text-emerald-600 font-medium truncate" title={formatFieldValue(campo, para)}>
-                      → {formatFieldValue(campo, para)}
-                    </span>
+            return (
+              <div key={idx} className="pt-2">
+                {/* Cabeçalho da entrada */}
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold text-gray-700">
+                    {entry.autor ? `✏️ ${entry.autor}` : '✏️ Edição'}
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    {(() => {
+                      try {
+                        return format(parseTimestamp(entry.timestamp), "d MMM yyyy, HH:mm", { locale: pt })
+                      } catch {
+                        return entry.timestamp
+                      }
+                    })()}
+                  </span>
+                </div>
+
+                {/* Campos alterados (formato com diff) */}
+                {hasDiff && (
+                  <div className="space-y-0.5">
+                    {Object.entries(entry.alteracoes).map(([campo, { de, para }]) => (
+                      <div key={campo} className="grid grid-cols-[auto_1fr_1fr] gap-x-2 text-[11px]">
+                        <span className="text-gray-400 font-medium min-w-[80px]">{fieldLabel(campo)}</span>
+                        <span className="text-red-500 line-through truncate" title={formatFieldValue(campo, de)}>
+                          {formatFieldValue(campo, de)}
+                        </span>
+                        <span className="text-emerald-600 font-medium truncate" title={formatFieldValue(campo, para)}>
+                          → {formatFieldValue(campo, para)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {/* Snapshot (formato admin sem diff) */}
+                {!hasDiff && hasSnapshot && (
+                  <div className="space-y-0.5">
+                    {Object.entries(entry.snapshot!).map(([campo, val]) => (
+                      <div key={campo} className="grid grid-cols-[auto_1fr] gap-x-2 text-[11px]">
+                        <span className="text-gray-400 font-medium min-w-[80px]">{fieldLabel(campo)}</span>
+                        <span className="text-gray-700 truncate">{formatFieldValue(campo, val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Fallback se não há nada para mostrar */}
+                {!hasDiff && !hasSnapshot && (
+                  <p className="text-[11px] text-gray-400 italic">Sem detalhes disponíveis</p>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
