@@ -16,10 +16,10 @@ const navItems: { to: string; label: string; icon: React.ElementType; superAdmin
     { to: ROUTES.ADMIN_CLIENTS,               label: 'Clientes',           icon: Users,         hideFromBarber: true },
     { to: ROUTES.ADMIN_UNAVAILABLE,           label: 'Indisponibilidades', icon: CalendarOff },
     { to: ROUTES.ADMIN_PRODUCT_SALES,         label: 'Venda de Produtos',  icon: ShoppingCart },
+    { to: ROUTES.ADMIN_PRODUCT_SALES_HISTORY, label: 'Histórico Vendas',   icon: History,       superAdminOnly: true },
     { to: ROUTES.ADMIN_SETTINGS,              label: 'Configuração',       icon: Settings,      superAdminOnly: true },
     { to: ROUTES.ADMIN_PAYMENTS,              label: 'Pagamentos',         icon: CreditCard,    superAdminOnly: true },
     { to: ROUTES.ADMIN_DISCOUNTS,             label: 'Descontos',          icon: Tag,           superAdminOnly: true },
-    { to: ROUTES.ADMIN_PRODUCT_SALES_HISTORY, label: 'Histórico Vendas',   icon: History,       superAdminOnly: true },
 ]
 
 const LogoMark = () => (
