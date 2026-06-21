@@ -168,6 +168,16 @@ export interface Client {
   blocked_reason?: string | null
 }
 
+// ─── Histórico de edições de uma reserva ─────────────────────────────────────────────────
+export interface ReservationHistoricoItem {
+  /** ISO 8601 da edição */
+  timestamp: string
+  /** Nome do utilizador que fez a alteração (admin, barbeiro ou 'Sistema') */
+  editado_por?: string
+  /** Campos alterados: chave = nome do campo, valor = { de, para } */
+  alteracoes: Record<string, { de: unknown; para: unknown }>
+}
+
 // ─── Reserva ─────────────────────────────────────────────────────────────────────────────
 export type ReservationStatus = 'confirmada' | 'concluida' | 'cancelada' | 'faltou'
 export type MeioPagamento = 'multibanco' | 'dinheiro' | 'outro'
@@ -216,6 +226,12 @@ export interface Reservation {
   desconto_tipo?: string | null
   desconto_percentagem?: number | null
   desconto_fixo_centimos?: number | null
+  /**
+   * Histórico de edições guardado no campo historico_edicoes da tabela reservas.
+   * Array de entradas com timestamp, quem editou e os campos alterados.
+   * Pode vir como string JSON (parse feito no componente) ou já como array.
+   */
+  historico_edicoes?: ReservationHistoricoItem[] | string | null
 }
 
 // ─── Cópia recorrente de reservas ─────────────────────────────────────────
