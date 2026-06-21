@@ -91,6 +91,18 @@ function parseHistorico(raw: Reservation['historico_edicoes']): ReservationHisto
   try { return JSON.parse(raw as string) as ReservationHistoricoItem[] } catch { return [] }
 }
 
+/**
+ * Normaliza timestamps do SQLite para ISO 8601 válido.
+ * O SQLite guarda datas como "2026-06-21 14:30:00" (espaço em vez de 'T'),
+ * o que falha em new Date() em alguns motores JS.
+ */
+function parseTimestamp(ts: string): Date {
+  // Substitui o espaço separador por 'T' se necessário
+  const normalized = ts.replace(' ', 'T')
+  const d = new Date(normalized)
+  return d
+}
+
 // Nomes amigáveis para os campos mais comuns
 const FIELD_LABELS: Record<string, string> = {
   status:           'Estado',
@@ -115,9 +127,9 @@ function fieldLabel(key: string): string {
 
 function formatFieldValue(key: string, val: unknown): string {
   if (val === null || val === undefined || val === '') return '—'
-  // Datas ISO
-  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
-    try { return format(new Date(val), "d MMM yyyy, HH:mm", { locale: pt }) } catch { /* fall through */ }
+  // Datas ISO ou SQLite datetime
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}[T ]/.test(val)) {
+    try { return format(parseTimestamp(val), "d MMM yyyy, HH:mm", { locale: pt }) } catch { /* fall through */ }
   }
   return String(val)
 }
@@ -149,7 +161,7 @@ function HistoricoEdicoes({ historico }: { historico: ReservationHistoricoItem[]
 
   // Ordem cronológica invertida: mais recente no topo
   const sorted = [...historico].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    (a, b) => parseTimestamp(b.timestamp).getTime() - parseTimestamp(a.timestamp).getTime()
   )
 
   return (
@@ -173,7 +185,13 @@ function HistoricoEdicoes({ historico }: { historico: ReservationHistoricoItem[]
                   {item.editado_por ? `✏️ ${item.editado_por}` : '✏️ Edição'}
                 </span>
                 <span className="text-[10px] text-gray-400">
-                  {format(new Date(item.timestamp), "d MMM yyyy, HH:mm", { locale: pt })}
+                  {(() => {
+                    try {
+                      return format(parseTimestamp(item.timestamp), "d MMM yyyy, HH:mm", { locale: pt })
+                    } catch {
+                      return item.timestamp
+                    }
+                  })()}
                 </span>
               </div>
 
