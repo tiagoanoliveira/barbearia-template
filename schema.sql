@@ -3,6 +3,11 @@
 -- NOTA: PRAGMA journal_mode e foreign_keys não são
 -- suportados pelo D1 — omitidos intencionalmente.
 -- ================================================
+-- Reflecte todas as migrações até 0015 (inclusive):
+--   0013_servicos_conta_fidelizacao
+--   0014_clientes_bloqueio
+--   0015_vendas_produtos
+-- ================================================
 
 -- ================================================
 -- CLIENTES
@@ -36,7 +41,12 @@ CREATE TABLE IF NOT EXISTS clientes (
   foto_perfil               TEXT,
   resend_reset_email_id        TEXT,
   resend_verification_email_id TEXT,
-  resend_email_change_id       TEXT
+  resend_email_change_id       TEXT,
+  -- ── Migração 0014: bloqueio de cliente ──────────────────────────────
+  bloqueado                 INTEGER  NOT NULL DEFAULT 0,
+  bloqueado_motivo          TEXT     DEFAULT NULL,
+  bloqueado_por_admin       INTEGER  REFERENCES admin_users(id) ON DELETE SET NULL,
+  bloqueado_em              DATETIME DEFAULT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_email_unique      ON clientes(email);
@@ -48,6 +58,8 @@ CREATE INDEX        IF NOT EXISTS idx_google_id                  ON clientes(goo
 CREATE INDEX        IF NOT EXISTS idx_facebook_id                ON clientes(facebook_id);
 CREATE INDEX        IF NOT EXISTS idx_instagram_id               ON clientes(instagram_id);
 CREATE INDEX        IF NOT EXISTS idx_auth_methods               ON clientes(auth_methods);
+-- índice adicionado na migração 0014
+CREATE INDEX        IF NOT EXISTS idx_clientes_bloqueado         ON clientes(bloqueado);
 
 -- ================================================
 -- BARBEIROS
@@ -74,8 +86,8 @@ CREATE TABLE IF NOT EXISTS servicos (
   svg                TEXT    NOT NULL DEFAULT 'null',
   abreviacao         TEXT    NOT NULL DEFAULT 'null',
   color              TEXT    NOT NULL DEFAULT '#000000',
-  -- Se 1 (default), reservas concluídas com este serviço incrementam
-  -- o contador de fidelização do cliente. Se 0, são excluídas.
+  -- Migração 0013: se 1 (default), reservas concluídas com este serviço
+  -- incrementam o contador de fidelização do cliente. Se 0, são excluídas.
   conta_fidelizacao  INTEGER NOT NULL DEFAULT 1
 );
 
@@ -294,6 +306,66 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_barbeiro   ON daily_stats(barbeiro_id
 CREATE INDEX IF NOT EXISTS idx_daily_stats_data_range ON daily_stats(data, barbeiro_id);
 
 -- ================================================
+-- PRODUTOS E VENDAS (Migração 0015)
+-- ================================================
+
+-- Categorias de produtos
+CREATE TABLE IF NOT EXISTS produto_categorias (
+  id            INTEGER  PRIMARY KEY AUTOINCREMENT,
+  nome          TEXT     NOT NULL,
+  descricao     TEXT,
+  ordem         INTEGER  NOT NULL DEFAULT 0,
+  ativo         INTEGER  NOT NULL DEFAULT 1,
+  criado_em     DATETIME NOT NULL DEFAULT (datetime('now')),
+  atualizado_em DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_produto_categorias_ativo ON produto_categorias(ativo);
+
+-- Produtos
+CREATE TABLE IF NOT EXISTS produtos (
+  id             INTEGER  PRIMARY KEY AUTOINCREMENT,
+  categoria_id   INTEGER  NOT NULL REFERENCES produto_categorias(id) ON DELETE RESTRICT,
+  nome           TEXT     NOT NULL,
+  descricao      TEXT,
+  preco_centimos INTEGER  NOT NULL DEFAULT 0,
+  ordem          INTEGER  NOT NULL DEFAULT 0,
+  ativo          INTEGER  NOT NULL DEFAULT 1,
+  criado_em      DATETIME NOT NULL DEFAULT (datetime('now')),
+  atualizado_em  DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_produtos_categoria_id ON produtos(categoria_id);
+CREATE INDEX IF NOT EXISTS idx_produtos_ativo        ON produtos(ativo);
+
+-- Cabeçalho de vendas de produtos
+CREATE TABLE IF NOT EXISTS produto_vendas (
+  id             INTEGER  PRIMARY KEY AUTOINCREMENT,
+  admin_user_id  INTEGER  NOT NULL REFERENCES admin_users(id) ON DELETE RESTRICT,
+  cliente_id     INTEGER  REFERENCES clientes(id) ON DELETE SET NULL,
+  total_centimos INTEGER  NOT NULL DEFAULT 0,
+  meio_pagamento TEXT     NOT NULL,
+  notas          TEXT,
+  criado_em      DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_produto_vendas_admin_user_id ON produto_vendas(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_produto_vendas_cliente_id   ON produto_vendas(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_produto_vendas_criado_em    ON produto_vendas(criado_em);
+
+-- Linhas de cada venda
+CREATE TABLE IF NOT EXISTS produto_venda_itens (
+  id                      INTEGER  PRIMARY KEY AUTOINCREMENT,
+  venda_id                INTEGER  NOT NULL REFERENCES produto_vendas(id) ON DELETE CASCADE,
+  produto_id              INTEGER  NOT NULL REFERENCES produtos(id) ON DELETE RESTRICT,
+  quantidade              INTEGER  NOT NULL DEFAULT 1,
+  preco_unitario_centimos INTEGER  NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_produto_venda_itens_venda_id   ON produto_venda_itens(venda_id);
+CREATE INDEX IF NOT EXISTS idx_produto_venda_itens_produto_id ON produto_venda_itens(produto_id);
+
+-- ================================================
 -- TRIGGERS
 -- ================================================
 
@@ -305,11 +377,8 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_data_range ON daily_stats(data, barbe
 -- O novo sistema de descontos (tabela descontos) convive em paralelo.
 -- ──────────────────────────────────────────────────────────────────────
 
--- ── reservas_concluidas ───────────────────────────────────────────
---
--- Só incrementa reservas_concluidas se o serviço da reserva
--- tiver conta_fidelizacao = 1. Serviços com conta_fidelizacao = 0
--- são excluídos do cartão de fidelização.
+-- ── reservas_concluidas ────────────────────────────────────────────────
+-- Atualizado na migração 0013: só incrementa se conta_fidelizacao = 1.
 -- last_appointment_date é sempre atualizado, independentemente do serviço.
 CREATE TRIGGER IF NOT EXISTS tr_reserva_concluida_increment
 AFTER UPDATE ON reservas FOR EACH ROW
@@ -486,13 +555,6 @@ BEGIN
 END;
 
 -- ================================================
--- MIGRATION (executar em instâncias existentes)
--- ================================================
--- Ver ficheiro migrations/0011_descontos.sql
--- Ver ficheiro migrations/0012_descontos_servicos_ids.sql
--- Ver ficheiro migrations/0013_servicos_conta_fidelizacao.sql
-
--- ================================================
 -- VIEWS
 -- ================================================
 CREATE VIEW IF NOT EXISTS v_reservas_complete AS
@@ -575,3 +637,21 @@ FROM notifications n
 WHERE n.is_read = 0
   AND datetime(n.created_at) > datetime('now', '-7 days')
 ORDER BY n.created_at DESC;
+
+-- View de vendas completas (Migração 0015)
+DROP VIEW IF EXISTS v_produto_vendas_complete;
+CREATE VIEW IF NOT EXISTS v_produto_vendas_complete AS
+SELECT
+  pv.id,
+  pv.admin_user_id,
+  au.nome        AS admin_user_nome,
+  pv.cliente_id,
+  c.nome         AS cliente_nome,
+  c.telefone     AS cliente_telefone,
+  pv.total_centimos,
+  pv.meio_pagamento,
+  pv.notas,
+  pv.criado_em
+FROM produto_vendas pv
+JOIN admin_users au ON pv.admin_user_id = au.id
+LEFT JOIN clientes c ON pv.cliente_id = c.id;
