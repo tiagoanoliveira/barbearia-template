@@ -5,15 +5,16 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, addMinutes } from 'date-fns'
+import { pt } from 'date-fns/locale'
 import { reservationsApi } from '@/api/reservations'
 import { barbersApi } from '@/api/barbers'
 import { adminApi } from '@/api/client'
 import Modal from '@/components/ui/Modal'
-import type { Reservation, ReservationStatus, Service, MeioPagamento, Discount } from '@/types'
+import type { Reservation, ReservationStatus, Service, MeioPagamento, Discount, ReservationHistoricoItem } from '@/types'
 import { isDiscountUsable } from '@/types'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
 
-// ─── Constantes partilhadas ─────────────────────────────────────────────────────
+// ─── Constantes partilhadas ──────────────────────────────────────────────────────────────────────
 const STATUS_LABEL_MAP: Record<string, string> = {
   confirmada: 'Confirmada',
   concluida:  'Concluída',
@@ -40,7 +41,7 @@ const OFERTA_TIPO_OPTIONS = [
   { value: 'outro',      label: '❓ Outro' },
 ]
 
-// ─── Helper: mapeia raw da API para Discount ────────────────────────────────────────────
+// ─── Helper: mapeia raw da API para Discount ────────────────────────────────────────────────────────────────
 function mapRawDiscount(d: any): Discount {
   return {
     id:                       d.id,
@@ -70,7 +71,7 @@ function mapRawDiscount(d: any): Discount {
   }
 }
 
-// ─── Helper: calcula valor do desconto sobre o preço ─────────────────────────────────────
+// ─── Helper: calcula valor do desconto sobre o preço ───────────────────────────────────────────────────────
 function calcDiscountValue(d: Discount, preco: number): number {
   if (d.value_percent != null) return Math.round(preco * d.value_percent) / 100
   if (d.value_fixed   != null) return Math.min(d.value_fixed / 100, preco)
@@ -83,7 +84,45 @@ function fmtDiscountLabel(d: Discount): string {
   return ''
 }
 
-// ─── ReservationDetailModal ──────────────────────────────────────────────────
+// ─── Helper: parse historico_edicoes ──────────────────────────────────────────────────────────────────────────
+function parseHistorico(raw: Reservation['historico_edicoes']): ReservationHistoricoItem[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw as ReservationHistoricoItem[]
+  try { return JSON.parse(raw as string) as ReservationHistoricoItem[] } catch { return [] }
+}
+
+// Nomes amigáveis para os campos mais comuns
+const FIELD_LABELS: Record<string, string> = {
+  status:           'Estado',
+  data_hora:        'Data/Hora',
+  barber_id:        'Barbeiro',
+  barber_name:      'Barbeiro',
+  service_id:       'Serviço',
+  service_name:     'Serviço',
+  service_duration: 'Duração (min)',
+  nota_privada:     'Nota privada',
+  comentario:       'Nota do cliente',
+  meio_pagamento:   'Meio de pagamento',
+  valor_pago:       'Valor pago (€)',
+  oferta_tipo:      'Tipo de oferta',
+  oferta_valor:     'Valor oferta (€)',
+  gorjeta:          'Gorjeta (€)',
+}
+
+function fieldLabel(key: string): string {
+  return FIELD_LABELS[key] ?? key
+}
+
+function formatFieldValue(key: string, val: unknown): string {
+  if (val === null || val === undefined || val === '') return '—'
+  // Datas ISO
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
+    try { return format(new Date(val), "d MMM yyyy, HH:mm", { locale: pt }) } catch { /* fall through */ }
+  }
+  return String(val)
+}
+
+// ─── ReservationDetailModal ────────────────────────────────────────────────────────────────────────────
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">
@@ -103,6 +142,63 @@ function NoteBox({ label, text, bg }: { label: string; text: string; bg: 'gray' 
   )
 }
 
+// ─── Componente de histórico de edições ────────────────────────────────────────────────────────────
+function HistoricoEdicoes({ historico }: { historico: ReservationHistoricoItem[] }) {
+  const [open, setOpen] = useState(false)
+  if (historico.length === 0) return null
+
+  // Ordem cronológica invertida: mais recente no topo
+  const sorted = [...historico].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  )
+
+  return (
+    <div className="border border-gray-100 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+      >
+        <span>📝 Histórico de edições ({historico.length})</span>
+        <span className="text-gray-400">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-3 border-t border-gray-100">
+          {sorted.map((item, idx) => (
+            <div key={idx} className="pt-2">
+              {/* Cabeçalho da entrada */}
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-semibold text-gray-700">
+                  {item.editado_por ? `✏️ ${item.editado_por}` : '✏️ Edição'}
+                </span>
+                <span className="text-[10px] text-gray-400">
+                  {format(new Date(item.timestamp), "d MMM yyyy, HH:mm", { locale: pt })}
+                </span>
+              </div>
+
+              {/* Campos alterados */}
+              <div className="space-y-0.5">
+                {Object.entries(item.alteracoes).map(([campo, { de, para }]) => (
+                  <div key={campo} className="grid grid-cols-[auto_1fr_1fr] gap-x-2 text-[11px]">
+                    <span className="text-gray-400 font-medium min-w-[80px]">{fieldLabel(campo)}</span>
+                    <span className="text-red-500 line-through truncate" title={formatFieldValue(campo, de)}>
+                      {formatFieldValue(campo, de)}
+                    </span>
+                    <span className="text-emerald-600 font-medium truncate" title={formatFieldValue(campo, para)}>
+                      → {formatFieldValue(campo, para)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ReservationDetailModal({
   reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout, onEditPayment,
 }: {
@@ -117,6 +213,8 @@ export function ReservationDetailModal({
   const r = reservation
   const dt    = new Date(r.data_hora)
   const endDt = addMinutes(dt, r.service_duration ?? 60)
+  const historico = parseHistorico(r.historico_edicoes)
+
   return (
     <Modal open onClose={onClose} title="Detalhe da reserva">
       <div className="space-y-3 text-sm">
@@ -150,6 +248,10 @@ export function ReservationDetailModal({
         } />
         {hasMeaningfulReservationComment(r.comentario) && <NoteBox label="Notas do cliente" text={r.comentario ?? ''} bg="gray" />}
         {r.nota_privada && <NoteBox label="Nota privada" text={r.nota_privada} bg="amber" />}
+
+        {/* Histórico de edições */}
+        <HistoricoEdicoes historico={historico} />
+
         <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2">
           {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
             <button onClick={onCheckout}
@@ -185,7 +287,7 @@ export function ReservationDetailModal({
   )
 }
 
-// ─── ReservationEditModal ──────────────────────────────────────────────────────
+// ─── ReservationEditModal ──────────────────────────────────────────────────────────────────────────────
 export function ReservationEditModal({
   reservation, invalidateKey, onClose, onCancelRequest, onOpenCheckout,
 }: {
@@ -346,7 +448,7 @@ export function ReservationEditModal({
   )
 }
 
-// ─── ReservationStatusModal ──────────────────────────────────────────────────────
+// ─── ReservationStatusModal ──────────────────────────────────────────────────────────────────────────────
 export function ReservationStatusModal({
   reservation, action, invalidateKey, onClose,
 }: {
@@ -406,7 +508,7 @@ export function ReservationStatusModal({
   )
 }
 
-// ─── CheckoutModal ─────────────────────────────────────────────────────────────────────
+// ─── CheckoutModal ───────────────────────────────────────────────────────────────────────────────────────
 export function CheckoutModal({
   reservation,
   invalidateKey,
@@ -425,7 +527,7 @@ export function CheckoutModal({
   const clientId     = reservation.client_id
   const hadOferta    = !!reservation.oferta_tipo
 
-  // ── Carregar descontos da tabela (admin routes) ─────────────────────────────────────────
+  // ── Carregar descontos da tabela (admin routes) ──────────────────────────────────────────────────────────────────────────
   const { data: clientDiscountsRes } = useQuery({
     queryKey: ['checkout-discounts-client', clientId],
     queryFn: () => adminApi.get<any[]>(`/api/admin/discounts/client/${clientId}`),
@@ -460,7 +562,7 @@ export function CheckoutModal({
   // Usamos um ID sentinel negativo para distinguir do ID de um desconto real.
   const GRATUITA_SENTINEL = -1
 
-  // ── Estado do modal ─────────────────────────────────────────────────────────────────
+  // ── Estado do modal ──────────────────────────────────────────────────────────────────────────────────────────
   const [selectedDiscountId, setSelectedDiscountId] = useState<number | null>(
     reservation.desconto_id ?? null
   )
@@ -494,7 +596,7 @@ export function CheckoutModal({
   const [error, setError]             = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
 
-  // ── Handler de seleção de desconto (tabela) ───────────────────────────────────────
+  // ── Handler de seleção de desconto (tabela) ───────────────────────────────────────────────────────────────────
   const handleSelectDiscount = (discountId: number | null) => {
     setSelectedDiscountId(discountId)
     if (discountId === null) {
