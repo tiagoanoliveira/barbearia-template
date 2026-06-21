@@ -157,6 +157,8 @@ export async function onRequest(context) {
       }
 
       // ── Histórico de edições ───────────────────────────────────────────────────────
+      // Guarda apenas os campos que realmente mudaram, com o valor anterior e o novo,
+      // usando o mesmo formato do cliente: { changes: { campo: { anterior, novo } } }
       const changedRelevant = data_hora !== undefined || barber_id !== undefined || service_id !== undefined
       if (changedRelevant) {
         const historicoRaw = reservation.historico_edicoes ?? '[]'
@@ -164,16 +166,29 @@ export async function onRequest(context) {
         try { historico = JSON.parse(historicoRaw) } catch { historico = [] }
         if (!Array.isArray(historico)) historico = []
 
-        historico.push({
-          ts:          new Date().toISOString(),
-          by:          auth.user?.role ?? 'admin',
-          data_hora:   data_hora    ?? null,
-          barbeiro_id: barber_id   ?? null,
-          servico_id:  service_id  ?? null,
-        })
+        const changes = {}
 
-        updates.push('historico_edicoes = ?')
-        vals.push(JSON.stringify(historico))
+        if (data_hora !== undefined && data_hora !== reservation.data_hora) {
+          changes.data_hora = { anterior: reservation.data_hora ?? null, novo: data_hora }
+        }
+        if (barber_id !== undefined && barber_id !== reservation.barbeiro_id) {
+          changes.barbeiro_id = { anterior: reservation.barbeiro_id ?? null, novo: barber_id }
+        }
+        if (service_id !== undefined && service_id !== reservation.servico_id) {
+          changes.servico_id = { anterior: reservation.servico_id ?? null, novo: service_id }
+        }
+
+        // Só adiciona entrada se houver de facto alterações
+        if (Object.keys(changes).length > 0) {
+          historico.push({
+            date:       new Date().toISOString(),
+            changed_by: auth.user?.role ?? 'admin',
+            changes,
+          })
+
+          updates.push('historico_edicoes = ?')
+          vals.push(JSON.stringify(historico))
+        }
       }
 
       if (!updates.length) return badRequest('Nada para actualizar')
