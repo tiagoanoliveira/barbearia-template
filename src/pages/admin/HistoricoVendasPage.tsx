@@ -36,7 +36,7 @@ function fmt(centimos: number | null | undefined) {
   return centimos != null ? (centimos / 100).toFixed(2) + ' €' : '—'
 }
 
-interface Produto  { id: number; nome: string; preco_centimos: number; categoria_nome: string; ativo: number }
+interface Produto   { id: number; nome: string; preco_centimos: number; categoria_nome: string; ativo: number }
 interface AdminUser { id: number; nome: string }
 
 export default function HistoricoVendasPage() {
@@ -45,21 +45,24 @@ export default function HistoricoVendasPage() {
   return <HistoricoVendasContent />
 }
 
-// ─── Modal de edição completa de venda ─────────────────────────────────────────────────
+// ─── Modal de edição completa de venda ────────────────────────────────────────────────────
 function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () => void; onSaved: () => void }) {
   const isSA = isSuperAdmin(useAdminUser())
 
-  // Produtos no carrinho de edição — pre-populado com os itens atuais
+  // Carrinho de edição — pré-populado com os itens atuais
+  // preco_editado: preço unitário custom (string para o input)
   const [carrinho, setCarrinho] = useState<Array<{
-    produto_id: number
-    produto_nome: string
-    preco_unitario_centimos: number
-    quantidade: number
-    oferta: boolean
+    produto_id:              number
+    produto_nome:            string
+    preco_unitario_centimos: number   // preço original / tabelado
+    preco_editado:           string   // preço que será cobrado (string do input)
+    quantidade:              number
+    oferta:                  boolean
   }>>(venda.itens?.map((i: any) => ({
     produto_id:              i.produto_id,
     produto_nome:            i.produto_nome,
     preco_unitario_centimos: i.preco_unitario_centimos,
+    preco_editado:           (i.preco_unitario_centimos / 100).toFixed(2),
     quantidade:              i.quantidade,
     oferta:                  !!i.oferta,
   })) ?? [])
@@ -70,29 +73,16 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
   const [meioGorjeta,   setMeioGorjeta]   = useState<string>(venda.meio_gorjeta ?? 'dinheiro')
   const [ofertaTipo,    setOfertaTipo]    = useState<string>(venda.oferta_tipo ?? '')
 
-  // Cliente — usa o tipo Client correto (campos em inglês: name, phone, email, photo_url)
-  // A API devolve cliente_nome e cliente_id na venda; construímos um Client parcial para pré-preencher
   const [clienteSel, setClienteSel] = useState<Client | null>(
     venda.cliente_id
-      ? {
-          id:         venda.cliente_id,
-          name:       venda.cliente_nome ?? '',
-          email:      venda.cliente_email ?? undefined,
-          phone:      venda.cliente_telefone ?? undefined,
-          photo_url:  venda.cliente_foto ?? undefined,
-          created_at: '',
-        }
+      ? { id: venda.cliente_id, name: venda.cliente_nome ?? '', email: venda.cliente_email ?? undefined, phone: venda.cliente_telefone ?? undefined, photo_url: venda.cliente_foto ?? undefined, created_at: '' }
       : null
   )
-
-  // Vendedor
   const [adminUserSel, setAdminUserSel] = useState<number | ''>(venda.admin_user_id ?? '')
-
   const [erro, setErro] = useState('')
 
   const isOferta = meioPagamento === 'oferta'
 
-  // Produtos disponíveis para adicionar
   const { data: produtosData } = useQuery({
     queryKey: ['produtos-ativos'],
     queryFn:  () => adminApi.get<Produto[]>('/api/admin/produtos?ativo=1'),
@@ -103,42 +93,56 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
     enabled:  isSA,
   })
 
-  const produtos   = (produtosData?.data ?? []) as Produto[]
+  const produtos   = (produtosData?.data   ?? []) as Produto[]
   const adminUsers = (adminUsersData?.data ?? []) as AdminUser[]
 
-  // Carrinho helpers
-  const totalBruto = carrinho.reduce((s, i) => s + i.preco_unitario_centimos * i.quantidade, 0)
-  const totalCobrado = carrinho.reduce((s, i) => s + (i.oferta ? 0 : i.preco_unitario_centimos * i.quantidade), 0)
+  // Preço efetivo de cada item: usa preco_editado se válido, senão o tabelado
+  function precoEfetivo(item: typeof carrinho[0]): number {
+    const v = parseFloat(item.preco_editado)
+    return isNaN(v) || v < 0 ? item.preco_unitario_centimos : Math.round(v * 100)
+  }
+
+  const totalBruto   = carrinho.reduce((s, i) => s + precoEfetivo(i) * i.quantidade, 0)
+  const totalCobrado = carrinho.reduce((s, i) => s + (i.oferta ? 0 : precoEfetivo(i) * i.quantidade), 0)
 
   function addProduto(p: Produto) {
     setCarrinho(prev => {
       const idx = prev.findIndex(i => i.produto_id === p.id)
       if (idx >= 0) { const n = [...prev]; n[idx] = { ...n[idx], quantidade: n[idx].quantidade + 1 }; return n }
-      return [...prev, { produto_id: p.id, produto_nome: p.nome, preco_unitario_centimos: p.preco_centimos, quantidade: 1, oferta: false }]
+      return [...prev, { produto_id: p.id, produto_nome: p.nome, preco_unitario_centimos: p.preco_centimos, preco_editado: (p.preco_centimos / 100).toFixed(2), quantidade: 1, oferta: false }]
     })
   }
   function setQty(pid: number, qty: number) {
     if (qty <= 0) setCarrinho(prev => prev.filter(i => i.produto_id !== pid))
-    else setCarrinho(prev => prev.map(i => i.produto_id === pid ? { ...i, quantidade: qty } : i))
+    else          setCarrinho(prev => prev.map(i => i.produto_id === pid ? { ...i, quantidade: qty } : i))
   }
   function toggleOferta(pid: number) {
     setCarrinho(prev => prev.map(i => i.produto_id === pid ? { ...i, oferta: !i.oferta } : i))
+  }
+  function setPrecoEditado(pid: number, val: string) {
+    setCarrinho(prev => prev.map(i => i.produto_id === pid ? { ...i, preco_editado: val } : i))
   }
 
   const mutation = useMutation({
     mutationFn: (payload: object) => adminApi.patch(`/api/admin/produto-vendas/${venda.id}`, payload),
     onSuccess: () => { onSaved(); onClose() },
-    onError: (e: any) => setErro(e?.message ?? 'Erro ao guardar'),
+    onError:   (e: any) => setErro(e?.message ?? 'Erro ao guardar'),
   })
 
   function guardar() {
     setErro('')
     if (!isOferta && MEIOS_COM_NOTA.includes(meioPagamento) && !notas.trim()) {
-      setErro('Indica para quem ou o motivo do meio de pagamento nas notas.')
-      return
+      setErro('Indica para quem ou o motivo do meio de pagamento nas notas.'); return
     }
     if (isOferta && !ofertaTipo) { setErro('Seleciona o tipo de oferta.'); return }
-    if (carrinho.length === 0) { setErro('Adiciona pelo menos um produto.'); return }
+    if (carrinho.length === 0)   { setErro('Adiciona pelo menos um produto.'); return }
+
+    // Validar preços editados
+    for (const item of carrinho) {
+      const v = parseFloat(item.preco_editado)
+      if (isNaN(v) || v < 0) { setErro(`Preço inválido em "${item.produto_nome}".`); return }
+    }
+
     const gorjetaCent = gorjeta.trim() !== '' ? Math.round(parseFloat(gorjeta) * 100) : null
     mutation.mutate({
       meio_pagamento: meioPagamento,
@@ -147,13 +151,12 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
       meio_gorjeta:   gorjetaCent ? meioGorjeta : null,
       oferta_tipo:    isOferta ? ofertaTipo : null,
       oferta_valor:   isOferta ? totalBruto : null,
-      total_centimos: isOferta ? 0 : totalCobrado,
       cliente_id:     clienteSel?.id ?? null,
       admin_user_id:  adminUserSel !== '' ? adminUserSel : undefined,
       itens: carrinho.map(i => ({
         produto_id:              i.produto_id,
         quantidade:              i.quantidade,
-        preco_unitario_centimos: i.preco_unitario_centimos,
+        preco_unitario_centimos: precoEfetivo(i),
         oferta:                  i.oferta,
       })),
     })
@@ -163,7 +166,8 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto p-6 relative">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={18} /></button>
-        <h2 className="text-base font-bold text-gray-900 mb-4">Editar Venda #{venda.id}</h2>
+        <h2 className="text-base font-bold text-gray-900 mb-1">Editar Venda #{venda.id}</h2>
+        <p className="text-xs text-gray-400 mb-4">Podes alterar produtos, quantidades, preços, meio de pagamento e gorjeta.</p>
 
         <div className="space-y-4">
 
@@ -172,27 +176,66 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
             <p className="label text-xs mb-2">Produtos</p>
             {carrinho.length === 0 && <p className="text-xs text-gray-400 mb-2">Sem produtos. Adiciona abaixo.</p>}
             <div className="space-y-2 mb-3">
-              {carrinho.map(item => (
-                <div key={item.produto_id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium truncate ${item.oferta ? 'line-through text-gray-400' : 'text-gray-800'}`}>{item.produto_nome}</p>
-                    <p className="text-xs text-gray-400">{(item.preco_unitario_centimos / 100).toFixed(2)} €/un</p>
+              {carrinho.map(item => {
+                const tabelado = (item.preco_unitario_centimos / 100).toFixed(2)
+                const editado  = item.preco_editado
+                const diferente = editado !== tabelado && !isNaN(parseFloat(editado))
+                return (
+                  <div key={item.produto_id} className="bg-gray-50 rounded-xl px-3 py-2 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-medium truncate ${item.oferta ? 'line-through text-gray-400' : 'text-gray-800'}`}>{item.produto_nome}</p>
+                      </div>
+                      {/* Botão oferta */}
+                      <button onClick={() => toggleOferta(item.produto_id)}
+                        title={item.oferta ? 'Remover oferta' : 'Marcar como oferta'}
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
+                          item.oferta ? 'bg-amber-100 text-amber-600' : 'bg-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-500'
+                        }`}><Gift size={10} /></button>
+                      {/* Quantidade */}
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setQty(item.produto_id, item.quantidade - 1)} className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center"><Minus size={10} /></button>
+                        <span className="text-xs font-semibold w-5 text-center">{item.quantidade}</span>
+                        <button onClick={() => setQty(item.produto_id, item.quantidade + 1)} className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center"><Plus size={10} /></button>
+                      </div>
+                      {/* Remover */}
+                      <button onClick={() => setCarrinho(prev => prev.filter(i => i.produto_id !== item.produto_id))}
+                        className="w-6 h-6 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center"><Trash2 size={10} /></button>
+                    </div>
+                    {/* Preço editável */}
+                    {!item.oferta && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-[11px] text-gray-400 w-20 shrink-0">Preço unit.</label>
+                        <div className="relative flex-1">
+                          <input
+                            type="number" min="0" step="0.01"
+                            className={`input text-xs py-1 pr-8 w-full ${
+                              diferente ? 'border-brand-400 bg-brand-50' : ''
+                            }`}
+                            value={editado}
+                            onChange={e => setPrecoEditado(item.produto_id, e.target.value)}
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">€</span>
+                        </div>
+                        {diferente && (
+                          <>
+                            <span className="text-[11px] text-gray-400 line-through">{tabelado} €</span>
+                            <button
+                              onClick={() => setPrecoEditado(item.produto_id, tabelado)}
+                              className="text-[11px] text-brand-500 hover:underline"
+                              title="Repor preço tabelado">Repor</button>
+                          </>
+                        )}
+                        <span className="text-[11px] text-gray-500 whitespace-nowrap">
+                          = {((precoEfetivo(item) * item.quantidade) / 100).toFixed(2)} €
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => toggleOferta(item.produto_id)}
-                    title={item.oferta ? 'Remover oferta' : 'Marcar como oferta'}
-                    className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${item.oferta ? 'bg-amber-100 text-amber-600' : 'bg-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-500'}`}>
-                    <Gift size={10} />
-                  </button>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => setQty(item.produto_id, item.quantidade - 1)} className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center"><Minus size={10} /></button>
-                    <span className="text-xs font-semibold w-5 text-center">{item.quantidade}</span>
-                    <button onClick={() => setQty(item.produto_id, item.quantidade + 1)} className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center"><Plus size={10} /></button>
-                  </div>
-                  <button onClick={() => setCarrinho(prev => prev.filter(i => i.produto_id !== item.produto_id))}
-                    className="w-6 h-6 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center"><Trash2 size={10} /></button>
-                </div>
-              ))}
+                )
+              })}
             </div>
+
             {/* Adicionar produto */}
             {produtos.length > 0 && (
               <details className="border border-dashed border-gray-200 rounded-xl">
@@ -210,7 +253,8 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
                 </div>
               </details>
             )}
-            <div className="flex justify-between text-sm font-semibold mt-2 px-1">
+
+            <div className="flex justify-between text-sm font-semibold mt-3 px-1">
               <span className="text-gray-500">Total a cobrar</span>
               <span className="text-gray-900">{isOferta ? '0.00 €' : (totalCobrado / 100).toFixed(2) + ' €'}</span>
             </div>
@@ -273,7 +317,7 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
             </div>
           )}
 
-          {/* ─ Cliente — componente partilhado com reservas ─ */}
+          {/* ─ Cliente ─ */}
           <div>
             <label className="label text-xs">Cliente</label>
             <ClientSearchInput
@@ -311,7 +355,7 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
   )
 }
 
-// ─── Conteúdo principal ──────────────────────────────────────────────────────
+// ─── Conteúdo principal ───────────────────────────────────────────────────────
 function HistoricoVendasContent() {
   const now      = new Date()
   const firstDay = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
@@ -319,16 +363,15 @@ function HistoricoVendasContent() {
 
   const [dateFrom,     setDateFrom]     = useState(firstDay)
   const [dateTo,       setDateTo]       = useState(today)
-  const [adminUserId,  setAdminUserId]  = useState('')   // filtro local
+  const [adminUserId,  setAdminUserId]  = useState('')
   const [expandedId,   setExpandedId]   = useState<number | null>(null)
   const [editingVenda, setEditingVenda] = useState<any | null>(null)
 
   const qc = useQueryClient()
 
-  // Carrega SEMPRE sem filtro de vendedor — filtragem feita no frontend
   const { data, isLoading } = useQuery({
     queryKey: ['produto-vendas', dateFrom, dateTo],
-    queryFn: () => adminApi.get<any[]>(`/api/admin/produto-vendas?data_inicio=${dateFrom}&data_fim=${dateTo}`),
+    queryFn:  () => adminApi.get<any[]>(`/api/admin/produto-vendas?data_inicio=${dateFrom}&data_fim=${dateTo}`),
   })
 
   const { data: adminUsersData } = useQuery({
@@ -336,10 +379,9 @@ function HistoricoVendasContent() {
     queryFn:  () => adminApi.get<any[]>('/api/admin/admin-users'),
   })
 
-  const todasVendas = (data?.data      ?? []) as any[]
+  const todasVendas = (data?.data         ?? []) as any[]
   const adminUsers  = (adminUsersData?.data ?? []) as any[]
 
-  // Filtro de vendedor aplicado no frontend — garante que funciona independentemente da API
   const vendas = useMemo(() =>
     adminUserId
       ? todasVendas.filter(v => String(v.admin_user_id) === adminUserId)
@@ -353,8 +395,8 @@ function HistoricoVendasContent() {
 
     for (const v of vendas) {
       const total = v.total_centimos ?? 0
-      const gorj  = v.gorjeta ?? 0
-      const ofv   = v.oferta_valor ?? 0
+      const gorj  = v.gorjeta        ?? 0
+      const ofv   = v.oferta_valor   ?? 0
       totalVendido  += total
       totalGorjetas += gorj
       totalOfertas  += ofv
@@ -369,7 +411,7 @@ function HistoricoVendasContent() {
     return {
       totalVendido, totalGorjetas, totalOfertas,
       media: vendas.length > 0 ? Math.round(totalVendido / vendas.length) : 0,
-      porMeio: Object.entries(porMeio).sort(([,a],[,b]) => b - a),
+      porMeio:     Object.entries(porMeio).sort(([,a],[,b]) => b - a),
       porVendedor: Object.values(porVendedor).sort((a, b) => b.total - a.total),
     }
   }, [vendas])
@@ -388,14 +430,8 @@ function HistoricoVendasContent() {
 
       <Card>
         <div className="flex flex-wrap gap-4 items-end">
-          <div>
-            <label className="label text-xs">De</label>
-            <input type="date" className="input text-sm" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-          </div>
-          <div>
-            <label className="label text-xs">Até</label>
-            <input type="date" className="input text-sm" value={dateTo} onChange={e => setDateTo(e.target.value)} />
-          </div>
+          <div><label className="label text-xs">De</label><input type="date" className="input text-sm" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></div>
+          <div><label className="label text-xs">Até</label><input type="date" className="input text-sm" value={dateTo}   onChange={e => setDateTo(e.target.value)} /></div>
           <div>
             <label className="label text-xs">Vendedor</label>
             <select className="input text-sm" value={adminUserId} onChange={e => setAdminUserId(e.target.value)}>
@@ -406,9 +442,7 @@ function HistoricoVendasContent() {
           <div className="flex gap-2">
             {shortcuts.map(p => (
               <button key={p.label} onClick={() => { setDateFrom(p.from); setDateTo(p.to) }}
-                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:border-brand-400 hover:text-brand-600 transition-colors">
-                {p.label}
-              </button>
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:border-brand-400 hover:text-brand-600 transition-colors">{p.label}</button>
             ))}
           </div>
         </div>
@@ -421,10 +455,7 @@ function HistoricoVendasContent() {
           { label: 'Média por venda', value: fmt(resumo.media) },
           { label: 'Gorjetas',        value: fmt(resumo.totalGorjetas) },
         ].map(k => (
-          <Card key={k.label}>
-            <p className="text-xs text-gray-500 mb-1">{k.label}</p>
-            <p className="text-xl font-bold text-gray-900">{k.value}</p>
-          </Card>
+          <Card key={k.label}><p className="text-xs text-gray-500 mb-1">{k.label}</p><p className="text-xl font-bold text-gray-900">{k.value}</p></Card>
         ))}
       </div>
 
@@ -433,47 +464,32 @@ function HistoricoVendasContent() {
           <h3 className="font-semibold text-sm mb-3">Por meio de pagamento</h3>
           {resumo.porMeio.length === 0
             ? <p className="text-xs text-gray-400">Sem dados</p>
-            : <div className="space-y-2">
-                {resumo.porMeio.map(([meio, total]) => (
-                  <div key={meio} className="flex justify-between text-sm">
-                    <span>{MEIO_LABEL[meio] ?? meio}</span>
-                    <span className="font-medium">{fmt(total)}</span>
-                  </div>
-                ))}
-              </div>
-          }
+            : <div className="space-y-2">{resumo.porMeio.map(([meio, total]) => (
+                <div key={meio} className="flex justify-between text-sm">
+                  <span>{MEIO_LABEL[meio] ?? meio}</span><span className="font-medium">{fmt(total)}</span>
+                </div>
+              ))}</div>}
         </Card>
         <Card>
           <h3 className="font-semibold text-sm mb-3">Gorjetas &amp; Ofertas</h3>
           <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>🎁 Total gorjetas</span>
-              <span className="font-medium">{fmt(resumo.totalGorjetas)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span><Gift size={13} className="inline mr-1 text-amber-500" />Total ofertas</span>
-              <span className="font-medium text-amber-600">{fmt(resumo.totalOfertas)}</span>
-            </div>
+            <div className="flex justify-between text-sm"><span>🎁 Total gorjetas</span><span className="font-medium">{fmt(resumo.totalGorjetas)}</span></div>
+            <div className="flex justify-between text-sm"><span><Gift size={13} className="inline mr-1 text-amber-500" />Total ofertas</span><span className="font-medium text-amber-600">{fmt(resumo.totalOfertas)}</span></div>
           </div>
         </Card>
         <Card>
           <h3 className="font-semibold text-sm mb-3">Por vendedor</h3>
           {resumo.porVendedor.length === 0
             ? <p className="text-xs text-gray-400">Sem dados</p>
-            : <div className="space-y-3">
-                {resumo.porVendedor.map(v => (
-                  <div key={v.nome}>
-                    <div className="flex justify-between text-sm font-semibold">
-                      <span>{v.nome}</span><span>{fmt(v.total)}</span>
-                    </div>
-                    <div className="pl-1 flex gap-3 text-xs text-gray-500 mt-0.5">
-                      {v.gorjetas > 0 && <span>🎁 {fmt(v.gorjetas)}</span>}
-                      {v.ofertas  > 0 && <span className="text-amber-600">Ofertas: {fmt(v.ofertas)}</span>}
-                    </div>
+            : <div className="space-y-3">{resumo.porVendedor.map(v => (
+                <div key={v.nome}>
+                  <div className="flex justify-between text-sm font-semibold"><span>{v.nome}</span><span>{fmt(v.total)}</span></div>
+                  <div className="pl-1 flex gap-3 text-xs text-gray-500 mt-0.5">
+                    {v.gorjetas > 0 && <span>🎁 {fmt(v.gorjetas)}</span>}
+                    {v.ofertas  > 0 && <span className="text-amber-600">Ofertas: {fmt(v.ofertas)}</span>}
                   </div>
-                ))}
-              </div>
-          }
+                </div>
+              ))}</div>}
         </Card>
       </div>
 
@@ -505,9 +521,7 @@ function HistoricoVendasContent() {
                     <td className="px-4 py-3 text-xs">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                         v.meio_pagamento === 'oferta' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {MEIO_LABEL[v.meio_pagamento] ?? v.meio_pagamento}
-                      </span>
+                      }`}>{MEIO_LABEL[v.meio_pagamento] ?? v.meio_pagamento}</span>
                       {v.oferta_tipo && <span className="ml-1 text-[11px] text-amber-500">({v.oferta_tipo})</span>}
                     </td>
                     <td className="px-4 py-3 font-semibold text-xs">{fmt(v.total_centimos)}</td>
@@ -548,11 +562,17 @@ function HistoricoVendasContent() {
                           <tbody className="divide-y divide-gray-100">
                             {v.itens.map((item: any, idx: number) => (
                               <tr key={idx}>
-                                <td className="py-1 pr-4">{item.produto_nome}</td>
+                                <td className="py-1 pr-4">
+                                  {item.oferta
+                                    ? <><span className="line-through text-gray-400">{item.produto_nome}</span> <span className="text-amber-500">🎁</span></>
+                                    : item.produto_nome}
+                                </td>
                                 <td className="py-1 pr-4 text-gray-400">{item.categoria_nome}</td>
                                 <td className="py-1 text-right">{item.quantidade}</td>
                                 <td className="py-1 text-right">{fmt(item.preco_unitario_centimos)}</td>
-                                <td className="py-1 text-right font-medium">{fmt(item.preco_unitario_centimos * item.quantidade)}</td>
+                                <td className="py-1 text-right font-medium">
+                                  {item.oferta ? <span className="text-amber-500">Oferta</span> : fmt(item.preco_unitario_centimos * item.quantidade)}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
