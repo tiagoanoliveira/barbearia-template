@@ -4,6 +4,7 @@ import { adminApi } from '@/api/client'
 import { clientsApi } from '@/api/clients'
 import { reservationsApi } from '@/api/reservations'
 import type { Barber, Reservation, Service } from '@/types'
+import { ClientSearchInput } from '@/components/admin/ClientSearchInput'
 
 const DEFAULT_SERVICE_DURATION = 60
 const PHONE_LIKE_PATTERN = /^\+?[\d\s\-()]*\d[\d\s\-()]{5,}$/
@@ -28,85 +29,7 @@ function inferClientDraft(input: string) {
   return { name: value, email: '', phone: '' }
 }
 
-function ClientSearch({
-  value,
-  onChange,
-  onCreateNew,
-}: {
-  value?: string
-  onChange: (id: number, name: string, email?: string) => void
-  onCreateNew: (draft: { name: string; email: string; phone: string }) => void
-}) {
-  const [q, setQ] = useState(value ?? '')
-  const [dq, setDq] = useState('')
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (value) setQ(value)
-  }, [value])
-
-  const onType = (v: string) => {
-    setQ(v)
-    setOpen(true)
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => setDq(v), 350)
-  }
-
-  const { data, isFetching } = useQuery({
-    queryKey: ['client-search', dq],
-    queryFn: () => clientsApi.list({ search: dq, page: 1, perPage: 8 }),
-    enabled: dq.length >= 1,
-  })
-
-  const results = data?.data?.items ?? []
-  const noResults = dq.trim().length > 0 && !isFetching && results.length === 0
-
-  return (
-    <div className="relative">
-      <input
-        type="text"
-        placeholder="Pesquisar cliente por nome / email / telefone"
-        value={q}
-        onChange={e => onType(e.target.value)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        className="input text-sm w-full"
-      />
-      {open && dq.trim().length > 0 && (results.length > 0 || noResults) && (
-        <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-          {results.map(c => (
-            <li
-              key={c.id}
-              className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer flex justify-between"
-              onMouseDown={() => {
-                onChange(c.id, c.name, c.email ?? undefined)
-                setQ(c.name)
-                setOpen(false)
-              }}
-            >
-              <span className="font-medium">{c.name}</span>
-              <span className="text-xs text-gray-400">{c.phone ?? c.email ?? ''}</span>
-            </li>
-          ))}
-          {noResults && (
-            <li
-              className="px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer"
-              onMouseDown={() => {
-                onCreateNew(inferClientDraft(q))
-                setOpen(false)
-              }}
-            >
-              <span className="font-medium text-brand-700">Criar novo cliente</span>
-            </li>
-          )}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-// ─── Modal inline: email placeholder detectado ─────────────────────────────
+// ─── Modal inline: email placeholder detectado ───────────────────────────────────────────────
 type EmailModalState =
   | { step: 'confirm' }                  // mostrar aviso + dois botões
   | { step: 'update'; value: string }    // campo de novo email
@@ -219,7 +142,7 @@ function PlaceholderEmailModal({
   )
 }
 
-// ─── Utilitário: calcular datas recorrentes ───────────────────────────────
+// ─── Utilitário: calcular datas recorrentes ───────────────────────────────────────────────────
 const RECURRENCE_LABELS: Record<string, string> = {
   none:        'Sem recorrência',
   weekly:      'Semanal (cada 7 dias)',
@@ -430,13 +353,13 @@ export function NewReservationForm({
   const [creatingClient, setCreatingClient] = useState(false)
   const [newClientError, setNewClientError] = useState<string | null>(null)
 
-  // Email do cliente seleccionado (guardado quando o cliente é escolhido na pesquisa)
+  // Email do cliente seleccionado (guardado quando o cliente é escolhido)
   const [selectedClientEmail, setSelectedClientEmail] = useState<string | undefined>(undefined)
 
   // Estado do modal de email placeholder
   const [showEmailModal, setShowEmailModal] = useState(false)
 
-  // Serviços disponíveis para o barbeiro seleccionado (preço e duração já correctos)
+  // Serviços disponíveis para o barbeiro seleccionado
   const selectedBarberId = (form.barber_id ?? barberId) as number
   const { data: barberSvcRes } = useQuery({
     queryKey: ['barber-services-new', selectedBarberId],
@@ -476,9 +399,7 @@ export function NewReservationForm({
     }
   }
 
-  // Chamado pelo botão "Criar reserva"
   const handleSaveClick = () => {
-    // Se send_email está activo E o cliente tem email placeholder → mostrar modal
     if (form.sendEmail && isPlaceholderEmail(selectedClientEmail)) {
       setShowEmailModal(true)
       return
@@ -486,13 +407,11 @@ export function NewReservationForm({
     onSave()
   }
 
-  // Utilizador escolheu atualizar o email
   const handleUpdateEmail = (newEmail: string) => {
     setShowEmailModal(false)
     onSave({ update_email: newEmail, send_email: true })
   }
 
-  // Utilizador escolheu confirmar sem emails
   const handleSkipEmail = () => {
     setShowEmailModal(false)
     onSave({ send_email: false })
@@ -542,18 +461,21 @@ export function NewReservationForm({
               </button>
             </div>
           ) : (
-            <ClientSearch
-              value={form.client_name}
-              onChange={(id, name, email) => {
-                onChange('client_id', id)
-                onChange('client_name', name)
-                setSelectedClientEmail(email)
+            // ─ Componente partilhado ClientSearchInput ─
+            <ClientSearchInput
+              selected={form.client_id && form.client_name
+                ? { id: form.client_id as number, name: form.client_name as string, created_at: '' }
+                : null
+              }
+              onSelect={c => {
+                onChange('client_id', c.id)
+                onChange('client_name', c.name)
+                setSelectedClientEmail(c.email ?? undefined)
               }}
-              onCreateNew={({ name, email, phone }) => {
-                setNewClientName(name)
-                setNewClientEmail(email)
-                setNewClientPhone(phone)
-                setNewClientMode(true)
+              onClear={() => {
+                onChange('client_id', undefined)
+                onChange('client_name', '')
+                setSelectedClientEmail(undefined)
               }}
             />
           )}
@@ -574,7 +496,6 @@ export function NewReservationForm({
               onChange={e => {
                 const newBarberId = Number(e.target.value)
                 onChange('barber_id', newBarberId)
-                // Limpar serviço seleccionado ao mudar barbeiro
                 onChange('service_id', undefined)
                 onChange('service_duration', undefined)
               }}
@@ -591,7 +512,6 @@ export function NewReservationForm({
                 const serviceId = Number(e.target.value)
                 const service = barberServices.find(s => s.id === serviceId)
                 onChange('service_id', serviceId)
-                // duration e price já vêm correctos do endpoint /api/barbers/:id/services
                 if (service) onChange('service_duration', service.duration)
               }}
               className="input text-sm w-full"

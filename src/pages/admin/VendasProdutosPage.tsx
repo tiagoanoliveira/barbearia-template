@@ -7,6 +7,8 @@ import { ShoppingCart, Plus, Minus, Trash2, X, ShoppingBag, Gift } from 'lucide-
 import { useAdminUser, isSuperAdmin } from '@/hooks/useAdminUser'
 import { Navigate } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
+import { ClientSearchInput } from '@/components/admin/ClientSearchInput'
+import type { Client } from '@/types'
 
 const MEIOS_COM_NOTA_OBRIGATORIA = ['mbway', 'transferencia', 'outro']
 
@@ -33,14 +35,6 @@ interface CarrinhoItem {
   oferta: boolean
 }
 
-interface Cliente {
-  id: number
-  nome: string
-  telefone?: string
-  email?: string
-  foto_perfil?: string
-}
-
 interface AdminUser {
   id: number
   nome: string
@@ -50,21 +44,6 @@ export default function VendasProdutosPage() {
   const adminUser = useAdminUser()
   if (adminUser?.role === 'barbeiro') return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
   return <VendasProdutosContent />
-}
-
-// Guard defensivo: nome pode ser null/undefined em certos registos da API
-function ClienteAvatar({ c, size = 8 }: { c: Cliente; size?: number }) {
-  const [err, setErr] = useState(false)
-  const sz = `w-${size} h-${size}`
-  const inicial = c?.nome ? c.nome.charAt(0).toUpperCase() : '?'
-  if (c?.foto_perfil && !err) {
-    return <img src={c.foto_perfil} alt={c.nome ?? ''} className={`${sz} rounded-xl object-cover flex-shrink-0`} onError={() => setErr(true)} />
-  }
-  return (
-    <div className={`${sz} bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0`}>
-      <span className="text-brand-700 font-semibold text-xs">{inicial}</span>
-    </div>
-  )
 }
 
 function VendasProdutosContent() {
@@ -81,9 +60,9 @@ function VendasProdutosContent() {
   const [ofertaToda,      setOfertaToda]      = useState(false)
   const [ofertaTipo,      setOfertaTipo]      = useState('')
 
-  const [clienteQuery, setClienteQuery] = useState('')
-  const [clienteSel,   setClienteSel]   = useState<Cliente | null>(null)
-  const [dropAberto,   setDropAberto]   = useState(false)
+  // Usa o tipo Client correto (name, phone, email, photo_url)
+  const [clienteSel, setClienteSel] = useState<Client | null>(null)
+
   const [adminUserSel, setAdminUserSel] = useState<AdminUser | null>(null)
 
   const [erro,    setErro]    = useState('')
@@ -94,12 +73,6 @@ function VendasProdutosContent() {
   const { data: produtosData, isLoading: loadingProdutos } = useQuery({
     queryKey: ['produtos-ativos'],
     queryFn:  () => adminApi.get<Produto[]>('/api/admin/produtos?ativo=1'),
-  })
-
-  const { data: clientesData } = useQuery({
-    queryKey: ['clientes-search-vendas', clienteQuery],
-    queryFn:  () => adminApi.get<any>(`/api/admin/clients?search=${encodeURIComponent(clienteQuery)}&perPage=10`),
-    enabled:  clienteQuery.length >= 2,
   })
 
   const { data: adminUsersData } = useQuery({
@@ -160,7 +133,7 @@ function VendasProdutosContent() {
     setMeioPagamento('dinheiro'); setNotaPagamento('')
     setGorjetaCentimos(''); setMeioGorjeta('dinheiro')
     setOfertaToda(false); setOfertaTipo('')
-    setClienteQuery(''); setClienteSel(null); setDropAberto(false)
+    setClienteSel(null)
     setAdminUserSel(null)
     setModalAberto(true)
   }
@@ -197,15 +170,6 @@ function VendasProdutosContent() {
     if (isSA && adminUserSel) payload.admin_user_id = adminUserSel.id
     mutation.mutate(payload)
   }
-
-  // Normaliza resposta da API — pode devolver array ou { items, total }
-  const clientes = useMemo<Cliente[]>(() => {
-    const raw = clientesData?.data
-    if (!raw) return []
-    if (Array.isArray(raw)) return raw
-    if (Array.isArray((raw as any).items)) return (raw as any).items
-    return []
-  }, [clientesData])
 
   const adminUsers = (adminUsersData?.data ?? []) as AdminUser[]
 
@@ -404,47 +368,14 @@ function VendasProdutosContent() {
                   </>
                 )}
 
-                {/* Cliente */}
+                {/* Cliente — componente partilhado */}
                 <div>
                   <label className="label text-xs">Cliente (opcional)</label>
-                  {clienteSel ? (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-brand-50 border border-brand-200 rounded-xl">
-                      <ClienteAvatar c={clienteSel} size={6} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-brand-800">{clienteSel.nome}</p>
-                        {clienteSel.telefone && <p className="text-xs text-brand-500">{clienteSel.telefone}</p>}
-                      </div>
-                      <button onClick={() => { setClienteSel(null); setClienteQuery('') }} className="text-brand-400 hover:text-brand-600"><X size={14} /></button>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <input type="text" className="input text-sm w-full"
-                        placeholder="Pesquisar por nome, email ou telefone..."
-                        value={clienteQuery}
-                        onFocus={() => { if (clientes.length > 0) setDropAberto(true) }}
-                        onBlur={() => setTimeout(() => setDropAberto(false), 150)}
-                        onChange={e => { setClienteQuery(e.target.value); setDropAberto(true) }} />
-                      {dropAberto && clientes.length > 0 && clienteQuery.length >= 2 && (
-                        <div className="absolute z-20 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
-                          {clientes.map(c => (
-                            <button key={c.id} type="button"
-                              className="w-full text-left px-3 py-2 hover:bg-brand-50 flex items-center gap-2"
-                              onMouseDown={e => { e.preventDefault(); setClienteSel(c); setClienteQuery(''); setDropAberto(false) }}>
-                              <ClienteAvatar c={c} size={6} />
-                              <div>
-                                <p className="text-sm font-medium text-gray-800">{c.nome ?? '(sem nome)'}</p>
-                                {c.telefone && <p className="text-xs text-gray-400">{c.telefone}</p>}
-                                {c.email && <p className="text-xs text-gray-400">{c.email}</p>}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {clienteQuery.length >= 2 && clientes.length === 0 && (
-                        <p className="text-xs text-gray-400 mt-1 px-1">Nenhum cliente encontrado.</p>
-                      )}
-                    </div>
-                  )}
+                  <ClientSearchInput
+                    selected={clienteSel}
+                    onSelect={c => setClienteSel(c)}
+                    onClear={() => setClienteSel(null)}
+                  />
                 </div>
 
                 {/* Vendedor */}
