@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { adminApi } from '@/api/client'
 import { clientsApi } from '@/api/clients'
 import { reservationsApi } from '@/api/reservations'
-import type { Barber, Reservation, Service } from '@/types'
+import type { Barber, Client, Reservation, Service } from '@/types'
 import { ClientSearchInput } from '@/components/admin/ClientSearchInput'
 
 const DEFAULT_SERVICE_DURATION = 60
@@ -21,18 +21,10 @@ function slotToISO(dateStr: string, slot: number, startH: number) {
   return `${dateStr}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '00')}:00`
 }
 
-function inferClientDraft(input: string) {
-  const value = input.trim()
-  if (!value) return { name: '', email: '', phone: '' }
-  if (EMAIL_LIKE_PATTERN.test(value)) return { name: '', email: value, phone: '' }
-  if (PHONE_LIKE_PATTERN.test(value)) return { name: '', email: '', phone: value }
-  return { name: value, email: '', phone: '' }
-}
-
 // ─── Modal inline: email placeholder detectado ───────────────────────────────────────────────
 type EmailModalState =
-  | { step: 'confirm' }                  // mostrar aviso + dois botões
-  | { step: 'update'; value: string }    // campo de novo email
+  | { step: 'confirm' }
+  | { step: 'update'; value: string }
 
 function PlaceholderEmailModal({
   onUpdateEmail,
@@ -353,8 +345,8 @@ export function NewReservationForm({
   const [creatingClient, setCreatingClient] = useState(false)
   const [newClientError, setNewClientError] = useState<string | null>(null)
 
-  // Email do cliente seleccionado (guardado quando o cliente é escolhido)
-  const [selectedClientEmail, setSelectedClientEmail] = useState<string | undefined>(undefined)
+  // Guarda o objecto Client COMPLETO (com photo_url, phone, email) para o ClientSearchInput mostrar avatar e contacto
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
 
   // Estado do modal de email placeholder
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -387,7 +379,7 @@ export function NewReservationForm({
       if (!res.success || !res.data) throw new Error(res.error ?? 'Não foi possível criar o cliente.')
       onChange('client_id', res.data.id)
       onChange('client_name', res.data.name)
-      setSelectedClientEmail(res.data.email ?? undefined)
+      setSelectedClient(res.data)
       setNewClientMode(false)
       setNewClientName('')
       setNewClientEmail('')
@@ -400,7 +392,7 @@ export function NewReservationForm({
   }
 
   const handleSaveClick = () => {
-    if (form.sendEmail && isPlaceholderEmail(selectedClientEmail)) {
+    if (form.sendEmail && isPlaceholderEmail(selectedClient?.email)) {
       setShowEmailModal(true)
       return
     }
@@ -461,28 +453,25 @@ export function NewReservationForm({
               </button>
             </div>
           ) : (
-            // ─ Componente partilhado ClientSearchInput ─
+            // ─ Componente partilhado — guarda Client completo para mostrar avatar e contacto ─
             <ClientSearchInput
-              selected={form.client_id && form.client_name
-                ? { id: form.client_id as number, name: form.client_name as string, created_at: '' }
-                : null
-              }
+              selected={selectedClient}
               onSelect={c => {
+                setSelectedClient(c)
                 onChange('client_id', c.id)
                 onChange('client_name', c.name)
-                setSelectedClientEmail(c.email ?? undefined)
               }}
               onClear={() => {
+                setSelectedClient(null)
                 onChange('client_id', undefined)
                 onChange('client_name', '')
-                setSelectedClientEmail(undefined)
               }}
             />
           )}
         </div>
 
         {/* Aviso visual quando o email do cliente é placeholder */}
-        {isPlaceholderEmail(selectedClientEmail) && (
+        {isPlaceholderEmail(selectedClient?.email) && (
           <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
             <span className="text-base leading-none mt-0.5">⚠️</span>
             <span>Este cliente não tem email atualizado.</span>
