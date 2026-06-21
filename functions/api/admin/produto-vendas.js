@@ -35,6 +35,8 @@ export async function onRequestGet({ request, env }) {
   let query = `
     SELECT
       pv.id, pv.total_centimos, pv.meio_pagamento, pv.notas, pv.criado_em,
+      pv.gorjeta, pv.meio_gorjeta,
+      pv.oferta_tipo, pv.oferta_valor,
       pv.admin_user_id, au.nome AS admin_user_nome,
       pv.cliente_id, c.nome AS cliente_nome, c.telefone AS cliente_telefone
     FROM produto_vendas pv
@@ -44,7 +46,6 @@ export async function onRequestGet({ request, env }) {
   `
   const args = []
 
-  // Admins normais só vêem as suas próprias vendas
   if (!isSuperAdmin) {
     query += ' AND pv.admin_user_id = ?'
     args.push(adminAuth.adminId)
@@ -63,13 +64,13 @@ export async function onRequestGet({ request, env }) {
   try {
     const { results: vendas } = await env.DB.prepare(query).bind(...args).all()
 
-    // Buscar itens de cada venda
     if (vendas.length > 0) {
       const vendaIds = vendas.map(v => v.id)
       const placeholders = vendaIds.map(() => '?').join(',')
       const { results: itens } = await env.DB.prepare(`
         SELECT
           pvi.venda_id, pvi.produto_id, pvi.quantidade, pvi.preco_unitario_centimos,
+          pvi.oferta,
           p.nome AS produto_nome, pc.nome AS categoria_nome
         FROM produto_venda_itens pvi
         JOIN produtos p ON pvi.produto_id = p.id
@@ -102,22 +103,26 @@ export async function onRequestPost({ request, env }) {
   try {
     const body = await request.json()
 
-    // Validações básicas
-    if (!body.meio_pagamento)                       return badRequest('meio_pagamento obrigatório')
+    if (!body.meio_pagamento)                            return badRequest('meio_pagamento obrigatório')
     if (!Array.isArray(body.itens) || !body.itens.length) return badRequest('itens obrigatório e não pode ser vazio')
 
     for (const item of body.itens) {
-      if (!item.produto_id)  return badRequest('produto_id obrigatório em cada item')
+      if (!item.produto_id)                        return badRequest('produto_id obrigatório em cada item')
       if (!item.quantidade || item.quantidade < 1) return badRequest('quantidade deve ser >= 1')
     }
 
-    // admin_user_id: usa o do token; superAdmin pode passar outro
+    // Validar gorjeta
+    const gorjeta = body.gorjeta != null ? Number(body.gorjeta) : null
+    if (gorjeta !== null && (!Number.isFinite(gorjeta) || gorjeta < 0)) {
+      return badRequest('gorjeta deve ser um número não-negativo (cêntimos)')
+    }
+    const meioGorjeta = (gorjeta && gorjeta > 0) ? (body.meio_gorjeta ?? null) : null
+
     const adminUserId = (adminAuth.role === 'superAdmin' && body.admin_user_id)
       ? body.admin_user_id
       : adminAuth.adminId
 
-    // Verificar produtos e calcular total
-    const prodIds     = [...new Set(body.itens.map(i => i.produto_id))]
+    const prodIds      = [...new Set(body.itens.map(i => i.produto_id))]
     const placeholders = prodIds.map(() => '?').join(',')
     const { results: produtos } = await env.DB.prepare(
       `SELECT id, preco_centimos, ativo FROM produtos WHERE id IN (${placeholders})`
@@ -134,16 +139,18 @@ export async function onRequestPost({ request, env }) {
       if (!prod.ativo) return badRequest(`Produto ${item.produto_id} está inativo`)
 
       const precoUnitario = item.preco_unitario_centimos ?? prod.preco_centimos
-      totalCentimos += precoUnitario * item.quantidade
-      itensParaInserir.push({ ...item, preco_unitario_centimos: precoUnitario })
+      const eOferta       = item.oferta === true || item.oferta === 1
+      if (!eOferta) totalCentimos += precoUnitario * item.quantidade
+      itensParaInserir.push({ ...item, preco_unitario_centimos: precoUnitario, oferta: eOferta ? 1 : 0 })
     }
 
     const now = new Date().toISOString()
 
-    // Inserir venda
     const { results: vendaResult } = await env.DB.prepare(`
-      INSERT INTO produto_vendas (admin_user_id, cliente_id, total_centimos, meio_pagamento, notas, criado_em)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO produto_vendas
+        (admin_user_id, cliente_id, total_centimos, meio_pagamento, notas,
+         gorjeta, meio_gorjeta, oferta_tipo, oferta_valor, criado_em)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING *
     `).bind(
       adminUserId,
@@ -151,20 +158,22 @@ export async function onRequestPost({ request, env }) {
       totalCentimos,
       body.meio_pagamento,
       body.notas ?? null,
+      gorjeta,
+      meioGorjeta,
+      body.oferta_tipo  ?? null,
+      body.oferta_valor ?? null,
       now
     ).all()
 
     const venda = vendaResult[0]
 
-    // Inserir itens
     for (const item of itensParaInserir) {
       await env.DB.prepare(`
-        INSERT INTO produto_venda_itens (venda_id, produto_id, quantidade, preco_unitario_centimos)
-        VALUES (?, ?, ?, ?)
-      `).bind(venda.id, item.produto_id, item.quantidade, item.preco_unitario_centimos).run()
+        INSERT INTO produto_venda_itens (venda_id, produto_id, quantidade, preco_unitario_centimos, oferta)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(venda.id, item.produto_id, item.quantidade, item.preco_unitario_centimos, item.oferta).run()
     }
 
-    // Retornar venda completa com itens
     venda.itens = itensParaInserir
 
     return ok(venda, 201)

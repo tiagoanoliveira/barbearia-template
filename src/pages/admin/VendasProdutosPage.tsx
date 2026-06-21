@@ -60,13 +60,13 @@ function VendasProdutosContent() {
   const [ofertaToda,      setOfertaToda]      = useState(false)
   const [ofertaTipo,      setOfertaTipo]      = useState('')
 
-  // Usa o tipo Client correto (name, phone, email, photo_url)
   const [clienteSel, setClienteSel] = useState<Client | null>(null)
-
   const [adminUserSel, setAdminUserSel] = useState<AdminUser | null>(null)
 
   const [erro,    setErro]    = useState('')
   const [sucesso, setSucesso] = useState(false)
+  // Snapshot do total no momento em que a venda é confirmada
+  const [totalSucesso, setTotalSucesso] = useState(0)
 
   const isSA = isSuperAdmin(adminUser)
 
@@ -123,13 +123,13 @@ function VendasProdutosContent() {
       setSucesso(true)
       setCarrinho([])
       qc.invalidateQueries({ queryKey: ['produto-vendas'] })
-      setTimeout(() => { setSucesso(false); fecharModal() }, 1800)
+      setTimeout(() => { setSucesso(false); fecharModal() }, 2200)
     },
     onError: (e: any) => setErro(e?.message ?? 'Erro ao registar venda'),
   })
 
   function abrirModal() {
-    setErro(''); setSucesso(false)
+    setErro(''); setSucesso(false); setTotalSucesso(0)
     setMeioPagamento('dinheiro'); setNotaPagamento('')
     setGorjetaCentimos(''); setMeioGorjeta('dinheiro')
     setOfertaToda(false); setOfertaTipo('')
@@ -151,9 +151,14 @@ function VendasProdutosContent() {
       return
     }
     const gorjetaCent = gorjetaCentimos.trim() !== '' ? Math.round(parseFloat(gorjetaCentimos) * 100) : null
+
+    // Guardar snapshot do total ANTES de limpar o carrinho no onSuccess
+    const totalFinal = ofertaToda ? 0 : totalCentimos
+    setTotalSucesso(totalFinal)
+
     const payload: any = {
       meio_pagamento: ofertaToda ? 'oferta' : meioPagamento,
-      total_centimos: ofertaToda ? 0 : totalCentimos,
+      total_centimos: totalFinal,
       itens: carrinho.map(i => ({
         produto_id:              i.produto.id,
         quantidade:              i.quantidade,
@@ -294,6 +299,9 @@ function VendasProdutosContent() {
               <div className="text-center py-6">
                 <p className="text-2xl mb-2">✅</p>
                 <p className="text-green-600 font-semibold">Venda registada com sucesso!</p>
+                <p className="text-gray-500 text-sm mt-1">
+                  Total cobrado: <span className="font-bold text-gray-900">{(totalSucesso / 100).toFixed(2)} €</span>
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -368,7 +376,7 @@ function VendasProdutosContent() {
                   </>
                 )}
 
-                {/* Cliente — componente partilhado */}
+                {/* Cliente */}
                 <div>
                   <label className="label text-xs">Cliente (opcional)</label>
                   <ClientSearchInput
@@ -390,7 +398,7 @@ function VendasProdutosContent() {
                   </div>
                 )}
 
-                {/* Notas livres (quando não há nota obrigatória) */}
+                {/* Notas livres */}
                 {!MEIOS_COM_NOTA_OBRIGATORIA.includes(meioPagamento) && !ofertaToda && (
                   <div>
                     <label className="label text-xs">Notas (opcional)</label>
