@@ -14,6 +14,13 @@ import { SHOP } from '../../../utils/site-config.js'
 const VALID_STATUSES = ['confirmada', 'cancelada', 'concluida', 'faltou']
 const VALID_MEIOS    = ['multibanco', 'dinheiro', 'outro']
 
+const STATUS_LABEL = {
+  confirmada: 'Confirmada',
+  concluida:  'Concluída',
+  cancelada:  'Cancelada',
+  faltou:     'Não compareceu',
+}
+
 export async function onRequest(context) {
   const { request, env, params } = context
   if (request.method === 'OPTIONS') return corsOptions()
@@ -73,12 +80,10 @@ export async function onRequest(context) {
         comentario_pagamento,
         oferta_valor,
         oferta_tipo,
-        // Ambos os nomes possíveis para o campo de reenvio
         send_email,
         reenviar_confirmacao,
       } = body
 
-      // Normalizar: qualquer dos dois campos activa o reenvio
       const deveReenviarConfirmacao = !!(send_email || reenviar_confirmacao)
 
       if (status && !VALID_STATUSES.includes(status)) return badRequest('Status inválido')
@@ -125,7 +130,6 @@ export async function onRequest(context) {
         updates.push('duracao_minutos = ?')
         vals.push(Number(service_duration))
       }
-
       if (meio_pagamento !== undefined) {
         updates.push('meio_pagamento = ?')
         vals.push(meio_pagamento)
@@ -146,7 +150,6 @@ export async function onRequest(context) {
         updates.push('comentario_pagamento = ?')
         vals.push(sanitize(comentario_pagamento, 1000))
       }
-
       if (oferta_valor !== undefined) {
         updates.push('oferta_valor = ?')
         vals.push(oferta_valor === null ? null : Number(oferta_valor))
@@ -157,25 +160,68 @@ export async function onRequest(context) {
       }
 
       // ── Histórico de edições ───────────────────────────────────────────────────────
-      // Guarda apenas os campos que realmente mudaram, com o valor anterior e o novo,
-      // usando o mesmo formato do cliente: { changes: { campo: { anterior, novo } } }
-      const changedRelevant = data_hora !== undefined || barber_id !== undefined || service_id !== undefined
+      // Campos que devem ficar registados quando mudam
+      const changedRelevant =
+        data_hora        !== undefined ||
+        barber_id        !== undefined ||
+        service_id       !== undefined ||
+        status           !== undefined ||
+        (service_duration !== undefined && Number.isFinite(Number(service_duration)))
+
       if (changedRelevant) {
         const historicoRaw = reservation.historico_edicoes ?? '[]'
         let historico = []
         try { historico = JSON.parse(historicoRaw) } catch { historico = [] }
         if (!Array.isArray(historico)) historico = []
 
+        // Resolver nomes de barbeiro antes de guardar (anterior e novo)
+        let barberNameAnterior = reservation.barbeiro_nome ?? null
+        let barberNameNovo     = null
+        if (barber_id !== undefined && barber_id !== reservation.barbeiro_id) {
+          const b = await env.DB.prepare('SELECT nome FROM barbeiros WHERE id = ?').bind(barber_id).first()
+          barberNameNovo = b?.nome ?? String(barber_id)
+        }
+
+        // Resolver nomes de serviço antes de guardar
+        let serviceNameAnterior = reservation.servico_nome ?? null
+        let serviceNameNovo     = null
+        let serviceDurationNovo = null
+        if (service_id !== undefined && service_id !== reservation.servico_id) {
+          const s = await env.DB.prepare('SELECT nome, duracao FROM servicos WHERE id = ?').bind(service_id).first()
+          serviceNameNovo     = s?.nome     ?? String(service_id)
+          serviceDurationNovo = s?.duracao  ?? null
+        }
+
         const changes = {}
+
+        if (status !== undefined && status !== reservation.status) {
+          changes.status = {
+            anterior: STATUS_LABEL[reservation.status] ?? reservation.status ?? null,
+            novo:     STATUS_LABEL[status] ?? status,
+          }
+        }
 
         if (data_hora !== undefined && data_hora !== reservation.data_hora) {
           changes.data_hora = { anterior: reservation.data_hora ?? null, novo: data_hora }
         }
+
         if (barber_id !== undefined && barber_id !== reservation.barbeiro_id) {
-          changes.barbeiro_id = { anterior: reservation.barbeiro_id ?? null, novo: barber_id }
+          changes.barbeiro = { anterior: barberNameAnterior, novo: barberNameNovo }
         }
+
         if (service_id !== undefined && service_id !== reservation.servico_id) {
-          changes.servico_id = { anterior: reservation.servico_id ?? null, novo: service_id }
+          changes.servico = { anterior: serviceNameAnterior, novo: serviceNameNovo }
+        }
+
+        if (
+          service_duration !== undefined &&
+          Number.isFinite(Number(service_duration)) &&
+          Number(service_duration) !== reservation.service_duration
+        ) {
+          changes.duracao_minutos = {
+            anterior: reservation.service_duration ?? null,
+            novo:     Number(service_duration),
+          }
         }
 
         // Só adiciona entrada se houver de facto alterações
@@ -185,7 +231,6 @@ export async function onRequest(context) {
             changed_by: auth.user?.role ?? 'admin',
             changes,
           })
-
           updates.push('historico_edicoes = ?')
           vals.push(JSON.stringify(historico))
         }
@@ -213,8 +258,7 @@ export async function onRequest(context) {
         }
       }
 
-      // 2. Conclusão → enviar pedido de avaliação Google (se configurado)
-      //    Só enviado quando a reserva PASSA a 'concluida' (não se já estava).
+      // 2. Conclusão → enviar pedido de avaliação Google
       if (status === 'concluida' && reservation.status !== 'concluida' && reservation.cliente_email) {
         sendReviewRequest(context, {
           reservaId:   reservation.id,
@@ -224,11 +268,10 @@ export async function onRequest(context) {
         })
       }
 
-      // 3. Alteração relevante → reagendar lembrete (+ confirmação se pedido)
-      // 4. Só reenvio de confirmação → enviar email directamente
       const notCancelled = status !== 'cancelada'
+      const changedSchedule = data_hora !== undefined || barber_id !== undefined || service_id !== undefined
 
-      if (notCancelled && reservation.cliente_email && (changedRelevant || deveReenviarConfirmacao)) {
+      if (notCancelled && reservation.cliente_email && (changedSchedule || deveReenviarConfirmacao)) {
         let newBarberName  = reservation.barbeiro_nome
         let newServiceName = reservation.servico_nome
         let newDuration    = reservation.service_duration
@@ -251,7 +294,7 @@ export async function onRequest(context) {
         })()
         const sequence = historicoFinal.length + 1
 
-        if (changedRelevant) {
+        if (changedSchedule) {
           context.waitUntil(
             rescheduleReminder(context, {
               reservaId:        reservation.id,
