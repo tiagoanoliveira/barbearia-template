@@ -9,6 +9,8 @@ import { useAdminUser, isSuperAdmin } from '@/hooks/useAdminUser'
 import { Navigate } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
 import { ChevronDown, ChevronUp, Pencil, X, Save, Gift, Plus, Minus, Trash2 } from 'lucide-react'
+import type { Client } from '@/types'
+import { ClientSearchInput } from '@/components/admin/ClientSearchInput'
 
 const MEIO_LABEL: Record<string, string> = {
   multibanco:    '💳 Multibanco',
@@ -34,24 +36,8 @@ function fmt(centimos: number | null | undefined) {
   return centimos != null ? (centimos / 100).toFixed(2) + ' €' : '—'
 }
 
-interface Cliente { id: number; nome: string; telefone?: string; email?: string; foto_perfil?: string }
 interface Produto  { id: number; nome: string; preco_centimos: number; categoria_nome: string; ativo: number }
 interface AdminUser { id: number; nome: string }
-
-// Avatar defensivo
-function ClienteAvatar({ c, size = 8 }: { c: Cliente; size?: number }) {
-  const [err, setErr] = useState(false)
-  const sz = `w-${size} h-${size}`
-  const inicial = c?.nome ? c.nome.charAt(0).toUpperCase() : '?'
-  if (c?.foto_perfil && !err) {
-    return <img src={c.foto_perfil} alt={c.nome ?? ''} className={`${sz} rounded-xl object-cover flex-shrink-0`} onError={() => setErr(true)} />
-  }
-  return (
-    <div className={`${sz} bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0`}>
-      <span className="text-brand-700 font-semibold text-xs">{inicial}</span>
-    </div>
-  )
-}
 
 export default function HistoricoVendasPage() {
   const adminUser = useAdminUser()
@@ -84,12 +70,20 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
   const [meioGorjeta,   setMeioGorjeta]   = useState<string>(venda.meio_gorjeta ?? 'dinheiro')
   const [ofertaTipo,    setOfertaTipo]    = useState<string>(venda.oferta_tipo ?? '')
 
-  // Cliente
-  const [clienteQuery, setClienteQuery] = useState('')
-  const [clienteSel,   setClienteSel]   = useState<Cliente | null>(
-    venda.cliente_id ? { id: venda.cliente_id, nome: venda.cliente_nome ?? '' } : null
+  // Cliente — usa o tipo Client correto (campos em inglês: name, phone, email, photo_url)
+  // A API devolve cliente_nome e cliente_id na venda; construímos um Client parcial para pré-preencher
+  const [clienteSel, setClienteSel] = useState<Client | null>(
+    venda.cliente_id
+      ? {
+          id:         venda.cliente_id,
+          name:       venda.cliente_nome ?? '',
+          email:      venda.cliente_email ?? undefined,
+          phone:      venda.cliente_telefone ?? undefined,
+          photo_url:  venda.cliente_foto ?? undefined,
+          created_at: '',
+        }
+      : null
   )
-  const [dropAberto, setDropAberto] = useState(false)
 
   // Vendedor
   const [adminUserSel, setAdminUserSel] = useState<number | ''>(venda.admin_user_id ?? '')
@@ -103,11 +97,6 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
     queryKey: ['produtos-ativos'],
     queryFn:  () => adminApi.get<Produto[]>('/api/admin/produtos?ativo=1'),
   })
-  const { data: clientesData } = useQuery({
-    queryKey: ['clientes-search-edit', clienteQuery],
-    queryFn:  () => adminApi.get<any>(`/api/admin/clients?search=${encodeURIComponent(clienteQuery)}&perPage=10`),
-    enabled:  clienteQuery.length >= 2,
-  })
   const { data: adminUsersData } = useQuery({
     queryKey: ['admin-users-list'],
     queryFn:  () => adminApi.get<AdminUser[]>('/api/admin/admin-users'),
@@ -116,13 +105,6 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
 
   const produtos   = (produtosData?.data ?? []) as Produto[]
   const adminUsers = (adminUsersData?.data ?? []) as AdminUser[]
-  const clientes = useMemo<Cliente[]>(() => {
-    const raw = clientesData?.data
-    if (!raw) return []
-    if (Array.isArray(raw)) return raw
-    if (Array.isArray((raw as any).items)) return (raw as any).items
-    return []
-  }, [clientesData])
 
   // Carrinho helpers
   const totalBruto = carrinho.reduce((s, i) => s + i.preco_unitario_centimos * i.quantidade, 0)
@@ -291,46 +273,14 @@ function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () =
             </div>
           )}
 
-          {/* ─ Cliente ─ */}
+          {/* ─ Cliente — componente partilhado com reservas ─ */}
           <div>
             <label className="label text-xs">Cliente</label>
-            {clienteSel ? (
-              <div className="flex items-center gap-2 px-3 py-2 bg-brand-50 border border-brand-200 rounded-xl">
-                <ClienteAvatar c={clienteSel} size={6} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-brand-800">{clienteSel.nome}</p>
-                  {clienteSel.telefone && <p className="text-xs text-brand-500">{clienteSel.telefone}</p>}
-                </div>
-                <button onClick={() => { setClienteSel(null); setClienteQuery('') }} className="text-brand-400 hover:text-brand-600"><X size={14} /></button>
-              </div>
-            ) : (
-              <div className="relative">
-                <input type="text" className="input text-sm w-full"
-                  placeholder="Pesquisar por nome, email ou telefone..."
-                  value={clienteQuery}
-                  onFocus={() => { if (clientes.length > 0) setDropAberto(true) }}
-                  onBlur={() => setTimeout(() => setDropAberto(false), 150)}
-                  onChange={e => { setClienteQuery(e.target.value); setDropAberto(true) }} />
-                {dropAberto && clientes.length > 0 && clienteQuery.length >= 2 && (
-                  <div className="absolute z-20 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-40 overflow-y-auto">
-                    {clientes.map(c => (
-                      <button key={c.id} type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-brand-50 flex items-center gap-2"
-                        onMouseDown={e => { e.preventDefault(); setClienteSel(c); setClienteQuery(''); setDropAberto(false) }}>
-                        <ClienteAvatar c={c} size={6} />
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">{c.nome ?? '(sem nome)'}</p>
-                          {c.telefone && <p className="text-xs text-gray-400">{c.telefone}</p>}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {clienteQuery.length >= 2 && clientes.length === 0 && (
-                  <p className="text-xs text-gray-400 mt-1 px-1">Nenhum cliente encontrado.</p>
-                )}
-              </div>
-            )}
+            <ClientSearchInput
+              selected={clienteSel}
+              onSelect={c => setClienteSel(c)}
+              onClear={() => setClienteSel(null)}
+            />
           </div>
 
           {/* ─ Vendedor ─ */}
