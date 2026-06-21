@@ -1,13 +1,10 @@
 /**
  * /api/admin/produto-vendas — Registo e listagem de vendas de produtos
  *
- * GET  /api/admin/produto-vendas   → lista vendas (superAdmin: todas; admin: as suas)
- * POST /api/admin/produto-vendas   → registar nova venda (admin/superAdmin)
- *
- * Filtros GET: data_inicio, data_fim, admin_user_id, cliente_id
- *
- * Sub-rotas em:
- *   functions/api/admin/produto-vendas/[id].js  → GET /:id  PATCH /:id
+ * GET  /api/admin/produto-vendas   → lista vendas
+ *   - superAdmin / admin : vêem todas; podem filtrar por admin_user_id
+ *   - barbeiro           : vê apenas as suas próprias
+ * POST /api/admin/produto-vendas   → registar nova venda
  */
 
 import { authenticateAdmin } from '../../utils/auth.js'
@@ -17,20 +14,19 @@ export async function onRequestOptions() {
   return corsOptions()
 }
 
-// ─── GET — lista de vendas ───────────────────────────────────────────────
+// ─── GET ────────────────────────────────────────────────────
 export async function onRequestGet({ request, env }) {
   const adminAuth = await authenticateAdmin(request, env)
   if (!adminAuth.success) return unauthorized()
 
-  const isSuperAdmin = adminAuth.role === 'superAdmin'
-  const url          = new URL(request.url)
+  const url = new URL(request.url)
 
-  const dataInicio   = url.searchParams.get('data_inicio')
-  const dataFim      = url.searchParams.get('data_fim')
-  const adminUserId  = url.searchParams.get('admin_user_id')
-  const clienteId    = url.searchParams.get('cliente_id')
-  const limit        = parseInt(url.searchParams.get('limit')  || '100')
-  const offset       = parseInt(url.searchParams.get('offset') || '0')
+  const dataInicio  = url.searchParams.get('data_inicio')
+  const dataFim     = url.searchParams.get('data_fim')
+  const adminUserId = url.searchParams.get('admin_user_id')
+  const clienteId   = url.searchParams.get('cliente_id')
+  const limit       = parseInt(url.searchParams.get('limit')  || '100')
+  const offset      = parseInt(url.searchParams.get('offset') || '0')
 
   let query = `
     SELECT
@@ -46,7 +42,9 @@ export async function onRequestGet({ request, env }) {
   `
   const args = []
 
-  if (!isSuperAdmin) {
+  // Barbeiros só vêem as suas próprias vendas.
+  // Admin e superAdmin vêem tudo e podem filtrar por admin_user_id.
+  if (adminAuth.role === 'barbeiro') {
     query += ' AND pv.admin_user_id = ?'
     args.push(adminAuth.adminId)
   } else if (adminUserId) {
@@ -54,9 +52,9 @@ export async function onRequestGet({ request, env }) {
     args.push(parseInt(adminUserId))
   }
 
-  if (clienteId)  { query += ' AND pv.cliente_id = ?';                args.push(parseInt(clienteId)) }
-  if (dataInicio) { query += ' AND date(pv.criado_em) >= date(?)';    args.push(dataInicio) }
-  if (dataFim)    { query += ' AND date(pv.criado_em) <= date(?)';    args.push(dataFim) }
+  if (clienteId)  { query += ' AND pv.cliente_id = ?';             args.push(parseInt(clienteId)) }
+  if (dataInicio) { query += ' AND date(pv.criado_em) >= date(?)'; args.push(dataInicio) }
+  if (dataFim)    { query += ' AND date(pv.criado_em) <= date(?)'; args.push(dataFim) }
 
   query += ' ORDER BY pv.criado_em DESC LIMIT ? OFFSET ?'
   args.push(limit, offset)
@@ -94,7 +92,7 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-// ─── POST — registar nova venda ─────────────────────────────────────────────
+// ─── POST ─────────────────────────────────────────────────
 export async function onRequestPost({ request, env }) {
   const adminAuth = await authenticateAdmin(request, env)
   if (!adminAuth.success) return unauthorized()
@@ -102,26 +100,21 @@ export async function onRequestPost({ request, env }) {
   try {
     const body = await request.json()
 
-    if (!body.meio_pagamento)                              return badRequest('meio_pagamento obrigatório')
-    if (!Array.isArray(body.itens) || !body.itens.length)  return badRequest('itens obrigatório e não pode ser vazio')
+    if (!body.meio_pagamento)                             return badRequest('meio_pagamento obrigatório')
+    if (!Array.isArray(body.itens) || !body.itens.length) return badRequest('itens obrigatório e não pode ser vazio')
 
     for (const item of body.itens) {
       if (!item.produto_id)                        return badRequest('produto_id obrigatório em cada item')
       if (!item.quantidade || item.quantidade < 1) return badRequest('quantidade deve ser >= 1')
     }
 
-    // Gorjeta
     const gorjeta = body.gorjeta != null ? Number(body.gorjeta) : null
     if (gorjeta !== null && (!Number.isFinite(gorjeta) || gorjeta < 0))
       return badRequest('gorjeta deve ser um número não-negativo (cêntimos)')
     const meioGorjeta = (gorjeta && gorjeta > 0) ? (body.meio_gorjeta ?? null) : null
 
-    // Vendedor: usa o body.admin_user_id se vier preenchido; caso contrário usa o user logado.
-    // Qualquer admin autenticado pode atribuir a venda a outro admin — a responsabilidade
-    // é de quem está logado no painel.
     const adminUserId = body.admin_user_id ? parseInt(body.admin_user_id) : adminAuth.adminId
 
-    // Verificar que o admin_user_id existe (evitar FK error pouco descritivo)
     if (adminUserId !== adminAuth.adminId) {
       const { results: adminCheck } = await env.DB.prepare(
         'SELECT id FROM admin_users WHERE id = ?'
@@ -161,10 +154,10 @@ export async function onRequestPost({ request, env }) {
       RETURNING *
     `).bind(
       adminUserId,
-      body.cliente_id  ?? null,
+      body.cliente_id   ?? null,
       totalCentimos,
       body.meio_pagamento,
-      body.notas       ?? null,
+      body.notas        ?? null,
       gorjeta,
       meioGorjeta,
       body.oferta_tipo  ?? null,
