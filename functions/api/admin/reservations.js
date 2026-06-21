@@ -94,6 +94,7 @@ export async function onRequest(context) {
            r.gorjeta,
            r.meio_gorjeta,
            r.comentario_pagamento,
+           r.historico_edicoes,
            c.foto_perfil               AS client_photo_url,
            c.reservas_gratuitas_disponiveis AS client_free_reservations
           FROM v_reservas_complete r
