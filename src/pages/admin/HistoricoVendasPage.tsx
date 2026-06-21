@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 import { adminApi } from '@/api/client'
@@ -8,7 +8,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { useAdminUser, isSuperAdmin } from '@/hooks/useAdminUser'
 import { Navigate } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pencil, X, Save, Gift } from 'lucide-react'
 
 const MEIO_LABEL: Record<string, string> = {
   multibanco:    '💳 Multibanco',
@@ -16,31 +16,169 @@ const MEIO_LABEL: Record<string, string> = {
   mbway:         '📱 MB Way',
   transferencia: '🏦 Transferência',
   outro:         '❓ Outro',
+  oferta:        '🎁 Oferta',
 }
 
-function fmt(centimos: number) {
-  return (centimos / 100).toFixed(2) + ' €'
+const MEIO_OPTIONS = [
+  { value: 'dinheiro',      label: '💵 Dinheiro' },
+  { value: 'multibanco',    label: '💳 Multibanco' },
+  { value: 'mbway',         label: '📱 MB Way' },
+  { value: 'transferencia', label: '🏦 Transferência' },
+  { value: 'outro',         label: '❓ Outro' },
+  { value: 'oferta',        label: '🎁 Oferta' },
+]
+
+const MEIOS_COM_NOTA = ['mbway', 'transferencia', 'outro']
+
+function fmt(centimos: number | null | undefined) {
+  return centimos != null ? (centimos / 100).toFixed(2) + ' €' : '—'
 }
 
 export default function HistoricoVendasPage() {
   const adminUser = useAdminUser()
-  const isSA      = isSuperAdmin(adminUser)
-
-  // Apenas superAdmin pode aceder
-  if (!isSA) return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
-
+  if (!isSuperAdmin(adminUser)) return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
   return <HistoricoVendasContent />
 }
 
+// ─── Modal de edição de venda ────────────────────────────────────────────────
+function EditVendaModal({ venda, onClose, onSaved }: { venda: any; onClose: () => void; onSaved: () => void }) {
+  const [meioPagamento, setMeioPagamento] = useState<string>(venda.meio_pagamento ?? 'dinheiro')
+  const [notas,         setNotas]         = useState<string>(venda.notas ?? '')
+  const [gorjeta,       setGorjeta]       = useState<string>(
+    venda.gorjeta != null ? (venda.gorjeta / 100).toFixed(2) : ''
+  )
+  const [meioGorjeta,   setMeioGorjeta]   = useState<string>(venda.meio_gorjeta ?? 'dinheiro')
+  const [ofertaTipo,    setOfertaTipo]    = useState<string>(venda.oferta_tipo ?? '')
+  const [erro,          setErro]          = useState('')
+
+  const isOferta = meioPagamento === 'oferta'
+
+  const mutation = useMutation({
+    mutationFn: (payload: object) =>
+      adminApi.patch(`/api/admin/produto-vendas/${venda.id}`, payload),
+    onSuccess: () => { onSaved(); onClose() },
+    onError: (e: any) => setErro(e?.message ?? 'Erro ao guardar'),
+  })
+
+  function guardar() {
+    setErro('')
+    if (MEIOS_COM_NOTA.includes(meioPagamento) && !notas.trim()) {
+      setErro('Indica para quem ou o motivo do meio de pagamento nas notas.')
+      return
+    }
+    if (isOferta && !ofertaTipo) {
+      setErro('Seleciona o tipo de oferta.')
+      return
+    }
+    const gorjetaCent = gorjeta.trim() !== '' ? Math.round(parseFloat(gorjeta) * 100) : null
+    mutation.mutate({
+      meio_pagamento: meioPagamento,
+      notas:          notas.trim() || null,
+      gorjeta:        gorjetaCent,
+      meio_gorjeta:   gorjetaCent ? meioGorjeta : null,
+      oferta_tipo:    isOferta ? ofertaTipo : null,
+      oferta_valor:   isOferta ? venda.total_centimos : null,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        <h2 className="text-base font-bold text-gray-900 mb-4">Editar Venda #{venda.id}</h2>
+
+        <div className="space-y-3">
+          {/* Meio de pagamento */}
+          <div>
+            <label className="label text-xs">Meio de Pagamento</label>
+            <select className="input text-sm w-full" value={meioPagamento}
+              onChange={e => { setMeioPagamento(e.target.value); setNotas(''); setOfertaTipo('') }}>
+              {MEIO_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+
+          {/* Tipo de oferta */}
+          {isOferta && (
+            <div>
+              <label className="label text-xs">Tipo de Oferta <span className="text-red-500">*</span></label>
+              <select className="input text-sm w-full" value={ofertaTipo} onChange={e => setOfertaTipo(e.target.value)}>
+                <option value="">— Selecionar —</option>
+                <option value="fidelidade">Fidelidade</option>
+                <option value="desconto">Desconto</option>
+                <option value="cortesia">Cortesia</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+          )}
+
+          {/* Nota obrigatória */}
+          {MEIOS_COM_NOTA.includes(meioPagamento) && (
+            <div>
+              <label className="label text-xs">Para quem / Motivo <span className="text-red-500">*</span></label>
+              <textarea className="input text-sm w-full resize-none" rows={2}
+                value={notas} onChange={e => setNotas(e.target.value)}
+                placeholder="Ex.: MB Way para João Silva (+351 912...)" />
+            </div>
+          )}
+
+          {/* Gorjeta */}
+          {!isOferta && (
+            <div className="border border-gray-100 rounded-xl p-3 bg-gray-50 space-y-2">
+              <p className="text-xs font-semibold text-gray-500">Gorjeta</p>
+              <div className="flex gap-2">
+                <input type="number" min="0" step="0.5" placeholder="0.00"
+                  className="input text-sm flex-1" value={gorjeta}
+                  onChange={e => setGorjeta(e.target.value)} />
+                {gorjeta.trim() !== '' && parseFloat(gorjeta) > 0 && (
+                  <select className="input text-sm w-36" value={meioGorjeta} onChange={e => setMeioGorjeta(e.target.value)}>
+                    {MEIO_OPTIONS.filter(m => m.value !== 'oferta').map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Notas livres */}
+          {!MEIOS_COM_NOTA.includes(meioPagamento) && (
+            <div>
+              <label className="label text-xs">Notas</label>
+              <textarea className="input text-sm w-full resize-none" rows={2}
+                value={notas} onChange={e => setNotas(e.target.value)}
+                placeholder="Observações..." />
+            </div>
+          )}
+
+          {erro && <p className="text-sm text-red-500 bg-red-50 rounded-xl px-3 py-2">{erro}</p>}
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button onClick={guardar} disabled={mutation.isPending}
+              className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-60">
+              <Save size={14} /> {mutation.isPending ? 'A guardar...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Conteúdo principal ──────────────────────────────────────────────────────
 function HistoricoVendasContent() {
   const now      = new Date()
   const firstDay = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
   const today    = now.toISOString().slice(0, 10)
 
-  const [dateFrom,     setDateFrom]     = useState(firstDay)
-  const [dateTo,       setDateTo]       = useState(today)
-  const [adminUserId,  setAdminUserId]  = useState('')
-  const [expandedId,   setExpandedId]   = useState<number | null>(null)
+  const [dateFrom,    setDateFrom]    = useState(firstDay)
+  const [dateTo,      setDateTo]      = useState(today)
+  const [adminUserId, setAdminUserId] = useState('')
+  const [expandedId,  setExpandedId]  = useState<number | null>(null)
+  const [editingVenda, setEditingVenda] = useState<any | null>(null)
+
+  const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
     queryKey: ['produto-vendas', dateFrom, dateTo, adminUserId],
@@ -56,10 +194,49 @@ function HistoricoVendasContent() {
     queryFn:  () => adminApi.get<any[]>('/api/admin/admin-users'),
   })
 
-  const vendas      = (data?.data      ?? []) as any[]
-  const adminUsers  = (adminUsersData?.data ?? []) as any[]
+  const vendas     = (data?.data      ?? []) as any[]
+  const adminUsers = (adminUsersData?.data ?? []) as any[]
 
-  const totalGeral  = vendas.reduce((acc: number, v: any) => acc + (v.total_centimos ?? 0), 0)
+  // ── KPIs e resumos calculados no frontend ────────────────────────────────
+  const resumo = useMemo(() => {
+    let totalVendido = 0, totalGorjetas = 0, totalOfertas = 0
+    const porMeio:    Record<string, number> = {}
+    const porVendedor: Record<string, { nome: string; total: number; gorjetas: number; ofertas: number }> = {}
+
+    for (const v of vendas) {
+      const total = v.total_centimos ?? 0
+      const gorj  = v.gorjeta ?? 0
+      const ofv   = v.oferta_valor ?? 0
+
+      totalVendido  += total
+      totalGorjetas += gorj
+      totalOfertas  += ofv
+
+      // Por meio de pagamento
+      const meio = v.meio_pagamento ?? 'outro'
+      porMeio[meio] = (porMeio[meio] ?? 0) + total
+
+      // Por vendedor
+      const uid = String(v.admin_user_id ?? 'desconhecido')
+      if (!porVendedor[uid]) porVendedor[uid] = { nome: v.admin_user_nome ?? '—', total: 0, gorjetas: 0, ofertas: 0 }
+      porVendedor[uid].total    += total
+      porVendedor[uid].gorjetas += gorj
+      porVendedor[uid].ofertas  += ofv
+    }
+
+    return {
+      totalVendido, totalGorjetas, totalOfertas,
+      media: vendas.length > 0 ? Math.round(totalVendido / vendas.length) : 0,
+      porMeio: Object.entries(porMeio).sort(([,a],[,b]) => b - a),
+      porVendedor: Object.values(porVendedor).sort((a, b) => b.total - a.total),
+    }
+  }, [vendas])
+
+  const shortcuts = [
+    { label: 'Este mês',    from: firstDay, to: today },
+    { label: 'Mês passado', from: (() => { const d = new Date(now.getFullYear(), now.getMonth()-1, 1); return d.toISOString().slice(0,10) })(), to: (() => { const d = new Date(now.getFullYear(), now.getMonth(), 0); return d.toISOString().slice(0,10) })() },
+    { label: 'Este ano',    from: `${now.getFullYear()}-01-01`, to: today },
+  ]
 
   if (isLoading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
 
@@ -82,17 +259,11 @@ function HistoricoVendasContent() {
             <label className="label text-xs">Vendedor</label>
             <select className="input text-sm" value={adminUserId} onChange={e => setAdminUserId(e.target.value)}>
               <option value="">Todos</option>
-              {adminUsers.map((u: any) => (
-                <option key={u.id} value={u.id}>{u.nome}</option>
-              ))}
+              {adminUsers.map((u: any) => <option key={u.id} value={u.id}>{u.nome}</option>)}
             </select>
           </div>
           <div className="flex gap-2">
-            {[
-              { label: 'Este mês',    from: firstDay, to: today },
-              { label: 'Mês passado', from: (() => { const d = new Date(now.getFullYear(), now.getMonth()-1, 1); return d.toISOString().slice(0,10) })(), to: (() => { const d = new Date(now.getFullYear(), now.getMonth(), 0); return d.toISOString().slice(0,10) })() },
-              { label: 'Este ano',    from: `${now.getFullYear()}-01-01`, to: today },
-            ].map(p => (
+            {shortcuts.map(p => (
               <button key={p.label} onClick={() => { setDateFrom(p.from); setDateTo(p.to) }}
                 className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:border-brand-400 hover:text-brand-600 transition-colors">
                 {p.label}
@@ -102,25 +273,82 @@ function HistoricoVendasContent() {
         </div>
       </Card>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      {/* KPIs principais */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[
+          { label: 'Total vendido',  value: fmt(resumo.totalVendido),  sub: null },
+          { label: 'Nº de vendas',   value: String(vendas.length),     sub: null },
+          { label: 'Média por venda', value: fmt(resumo.media),        sub: null },
+          { label: 'Gorjetas',       value: fmt(resumo.totalGorjetas), sub: null },
+        ].map(k => (
+          <Card key={k.label}>
+            <p className="text-xs text-gray-500 mb-1">{k.label}</p>
+            <p className="text-xl font-bold text-gray-900">{k.value}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* Resumos detalhados */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+        {/* Por meio de pagamento */}
         <Card>
-          <p className="text-xs text-gray-500 mb-1">Total vendido</p>
-          <p className="text-xl font-bold text-gray-900">{fmt(totalGeral)}</p>
+          <h3 className="font-semibold text-sm mb-3">Por meio de pagamento</h3>
+          {resumo.porMeio.length === 0
+            ? <p className="text-xs text-gray-400">Sem dados</p>
+            : <div className="space-y-2">
+                {resumo.porMeio.map(([meio, total]) => (
+                  <div key={meio} className="flex justify-between text-sm">
+                    <span>{MEIO_LABEL[meio] ?? meio}</span>
+                    <span className="font-medium">{fmt(total)}</span>
+                  </div>
+                ))}
+              </div>
+          }
         </Card>
+
+        {/* Gorjetas e Ofertas */}
         <Card>
-          <p className="text-xs text-gray-500 mb-1">Nº de vendas</p>
-          <p className="text-xl font-bold text-gray-900">{vendas.length}</p>
+          <h3 className="font-semibold text-sm mb-3">Gorjetas &amp; Ofertas</h3>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>🎁 Total gorjetas</span>
+              <span className="font-medium">{fmt(resumo.totalGorjetas)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>
+                <Gift size={13} className="inline mr-1 text-amber-500" />
+                Total ofertas
+              </span>
+              <span className="font-medium text-amber-600">{fmt(resumo.totalOfertas)}</span>
+            </div>
+          </div>
         </Card>
+
+        {/* Por vendedor */}
         <Card>
-          <p className="text-xs text-gray-500 mb-1">Média por venda</p>
-          <p className="text-xl font-bold text-gray-900">
-            {vendas.length > 0 ? fmt(Math.round(totalGeral / vendas.length)) : '—'}
-          </p>
+          <h3 className="font-semibold text-sm mb-3">Por vendedor</h3>
+          {resumo.porVendedor.length === 0
+            ? <p className="text-xs text-gray-400">Sem dados</p>
+            : <div className="space-y-3">
+                {resumo.porVendedor.map(v => (
+                  <div key={v.nome}>
+                    <div className="flex justify-between text-sm font-semibold">
+                      <span>{v.nome}</span>
+                      <span>{fmt(v.total)}</span>
+                    </div>
+                    <div className="pl-1 flex gap-3 text-xs text-gray-500 mt-0.5">
+                      {v.gorjetas > 0 && <span>🎁 {fmt(v.gorjetas)}</span>}
+                      {v.ofertas  > 0 && <span className="text-amber-600">Ofertas: {fmt(v.ofertas)}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+          }
         </Card>
       </div>
 
-      {/* Tabela */}
+      {/* Tabela de detalhe */}
       <Card padding="none">
         <div className="px-5 py-3 border-b border-gray-100">
           <h3 className="font-semibold text-sm">Detalhe das vendas</h3>
@@ -129,18 +357,14 @@ function HistoricoVendasContent() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {['Data', 'Vendedor', 'Cliente', 'Meio Pag.', 'Total', 'Notas', ''].map(h => (
+                {['Data','Vendedor','Cliente','Meio Pag.','Total','Gorjeta','Notas',''].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {vendas.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="text-center text-gray-400 py-8 text-xs">
-                    Sem vendas no período selecionado
-                  </td>
-                </tr>
+                <tr><td colSpan={8} className="text-center text-gray-400 py-8 text-xs">Sem vendas no período selecionado</td></tr>
               )}
               {vendas.map((v: any) => (
                 <>
@@ -148,26 +372,46 @@ function HistoricoVendasContent() {
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {format(parseISO(v.criado_em), "d MMM yyyy HH:mm", { locale: pt })}
                     </td>
-                    <td className="px-4 py-3">{v.admin_user_nome}</td>
-                    <td className="px-4 py-3">{v.cliente_nome ?? <span className="text-gray-400">—</span>}</td>
-                    <td className="px-4 py-3 text-xs">{MEIO_LABEL[v.meio_pagamento] ?? v.meio_pagamento}</td>
-                    <td className="px-4 py-3 font-semibold">{fmt(v.total_centimos)}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{v.notas ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      {v.itens?.length > 0 && (
-                        <button
-                          onClick={() => setExpandedId(expandedId === v.id ? null : v.id)}
-                          className="text-xs px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center gap-1"
-                        >
-                          {expandedId === v.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                          {v.itens.length} {v.itens.length === 1 ? 'item' : 'itens'}
-                        </button>
+                    <td className="px-4 py-3 text-xs">{v.admin_user_nome}</td>
+                    <td className="px-4 py-3 text-xs">{v.cliente_nome ?? <span className="text-gray-400">—</span>}</td>
+                    <td className="px-4 py-3 text-xs">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                        v.meio_pagamento === 'oferta' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {MEIO_LABEL[v.meio_pagamento] ?? v.meio_pagamento}
+                      </span>
+                      {v.oferta_tipo && (
+                        <span className="ml-1 text-[11px] text-amber-500">({v.oferta_tipo})</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-xs">{fmt(v.total_centimos)}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {v.gorjeta ? `${fmt(v.gorjeta)} ${MEIO_LABEL[v.meio_gorjeta] ? '· ' + MEIO_LABEL[v.meio_gorjeta] : ''}` : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[140px] truncate" title={v.notas ?? ''}>{v.notas ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {v.itens?.length > 0 && (
+                          <button
+                            onClick={() => setExpandedId(expandedId === v.id ? null : v.id)}
+                            className="text-xs px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center gap-1"
+                          >
+                            {expandedId === v.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            {v.itens.length}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setEditingVenda(v)}
+                          className="text-xs px-2 py-1 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 flex items-center gap-1 font-medium"
+                        >
+                          <Pencil size={11} /> Editar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {expandedId === v.id && (
                     <tr key={`${v.id}-itens`} className="bg-gray-50">
-                      <td colSpan={7} className="px-8 py-3">
+                      <td colSpan={8} className="px-8 py-3">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-gray-400">
@@ -201,8 +445,15 @@ function HistoricoVendasContent() {
           </table>
         </div>
       </Card>
+
+      {/* Modal de edição */}
+      {editingVenda && (
+        <EditVendaModal
+          venda={editingVenda}
+          onClose={() => setEditingVenda(null)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['produto-vendas'] })}
+        />
+      )}
     </div>
   )
 }
-
-const now = new Date()

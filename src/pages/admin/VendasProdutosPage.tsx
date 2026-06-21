@@ -3,17 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminApi } from '@/api/client'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import { ShoppingCart, Plus, Minus, Trash2, X, ShoppingBag } from 'lucide-react'
+import { ShoppingCart, Plus, Minus, Trash2, X, ShoppingBag, Gift } from 'lucide-react'
 import { useAdminUser, isSuperAdmin } from '@/hooks/useAdminUser'
 import { Navigate } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
 
+// Meios que exigem nota explicativa
+const MEIOS_COM_NOTA_OBRIGATORIA = ['mbway', 'transferencia', 'outro']
+
 const MEIO_LABELS = [
-  { value: 'dinheiro',    label: '💵 Dinheiro' },
-  { value: 'multibanco',  label: '💳 Multibanco' },
-  { value: 'mbway',       label: '📱 MB Way' },
+  { value: 'dinheiro',      label: '💵 Dinheiro' },
+  { value: 'multibanco',    label: '💳 Multibanco' },
+  { value: 'mbway',         label: '📱 MB Way' },
   { value: 'transferencia', label: '🏦 Transferência' },
-  { value: 'outro',       label: '❓ Outro' },
+  { value: 'outro',         label: '❓ Outro' },
 ]
 
 interface Produto {
@@ -28,12 +31,15 @@ interface Produto {
 interface CarrinhoItem {
   produto: Produto
   quantidade: number
+  oferta: boolean  // true = este item é oferecido
 }
 
 interface Cliente {
   id: number
   nome: string
   telefone?: string
+  email?: string
+  foto_perfil?: string
 }
 
 interface AdminUser {
@@ -43,12 +49,21 @@ interface AdminUser {
 
 export default function VendasProdutosPage() {
   const adminUser = useAdminUser()
-  const isBarber  = adminUser?.role === 'barbeiro'
-
-  // Barbeiros não têm acesso a vendas de produtos
-  if (isBarber) return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
-
+  if (adminUser?.role === 'barbeiro') return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />
   return <VendasProdutosContent />
+}
+
+function ClienteAvatar({ c, size = 8 }: { c: Cliente; size?: number }) {
+  const [err, setErr] = useState(false)
+  const sz = `w-${size} h-${size}`
+  if (c.foto_perfil && !err) {
+    return <img src={c.foto_perfil} alt={c.nome} className={`${sz} rounded-xl object-cover flex-shrink-0`} onError={() => setErr(true)} />
+  }
+  return (
+    <div className={`${sz} bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0`}>
+      <span className="text-brand-700 font-semibold text-xs">{c.nome.charAt(0).toUpperCase()}</span>
+    </div>
+  )
 }
 
 function VendasProdutosContent() {
@@ -58,14 +73,24 @@ function VendasProdutosContent() {
   const [carrinho, setCarrinho] = useState<CarrinhoItem[]>([])
   const [modalAberto, setModalAberto] = useState(false)
 
-  // Dados do modal de pagamento
-  const [meioPagamento, setMeioPagamento] = useState('dinheiro')
-  const [clienteQuery,  setClienteQuery]  = useState('')
-  const [clienteSel,    setClienteSel]    = useState<Cliente | null>(null)
-  const [adminUserSel,  setAdminUserSel]  = useState<AdminUser | null>(null)
-  const [notas,         setNotas]         = useState('')
-  const [erro,          setErro]          = useState('')
-  const [sucesso,       setSucesso]       = useState(false)
+  // Pagamento
+  const [meioPagamento,     setMeioPagamento]     = useState('dinheiro')
+  const [notaPagamento,     setNotaPagamento]      = useState('')   // obrigatória p/ mbway/transf/outro
+  const [gorjetaCentimos,   setGorjetaCentimos]    = useState('')   // valor gorjeta em €
+  const [meioGorjeta,       setMeioGorjeta]        = useState('dinheiro')
+  const [ofertaToda,        setOfertaToda]         = useState(false) // oferece tudo
+  const [ofertaTipo,        setOfertaTipo]         = useState('')    // fidelidade | desconto | cortesia | outro
+
+  // Cliente
+  const [clienteQuery, setClienteQuery] = useState('')
+  const [clienteSel,   setClienteSel]   = useState<Cliente | null>(null)
+  const [dropAberto,   setDropAberto]   = useState(false)
+
+  // Admin
+  const [adminUserSel, setAdminUserSel] = useState<AdminUser | null>(null)
+
+  const [erro,    setErro]    = useState('')
+  const [sucesso, setSucesso] = useState(false)
 
   const isSA = isSuperAdmin(adminUser)
 
@@ -76,8 +101,8 @@ function VendasProdutosContent() {
   })
 
   const { data: clientesData } = useQuery({
-    queryKey: ['clientes-search', clienteQuery],
-    queryFn:  () => adminApi.get<Cliente[]>(`/api/admin/clients?search=${encodeURIComponent(clienteQuery)}&limit=10`),
+    queryKey: ['clientes-search-vendas', clienteQuery],
+    queryFn:  () => adminApi.get<{ items: Cliente[]; total: number }>(`/api/admin/clients?search=${encodeURIComponent(clienteQuery)}&perPage=10`),
     enabled:  clienteQuery.length >= 2,
   })
 
@@ -99,7 +124,11 @@ function VendasProdutosContent() {
   }, [produtosData])
 
   // ── Carrinho helpers ──────────────────────────────────────────────────────
-  const totalCentimos = carrinho.reduce((acc, i) => acc + i.produto.preco_centimos * i.quantidade, 0)
+  const totalCentimos = carrinho.reduce((acc, i) =>
+    acc + (i.oferta ? 0 : i.produto.preco_centimos * i.quantidade), 0)
+  const totalBrutoCentimos = carrinho.reduce((acc, i) =>
+    acc + i.produto.preco_centimos * i.quantidade, 0)
+  const ofertaValorCentimos = ofertaToda ? totalBrutoCentimos : 0
 
   function addProduto(produto: Produto) {
     setCarrinho(prev => {
@@ -109,20 +138,19 @@ function VendasProdutosContent() {
         next[idx] = { ...next[idx], quantidade: next[idx].quantidade + 1 }
         return next
       }
-      return [...prev, { produto, quantidade: 1 }]
+      return [...prev, { produto, quantidade: 1, oferta: false }]
     })
   }
 
   function setQty(produtoId: number, qty: number) {
-    if (qty <= 0) {
-      setCarrinho(prev => prev.filter(i => i.produto.id !== produtoId))
-    } else {
-      setCarrinho(prev => prev.map(i => i.produto.id === produtoId ? { ...i, quantidade: qty } : i))
-    }
+    if (qty <= 0) setCarrinho(prev => prev.filter(i => i.produto.id !== produtoId))
+    else setCarrinho(prev => prev.map(i => i.produto.id === produtoId ? { ...i, quantidade: qty } : i))
   }
 
-  function limparCarrinho() {
-    setCarrinho([])
+  function toggleOfertaItem(produtoId: number) {
+    setCarrinho(prev => prev.map(i =>
+      i.produto.id === produtoId ? { ...i, oferta: !i.oferta } : i
+    ))
   }
 
   // ── Mutation — registar venda ─────────────────────────────────────────────
@@ -132,50 +160,65 @@ function VendasProdutosContent() {
       setSucesso(true)
       setCarrinho([])
       qc.invalidateQueries({ queryKey: ['produto-vendas'] })
-      setTimeout(() => {
-        setSucesso(false)
-        fecharModal()
-      }, 1800)
+      setTimeout(() => { setSucesso(false); fecharModal() }, 1800)
     },
-    onError: (e: any) => {
-      setErro(e?.message ?? 'Erro ao registar venda')
-    },
+    onError: (e: any) => setErro(e?.message ?? 'Erro ao registar venda'),
   })
 
   function abrirModal() {
-    setErro('')
-    setSucesso(false)
-    setMeioPagamento('dinheiro')
-    setClienteQuery('')
-    setClienteSel(null)
+    setErro(''); setSucesso(false)
+    setMeioPagamento('dinheiro'); setNotaPagamento('')
+    setGorjetaCentimos(''); setMeioGorjeta('dinheiro')
+    setOfertaToda(false); setOfertaTipo('')
+    setClienteQuery(''); setClienteSel(null); setDropAberto(false)
     setAdminUserSel(null)
-    setNotas('')
     setModalAberto(true)
   }
 
-  function fecharModal() {
-    setModalAberto(false)
-  }
+  function fecharModal() { setModalAberto(false) }
 
   function confirmarVenda() {
     setErro('')
-    if (!meioPagamento) { setErro('Selecione o meio de pagamento'); return }
+    if (MEIOS_COM_NOTA_OBRIGATORIA.includes(meioPagamento) && !notaPagamento.trim()) {
+      setErro(`Para "${MEIO_LABELS.find(m => m.value === meioPagamento)?.label}" é obrigatório indicar para quem ou o motivo nas notas.`)
+      return
+    }
+    if (ofertaToda && !ofertaTipo) {
+      setErro('Seleciona o tipo de oferta.')
+      return
+    }
+    const gorjetaCent = gorjetaCentimos.trim() !== '' ? Math.round(parseFloat(gorjetaCentimos) * 100) : null
     const payload: any = {
-      meio_pagamento: meioPagamento,
+      meio_pagamento:   ofertaToda ? 'oferta' : meioPagamento,
+      total_centimos:   ofertaToda ? 0 : totalCentimos + (gorjetaCent ?? 0),
       itens: carrinho.map(i => ({
-        produto_id: i.produto.id,
-        quantidade: i.quantidade,
+        produto_id:              i.produto.id,
+        quantidade:              i.quantidade,
         preco_unitario_centimos: i.produto.preco_centimos,
+        oferta:                  i.oferta,
       })),
-      cliente_id:    clienteSel?.id    ?? null,
-      notas:         notas             || null,
+      cliente_id:        clienteSel?.id ?? null,
+      notas:             notaPagamento.trim() || null,
+      gorjeta:           gorjetaCent,
+      meio_gorjeta:      gorjetaCent ? meioGorjeta : null,
+      oferta_tipo:       ofertaToda ? ofertaTipo : null,
+      oferta_valor:      ofertaToda ? ofertaValorCentimos : null,
     }
     if (isSA && adminUserSel) payload.admin_user_id = adminUserSel.id
     mutation.mutate(payload)
   }
 
-  const clientes    = (clientesData?.data   ?? []) as Cliente[]
-  const adminUsers  = (adminUsersData?.data ?? []) as AdminUser[]
+  // Resultados da pesquisa de clientes — seguir mesmo padrão da criação de reserva
+  const clientes = useMemo(() => {
+    const raw = clientesData?.data as any
+    if (!raw) return []
+    // A API /api/admin/clients devolve { items, total, ... } ou diretamente um array
+    if (Array.isArray(raw)) return raw as Cliente[]
+    if (Array.isArray(raw.items)) return raw.items as Cliente[]
+    return []
+  }, [clientesData])
+
+  const adminUsers = (adminUsersData?.data ?? []) as AdminUser[]
 
   if (loadingProdutos) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
 
@@ -184,22 +227,17 @@ function VendasProdutosContent() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">Venda de Produtos</h1>
         {carrinho.length > 0 && (
-          <button onClick={limparCarrinho} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
+          <button onClick={() => setCarrinho([])} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
             <Trash2 size={13} /> Limpar carrinho
           </button>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
         {/* ── Grelha de produtos ── */}
         <div className="lg:col-span-2 space-y-6">
           {porCategoria.length === 0 && (
-            <Card>
-              <p className="text-sm text-gray-400 text-center py-8">
-                Sem produtos ativos. Adiciona produtos na página de Configuração.
-              </p>
-            </Card>
+            <Card><p className="text-sm text-gray-400 text-center py-8">Sem produtos ativos. Adiciona produtos na página de Configuração.</p></Card>
           )}
           {porCategoria.map(([categoria, produtos]) => (
             <div key={categoria}>
@@ -208,13 +246,9 @@ function VendasProdutosContent() {
                 {produtos.map(produto => {
                   const noCarrinho = carrinho.find(i => i.produto.id === produto.id)
                   return (
-                    <button
-                      key={produto.id}
-                      onClick={() => addProduto(produto)}
+                    <button key={produto.id} onClick={() => addProduto(produto)}
                       className={`relative text-left p-3 rounded-xl border-2 transition-all duration-150 ${
-                        noCarrinho
-                          ? 'border-brand-400 bg-brand-50'
-                          : 'border-gray-200 bg-white hover:border-brand-300 hover:shadow-sm'
+                        noCarrinho ? 'border-brand-400 bg-brand-50' : 'border-gray-200 bg-white hover:border-brand-300 hover:shadow-sm'
                       }`}
                     >
                       {noCarrinho && (
@@ -223,9 +257,7 @@ function VendasProdutosContent() {
                         </span>
                       )}
                       <p className="text-sm font-semibold text-gray-800 pr-6 leading-tight">{produto.nome}</p>
-                      <p className="text-sm text-brand-600 font-bold mt-1">
-                        {(produto.preco_centimos / 100).toFixed(2)} €
-                      </p>
+                      <p className="text-sm text-brand-600 font-bold mt-1">{(produto.preco_centimos / 100).toFixed(2)} €</p>
                     </button>
                   )
                 })}
@@ -258,9 +290,18 @@ function VendasProdutosContent() {
                   {carrinho.map(item => (
                     <div key={item.produto.id} className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-800 truncate">{item.produto.nome}</p>
+                        <p className={`text-xs font-medium truncate ${ item.oferta ? 'line-through text-gray-400' : 'text-gray-800' }`}>{item.produto.nome}</p>
                         <p className="text-xs text-gray-400">{(item.produto.preco_centimos / 100).toFixed(2)} € × {item.quantidade}</p>
                       </div>
+                      <button
+                        onClick={() => toggleOfertaItem(item.produto.id)}
+                        title={item.oferta ? 'Remover oferta' : 'Oferecer este produto'}
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
+                          item.oferta ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-500'
+                        }`}
+                      >
+                        <Gift size={11} />
+                      </button>
                       <div className="flex items-center gap-1">
                         <button onClick={() => setQty(item.produto.id, item.quantidade - 1)}
                           className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
@@ -272,8 +313,8 @@ function VendasProdutosContent() {
                           <Plus size={10} />
                         </button>
                       </div>
-                      <p className="text-xs font-semibold text-gray-900 w-14 text-right">
-                        {((item.produto.preco_centimos * item.quantidade) / 100).toFixed(2)} €
+                      <p className={`text-xs font-semibold w-14 text-right ${ item.oferta ? 'text-amber-500' : 'text-gray-900' }`}>
+                        {item.oferta ? '0.00 €' : ((item.produto.preco_centimos * item.quantidade) / 100).toFixed(2) + ' €'}
                       </p>
                     </div>
                   ))}
@@ -286,10 +327,8 @@ function VendasProdutosContent() {
                   </div>
                 </div>
 
-                <button
-                  onClick={abrirModal}
-                  className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors"
-                >
+                <button onClick={abrirModal}
+                  className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors">
                   💳 Pagamento
                 </button>
               </>
@@ -298,17 +337,17 @@ function VendasProdutosContent() {
         </div>
       </div>
 
-      {/* ── Modal de pagamento ── */}
+      {/* ── Modal de checkout ── */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 relative">
             <button onClick={fecharModal} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
               <X size={20} />
             </button>
 
             <h2 className="text-lg font-bold text-gray-900 mb-1">Confirmar Pagamento</h2>
             <p className="text-sm text-gray-500 mb-5">
-              Total: <span className="font-bold text-gray-900">{(totalCentimos / 100).toFixed(2)} €</span>
+              Total: <span className="font-bold text-gray-900">{(totalBrutoCentimos / 100).toFixed(2)} €</span>
             </p>
 
             {sucesso ? (
@@ -323,110 +362,150 @@ function VendasProdutosContent() {
                 <div className="bg-gray-50 rounded-xl p-3 space-y-1">
                   {carrinho.map(i => (
                     <div key={i.produto.id} className="flex justify-between text-sm">
-                      <span className="text-gray-700">{i.produto.nome} × {i.quantidade}</span>
-                      <span className="font-medium">{((i.produto.preco_centimos * i.quantidade) / 100).toFixed(2)} €</span>
+                      <span className={i.oferta ? 'text-gray-400 line-through' : 'text-gray-700'}>
+                        {i.produto.nome} × {i.quantidade}
+                        {i.oferta && <span className="ml-1 text-amber-500 text-xs no-underline">🎁 Oferta</span>}
+                      </span>
+                      <span className="font-medium">
+                        {i.oferta ? '0.00 €' : ((i.produto.preco_centimos * i.quantidade) / 100).toFixed(2) + ' €'}
+                      </span>
                     </div>
                   ))}
                 </div>
 
-                {/* Meio de pagamento */}
-                <div>
-                  <label className="label text-xs">Meio de Pagamento *</label>
-                  <select
-                    className="input text-sm w-full"
-                    value={meioPagamento}
-                    onChange={e => setMeioPagamento(e.target.value)}
-                  >
-                    {MEIO_LABELS.map(m => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
+                {/* Oferecer tudo */}
+                <div className="border border-amber-200 rounded-xl p-3 bg-amber-50 space-y-2">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" className="rounded" checked={ofertaToda}
+                      onChange={e => { setOfertaToda(e.target.checked); if (!e.target.checked) setOfertaTipo('') }} />
+                    <Gift size={14} className="text-amber-600" />
+                    <span className="font-medium text-amber-800">Oferecer toda a venda</span>
+                  </label>
+                  {ofertaToda && (
+                    <select className="input text-sm w-full" value={ofertaTipo} onChange={e => setOfertaTipo(e.target.value)}>
+                      <option value="">— Tipo de oferta —</option>
+                      <option value="fidelidade">Fidelidade</option>
+                      <option value="desconto">Desconto</option>
+                      <option value="cortesia">Cortesia</option>
+                      <option value="outro">Outro</option>
+                    </select>
+                  )}
                 </div>
 
-                {/* Cliente (opcional) */}
+                {/* Meio de pagamento (só se não for oferta total) */}
+                {!ofertaToda && (
+                  <>
+                    <div>
+                      <label className="label text-xs">Meio de Pagamento *</label>
+                      <select className="input text-sm w-full" value={meioPagamento}
+                        onChange={e => { setMeioPagamento(e.target.value); setNotaPagamento('') }}>
+                        {MEIO_LABELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                      </select>
+                    </div>
+                    {MEIOS_COM_NOTA_OBRIGATORIA.includes(meioPagamento) && (
+                      <div>
+                        <label className="label text-xs">
+                          Para quem / Motivo <span className="text-red-500">*</span>
+                          <span className="ml-1 text-gray-400 font-normal">(obrigatório para este meio)</span>
+                        </label>
+                        <textarea className="input text-sm w-full resize-none" rows={2}
+                          placeholder={`Ex.: MB Way para ${meioPagamento === 'mbway' ? 'João Silva (+351 912...)' : meioPagamento === 'transferencia' ? 'conta X, ref. Y' : 'descrição'}`}
+                          value={notaPagamento} onChange={e => setNotaPagamento(e.target.value)} />
+                      </div>
+                    )}
+
+                    {/* Gorjeta */}
+                    <div className="border border-gray-100 rounded-xl p-3 space-y-2 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-500">Gorjeta (opcional)</p>
+                      <div className="flex gap-2">
+                        <input type="number" min="0" step="0.5" placeholder="0.00"
+                          className="input text-sm flex-1" value={gorjetaCentimos}
+                          onChange={e => setGorjetaCentimos(e.target.value)} />
+                        {gorjetaCentimos.trim() !== '' && parseFloat(gorjetaCentimos) > 0 && (
+                          <select className="input text-sm w-36" value={meioGorjeta} onChange={e => setMeioGorjeta(e.target.value)}>
+                            {MEIO_LABELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Cliente */}
                 <div>
                   <label className="label text-xs">Cliente (opcional)</label>
                   {clienteSel ? (
                     <div className="flex items-center gap-2 px-3 py-2 bg-brand-50 border border-brand-200 rounded-xl">
-                      <span className="text-sm font-medium text-brand-800 flex-1">{clienteSel.nome}</span>
-                      <button onClick={() => setClienteSel(null)} className="text-brand-400 hover:text-brand-600">
+                      <ClienteAvatar c={clienteSel} size={6} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-brand-800">{clienteSel.nome}</p>
+                        {clienteSel.telefone && <p className="text-xs text-brand-500">{clienteSel.telefone}</p>}
+                      </div>
+                      <button onClick={() => { setClienteSel(null); setClienteQuery('') }} className="text-brand-400 hover:text-brand-600">
                         <X size={14} />
                       </button>
                     </div>
                   ) : (
                     <div className="relative">
-                      <input
-                        type="text"
-                        className="input text-sm w-full"
-                        placeholder="Pesquisar cliente..."
+                      <input type="text" className="input text-sm w-full"
+                        placeholder="Pesquisar por nome, email ou telefone..."
                         value={clienteQuery}
-                        onChange={e => setClienteQuery(e.target.value)}
-                      />
-                      {clientes.length > 0 && clienteQuery.length >= 2 && (
-                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-40 overflow-y-auto">
+                        onFocus={() => { if (clientes.length > 0) setDropAberto(true) }}
+                        onChange={e => { setClienteQuery(e.target.value); setDropAberto(true) }} />
+                      {dropAberto && clientes.length > 0 && clienteQuery.length >= 2 && (
+                        <div className="absolute z-20 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
                           {clientes.map(c => (
-                            <button
-                              key={c.id}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 hover:text-brand-700"
-                              onClick={() => { setClienteSel(c); setClienteQuery('') }}
-                            >
-                              {c.nome} {c.telefone ? <span className="text-gray-400">· {c.telefone}</span> : null}
+                            <button key={c.id} type="button"
+                              className="w-full text-left px-3 py-2 hover:bg-brand-50 flex items-center gap-2"
+                              onMouseDown={() => { setClienteSel(c); setClienteQuery(''); setDropAberto(false) }}>
+                              <ClienteAvatar c={c} size={6} />
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{c.nome}</p>
+                                {c.telefone && <p className="text-xs text-gray-400">{c.telefone}</p>}
+                                {c.email && <p className="text-xs text-gray-400">{c.email}</p>}
+                              </div>
                             </button>
                           ))}
                         </div>
+                      )}
+                      {clienteQuery.length >= 2 && clientes.length === 0 && (
+                        <p className="text-xs text-gray-400 mt-1 px-1">Nenhum cliente encontrado.</p>
                       )}
                     </div>
                   )}
                 </div>
 
-                {/* Vendedor (superAdmin pode alterar) */}
+                {/* Vendedor (superAdmin) */}
                 {isSA && (
                   <div>
                     <label className="label text-xs">Vendedor</label>
-                    <select
-                      className="input text-sm w-full"
-                      value={adminUserSel?.id ?? ''}
-                      onChange={e => {
-                        const found = adminUsers.find(u => u.id === Number(e.target.value))
-                        setAdminUserSel(found ?? null)
-                      }}
-                    >
+                    <select className="input text-sm w-full" value={adminUserSel?.id ?? ''}
+                      onChange={e => setAdminUserSel(adminUsers.find(u => u.id === Number(e.target.value)) ?? null)}>
                       <option value="">— Usar o meu utilizador —</option>
-                      {adminUsers.map(u => (
-                        <option key={u.id} value={u.id}>{u.nome}</option>
-                      ))}
+                      {adminUsers.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
                     </select>
                   </div>
                 )}
 
-                {/* Notas */}
-                <div>
-                  <label className="label text-xs">Notas (opcional)</label>
-                  <textarea
-                    className="input text-sm w-full resize-none"
-                    rows={2}
-                    placeholder="Observações sobre a venda..."
-                    value={notas}
-                    onChange={e => setNotas(e.target.value)}
-                  />
-                </div>
-
-                {erro && (
-                  <p className="text-sm text-red-500 bg-red-50 rounded-xl px-3 py-2">{erro}</p>
+                {/* Notas livres (quando não é meio especial — para não duplicar com nota obrigatória) */}
+                {!MEIOS_COM_NOTA_OBRIGATORIA.includes(meioPagamento) && !ofertaToda && (
+                  <div>
+                    <label className="label text-xs">Notas (opcional)</label>
+                    <textarea className="input text-sm w-full resize-none" rows={2}
+                      placeholder="Observações sobre a venda..."
+                      value={notaPagamento} onChange={e => setNotaPagamento(e.target.value)} />
+                  </div>
                 )}
 
+                {erro && <p className="text-sm text-red-500 bg-red-50 rounded-xl px-3 py-2">{erro}</p>}
+
                 <div className="flex gap-3 pt-1">
-                  <button
-                    onClick={fecharModal}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
+                  <button onClick={fecharModal}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
                     Cancelar
                   </button>
-                  <button
-                    onClick={confirmarVenda}
-                    disabled={mutation.isPending}
-                    className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-60"
-                  >
+                  <button onClick={confirmarVenda} disabled={mutation.isPending}
+                    className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-60">
                     {mutation.isPending ? 'A processar...' : 'Confirmar Venda'}
                   </button>
                 </div>
