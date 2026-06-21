@@ -345,6 +345,10 @@ CREATE TABLE IF NOT EXISTS produto_vendas (
   cliente_id     INTEGER  REFERENCES clientes(id) ON DELETE SET NULL,
   total_centimos INTEGER  NOT NULL DEFAULT 0,
   meio_pagamento TEXT     NOT NULL,
+  gorjeta      INTEGER DEFAULT NULL,
+  meio_gorjeta TEXT    DEFAULT NULL,
+  oferta_tipo  TEXT    DEFAULT NULL,
+  oferta_valor INTEGER DEFAULT NULL,
   notas          TEXT,
   criado_em      DATETIME NOT NULL DEFAULT (datetime('now'))
 );
@@ -359,7 +363,8 @@ CREATE TABLE IF NOT EXISTS produto_venda_itens (
   venda_id                INTEGER  NOT NULL REFERENCES produto_vendas(id) ON DELETE CASCADE,
   produto_id              INTEGER  NOT NULL REFERENCES produtos(id) ON DELETE RESTRICT,
   quantidade              INTEGER  NOT NULL DEFAULT 1,
-  preco_unitario_centimos INTEGER  NOT NULL
+  preco_unitario_centimos INTEGER  NOT NULL,
+  oferta INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_produto_venda_itens_venda_id   ON produto_venda_itens(venda_id);
