@@ -7,7 +7,7 @@
  * Filtros GET: data_inicio, data_fim, admin_user_id, cliente_id
  *
  * Sub-rotas em:
- *   functions/api/admin/produto-vendas/[id].js  → GET /:id (detalhe)
+ *   functions/api/admin/produto-vendas/[id].js  → GET /:id  PATCH /:id
  */
 
 import { authenticateAdmin } from '../../utils/auth.js'
@@ -17,7 +17,7 @@ export async function onRequestOptions() {
   return corsOptions()
 }
 
-// ─── GET — lista de vendas ─────────────────────────────────────────────────────
+// ─── GET — lista de vendas ───────────────────────────────────────────────
 export async function onRequestGet({ request, env }) {
   const adminAuth = await authenticateAdmin(request, env)
   if (!adminAuth.success) return unauthorized()
@@ -65,7 +65,7 @@ export async function onRequestGet({ request, env }) {
     const { results: vendas } = await env.DB.prepare(query).bind(...args).all()
 
     if (vendas.length > 0) {
-      const vendaIds = vendas.map(v => v.id)
+      const vendaIds     = vendas.map(v => v.id)
       const placeholders = vendaIds.map(() => '?').join(',')
       const { results: itens } = await env.DB.prepare(`
         SELECT
@@ -83,7 +83,6 @@ export async function onRequestGet({ request, env }) {
         if (!itensPorVenda[item.venda_id]) itensPorVenda[item.venda_id] = []
         itensPorVenda[item.venda_id].push(item)
       }
-
       for (const venda of vendas) {
         venda.itens = itensPorVenda[venda.id] || []
       }
@@ -95,7 +94,7 @@ export async function onRequestGet({ request, env }) {
   }
 }
 
-// ─── POST — registar nova venda ────────────────────────────────────────────────
+// ─── POST — registar nova venda ─────────────────────────────────────────────
 export async function onRequestPost({ request, env }) {
   const adminAuth = await authenticateAdmin(request, env)
   if (!adminAuth.success) return unauthorized()
@@ -103,24 +102,32 @@ export async function onRequestPost({ request, env }) {
   try {
     const body = await request.json()
 
-    if (!body.meio_pagamento)                            return badRequest('meio_pagamento obrigatório')
-    if (!Array.isArray(body.itens) || !body.itens.length) return badRequest('itens obrigatório e não pode ser vazio')
+    if (!body.meio_pagamento)                              return badRequest('meio_pagamento obrigatório')
+    if (!Array.isArray(body.itens) || !body.itens.length)  return badRequest('itens obrigatório e não pode ser vazio')
 
     for (const item of body.itens) {
       if (!item.produto_id)                        return badRequest('produto_id obrigatório em cada item')
       if (!item.quantidade || item.quantidade < 1) return badRequest('quantidade deve ser >= 1')
     }
 
-    // Validar gorjeta
+    // Gorjeta
     const gorjeta = body.gorjeta != null ? Number(body.gorjeta) : null
-    if (gorjeta !== null && (!Number.isFinite(gorjeta) || gorjeta < 0)) {
+    if (gorjeta !== null && (!Number.isFinite(gorjeta) || gorjeta < 0))
       return badRequest('gorjeta deve ser um número não-negativo (cêntimos)')
-    }
     const meioGorjeta = (gorjeta && gorjeta > 0) ? (body.meio_gorjeta ?? null) : null
 
-    const adminUserId = (adminAuth.role === 'superAdmin' && body.admin_user_id)
-      ? body.admin_user_id
-      : adminAuth.adminId
+    // Vendedor: usa o body.admin_user_id se vier preenchido; caso contrário usa o user logado.
+    // Qualquer admin autenticado pode atribuir a venda a outro admin — a responsabilidade
+    // é de quem está logado no painel.
+    const adminUserId = body.admin_user_id ? parseInt(body.admin_user_id) : adminAuth.adminId
+
+    // Verificar que o admin_user_id existe (evitar FK error pouco descritivo)
+    if (adminUserId !== adminAuth.adminId) {
+      const { results: adminCheck } = await env.DB.prepare(
+        'SELECT id FROM admin_users WHERE id = ?'
+      ).bind(adminUserId).all()
+      if (!adminCheck.length) return badRequest('admin_user_id não encontrado')
+    }
 
     const prodIds      = [...new Set(body.itens.map(i => i.produto_id))]
     const placeholders = prodIds.map(() => '?').join(',')
@@ -154,10 +161,10 @@ export async function onRequestPost({ request, env }) {
       RETURNING *
     `).bind(
       adminUserId,
-      body.cliente_id ?? null,
+      body.cliente_id  ?? null,
       totalCentimos,
       body.meio_pagamento,
-      body.notas ?? null,
+      body.notas       ?? null,
       gorjeta,
       meioGorjeta,
       body.oferta_tipo  ?? null,
@@ -175,7 +182,6 @@ export async function onRequestPost({ request, env }) {
     }
 
     venda.itens = itensParaInserir
-
     return ok(venda, 201)
   } catch (e) {
     return serverError('Erro ao registar venda', e.message)

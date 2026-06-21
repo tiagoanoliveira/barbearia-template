@@ -50,26 +50,22 @@ function VendasProdutosContent() {
   const adminUser = useAdminUser()
   const qc = useQueryClient()
 
-  const [carrinho, setCarrinho] = useState<CarrinhoItem[]>([])
-  const [modalAberto, setModalAberto] = useState(false)
-
+  const [carrinho,        setCarrinho]        = useState<CarrinhoItem[]>([])
+  const [modalAberto,     setModalAberto]     = useState(false)
   const [meioPagamento,   setMeioPagamento]   = useState('dinheiro')
   const [notaPagamento,   setNotaPagamento]   = useState('')
   const [gorjetaCentimos, setGorjetaCentimos] = useState('')
   const [meioGorjeta,     setMeioGorjeta]     = useState('dinheiro')
   const [ofertaToda,      setOfertaToda]      = useState(false)
   const [ofertaTipo,      setOfertaTipo]      = useState('')
+  const [clienteSel,      setClienteSel]      = useState<Client | null>(null)
+  // Vendedor: null = usar o user logado
+  const [adminUserSel,    setAdminUserSel]    = useState<AdminUser | null>(null)
+  const [erro,            setErro]            = useState('')
+  const [sucesso,         setSucesso]         = useState(false)
+  const [totalSucesso,    setTotalSucesso]    = useState(0)
 
-  const [clienteSel, setClienteSel] = useState<Client | null>(null)
-  const [adminUserSel, setAdminUserSel] = useState<AdminUser | null>(null)
-
-  const [erro,    setErro]    = useState('')
-  const [sucesso, setSucesso] = useState(false)
-  // Snapshot do total no momento em que a venda é confirmada
-  const [totalSucesso, setTotalSucesso] = useState(0)
-
-  const isSA = isSuperAdmin(adminUser)
-
+  // Todos os admins podem ver e selecionar o vendedor (não apenas superAdmin)
   const { data: produtosData, isLoading: loadingProdutos } = useQuery({
     queryKey: ['produtos-ativos'],
     queryFn:  () => adminApi.get<Produto[]>('/api/admin/produtos?ativo=1'),
@@ -78,7 +74,6 @@ function VendasProdutosContent() {
   const { data: adminUsersData } = useQuery({
     queryKey: ['admin-users-list'],
     queryFn:  () => adminApi.get<AdminUser[]>('/api/admin/admin-users'),
-    enabled:  isSA,
   })
 
   const porCategoria = useMemo(() => {
@@ -91,28 +86,20 @@ function VendasProdutosContent() {
     return Object.entries(mapa).sort(([a], [b]) => a.localeCompare(b))
   }, [produtosData])
 
-  const totalCentimos = carrinho.reduce((acc, i) =>
-    acc + (i.oferta ? 0 : i.produto.preco_centimos * i.quantidade), 0)
-  const totalBrutoCentimos = carrinho.reduce((acc, i) =>
-    acc + i.produto.preco_centimos * i.quantidade, 0)
+  const totalCentimos      = carrinho.reduce((acc, i) => acc + (i.oferta ? 0 : i.produto.preco_centimos * i.quantidade), 0)
+  const totalBrutoCentimos = carrinho.reduce((acc, i) => acc + i.produto.preco_centimos * i.quantidade, 0)
 
   function addProduto(produto: Produto) {
     setCarrinho(prev => {
       const idx = prev.findIndex(i => i.produto.id === produto.id)
-      if (idx >= 0) {
-        const next = [...prev]
-        next[idx] = { ...next[idx], quantidade: next[idx].quantidade + 1 }
-        return next
-      }
+      if (idx >= 0) { const next = [...prev]; next[idx] = { ...next[idx], quantidade: next[idx].quantidade + 1 }; return next }
       return [...prev, { produto, quantidade: 1, oferta: false }]
     })
   }
-
   function setQty(produtoId: number, qty: number) {
     if (qty <= 0) setCarrinho(prev => prev.filter(i => i.produto.id !== produtoId))
-    else setCarrinho(prev => prev.map(i => i.produto.id === produtoId ? { ...i, quantidade: qty } : i))
+    else          setCarrinho(prev => prev.map(i => i.produto.id === produtoId ? { ...i, quantidade: qty } : i))
   }
-
   function toggleOfertaItem(produtoId: number) {
     setCarrinho(prev => prev.map(i => i.produto.id === produtoId ? { ...i, oferta: !i.oferta } : i))
   }
@@ -134,10 +121,9 @@ function VendasProdutosContent() {
     setGorjetaCentimos(''); setMeioGorjeta('dinheiro')
     setOfertaToda(false); setOfertaTipo('')
     setClienteSel(null)
-    setAdminUserSel(null)
+    setAdminUserSel(null)  // reset: por omissão usa o user logado
     setModalAberto(true)
   }
-
   function fecharModal() { setModalAberto(false) }
 
   function confirmarVenda() {
@@ -146,14 +132,10 @@ function VendasProdutosContent() {
       setErro(`Para "${MEIO_LABELS.find(m => m.value === meioPagamento)?.label}" é obrigatório indicar para quem ou o motivo.`)
       return
     }
-    if (ofertaToda && !ofertaTipo) {
-      setErro('Seleciona o tipo de oferta.')
-      return
-    }
-    const gorjetaCent = gorjetaCentimos.trim() !== '' ? Math.round(parseFloat(gorjetaCentimos) * 100) : null
+    if (ofertaToda && !ofertaTipo) { setErro('Seleciona o tipo de oferta.'); return }
 
-    // Guardar snapshot do total ANTES de limpar o carrinho no onSuccess
-    const totalFinal = ofertaToda ? 0 : totalCentimos
+    const gorjetaCent = gorjetaCentimos.trim() !== '' ? Math.round(parseFloat(gorjetaCentimos) * 100) : null
+    const totalFinal  = ofertaToda ? 0 : totalCentimos
     setTotalSucesso(totalFinal)
 
     const payload: any = {
@@ -165,14 +147,17 @@ function VendasProdutosContent() {
         preco_unitario_centimos: i.produto.preco_centimos,
         oferta:                  i.oferta,
       })),
-      cliente_id:   clienteSel?.id ?? null,
+      cliente_id:   clienteSel?.id  ?? null,
       notas:        notaPagamento.trim() || null,
       gorjeta:      gorjetaCent,
       meio_gorjeta: gorjetaCent ? meioGorjeta : null,
-      oferta_tipo:  ofertaToda ? ofertaTipo : null,
+      oferta_tipo:  ofertaToda ? ofertaTipo   : null,
       oferta_valor: ofertaToda ? totalBrutoCentimos : null,
     }
-    if (isSA && adminUserSel) payload.admin_user_id = adminUserSel.id
+    // Enviar sempre o admin_user_id: se foi selecionado um vendedor usa esse,
+    // caso contrário envia o id do user logado (fallback explícito)
+    payload.admin_user_id = adminUserSel ? adminUserSel.id : adminUser?.id
+
     mutation.mutate(payload)
   }
 
@@ -253,9 +238,7 @@ function VendasProdutosContent() {
                         title={item.oferta ? 'Remover oferta' : 'Oferecer este produto'}
                         className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
                           item.oferta ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-500'
-                        }`}>
-                        <Gift size={11} />
-                      </button>
+                        }`}><Gift size={11} /></button>
                       <div className="flex items-center gap-1">
                         <button onClick={() => setQty(item.produto.id, item.quantidade - 1)}
                           className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><Minus size={10} /></button>
@@ -386,17 +369,18 @@ function VendasProdutosContent() {
                   />
                 </div>
 
-                {/* Vendedor */}
-                {isSA && (
-                  <div>
-                    <label className="label text-xs">Vendedor</label>
-                    <select className="input text-sm w-full" value={adminUserSel?.id ?? ''}
-                      onChange={e => setAdminUserSel(adminUsers.find(u => u.id === Number(e.target.value)) ?? null)}>
-                      <option value="">— Usar o meu utilizador —</option>
-                      {adminUsers.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-                    </select>
-                  </div>
-                )}
+                {/* Vendedor — visível para todos os admins */}
+                <div>
+                  <label className="label text-xs">Vendedor</label>
+                  <select
+                    className="input text-sm w-full"
+                    value={adminUserSel?.id ?? ''}
+                    onChange={e => setAdminUserSel(adminUsers.find(u => u.id === Number(e.target.value)) ?? null)}
+                  >
+                    <option value="">— {adminUser?.nome ?? 'Eu'} (utilizador logado) —</option>
+                    {adminUsers.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                </div>
 
                 {/* Notas livres */}
                 {!MEIOS_COM_NOTA_OBRIGATORIA.includes(meioPagamento) && !ofertaToda && (

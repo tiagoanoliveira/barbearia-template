@@ -2,7 +2,7 @@
  * /api/admin/produto-vendas/:id
  *
  * GET   → detalhe completo de uma venda
- * PATCH → editar venda (superAdmin ou dono da venda)
+ * PATCH → editar venda (qualquer admin autenticado pode editar; só vê as suas excepto superAdmin)
  */
 
 import { authenticateAdmin } from '../../../utils/auth.js'
@@ -66,19 +66,19 @@ export async function onRequestPatch({ request, env, params }) {
   if (isNaN(id)) return badRequest('ID inválido')
 
   try {
-    // Verificar que a venda existe e que o utilizador tem permissão
     const { results: existing } = await env.DB.prepare(
       'SELECT id, admin_user_id FROM produto_vendas WHERE id = ?'
     ).bind(id).all()
     if (!existing.length) return notFound('Venda não encontrada')
 
     const venda = existing[0]
+    // Admins normais só podem editar as suas próprias vendas
     if (adminAuth.role !== 'superAdmin' && venda.admin_user_id !== adminAuth.adminId)
       return unauthorized()
 
     const body = await request.json()
 
-    // — Validar itens (se fornecidos) —
+    // — Validar itens —
     if (body.itens !== undefined) {
       if (!Array.isArray(body.itens) || body.itens.length === 0)
         return badRequest('itens não pode ser vazio')
@@ -92,23 +92,32 @@ export async function onRequestPatch({ request, env, params }) {
       }
     }
 
-    // — Validar gorjeta —
+    // — Gorjeta —
     const gorjeta = body.gorjeta != null ? Number(body.gorjeta) : undefined
     if (gorjeta !== undefined && (!Number.isFinite(gorjeta) || gorjeta < 0))
       return badRequest('gorjeta deve ser número não-negativo')
 
-    // — Calcular total a partir dos itens (se fornecidos) —
+    // — Calcular total a partir dos itens —
     let totalCentimos = body.total_centimos
     if (body.itens !== undefined) {
       const isOferta = (body.meio_pagamento ?? '') === 'oferta'
-      if (isOferta) {
-        totalCentimos = 0
-      } else {
-        totalCentimos = body.itens.reduce((acc, i) => {
-          const eOferta = i.oferta === true || i.oferta === 1
-          return acc + (eOferta ? 0 : (i.preco_unitario_centimos ?? 0) * i.quantidade)
-        }, 0)
-      }
+      totalCentimos = isOferta ? 0 : body.itens.reduce((acc, i) => {
+        const eOferta = i.oferta === true || i.oferta === 1
+        return acc + (eOferta ? 0 : (i.preco_unitario_centimos ?? 0) * i.quantidade)
+      }, 0)
+    }
+
+    // — Validar admin_user_id se fornecido —
+    let novoAdminUserId = undefined
+    if (body.admin_user_id !== undefined && body.admin_user_id !== null) {
+      const uid = parseInt(body.admin_user_id)
+      if (isNaN(uid)) return badRequest('admin_user_id inválido')
+      // Verificar que o admin existe
+      const { results: adminCheck } = await env.DB.prepare(
+        'SELECT id FROM admin_users WHERE id = ?'
+      ).bind(uid).all()
+      if (!adminCheck.length) return badRequest('admin_user_id não encontrado')
+      novoAdminUserId = uid
     }
 
     // — Atualizar venda —
@@ -116,16 +125,14 @@ export async function onRequestPatch({ request, env, params }) {
     const setArgs   = []
 
     if (body.meio_pagamento !== undefined) { setFields.push('meio_pagamento = ?'); setArgs.push(body.meio_pagamento) }
-    if (totalCentimos      !== undefined) { setFields.push('total_centimos = ?'); setArgs.push(totalCentimos) }
-    if (body.notas         !== undefined) { setFields.push('notas = ?');          setArgs.push(body.notas) }
-    if (gorjeta            !== undefined) { setFields.push('gorjeta = ?');        setArgs.push(gorjeta) }
-    if (body.meio_gorjeta  !== undefined) { setFields.push('meio_gorjeta = ?');   setArgs.push(body.meio_gorjeta) }
-    if (body.oferta_tipo   !== undefined) { setFields.push('oferta_tipo = ?');    setArgs.push(body.oferta_tipo) }
-    if (body.oferta_valor  !== undefined) { setFields.push('oferta_valor = ?');   setArgs.push(body.oferta_valor) }
-    if (body.cliente_id    !== undefined) { setFields.push('cliente_id = ?');     setArgs.push(body.cliente_id) }
-    if (body.admin_user_id !== undefined && adminAuth.role === 'superAdmin') {
-      setFields.push('admin_user_id = ?'); setArgs.push(body.admin_user_id)
-    }
+    if (totalCentimos       !== undefined) { setFields.push('total_centimos = ?'); setArgs.push(totalCentimos) }
+    if (body.notas          !== undefined) { setFields.push('notas = ?');          setArgs.push(body.notas) }
+    if (gorjeta             !== undefined) { setFields.push('gorjeta = ?');        setArgs.push(gorjeta) }
+    if (body.meio_gorjeta   !== undefined) { setFields.push('meio_gorjeta = ?');   setArgs.push(body.meio_gorjeta) }
+    if (body.oferta_tipo    !== undefined) { setFields.push('oferta_tipo = ?');    setArgs.push(body.oferta_tipo) }
+    if (body.oferta_valor   !== undefined) { setFields.push('oferta_valor = ?');   setArgs.push(body.oferta_valor) }
+    if (body.cliente_id     !== undefined) { setFields.push('cliente_id = ?');     setArgs.push(body.cliente_id) }
+    if (novoAdminUserId     !== undefined) { setFields.push('admin_user_id = ?');  setArgs.push(novoAdminUserId) }
 
     if (setFields.length > 0) {
       await env.DB.prepare(
@@ -133,9 +140,8 @@ export async function onRequestPatch({ request, env, params }) {
       ).bind(...setArgs, id).run()
     }
 
-    // — Substituir itens (se fornecidos) —
+    // — Substituir itens —
     if (body.itens !== undefined) {
-      // Verificar que todos os produtos existem e estão ativos
       const prodIds      = [...new Set(body.itens.map(i => i.produto_id))]
       const placeholders = prodIds.map(() => '?').join(',')
       const { results: produtos } = await env.DB.prepare(
@@ -149,20 +155,19 @@ export async function onRequestPatch({ request, env, params }) {
         if (!prod.ativo) return badRequest(`Produto ${item.produto_id} está inativo`)
       }
 
-      // Apagar itens anteriores e inserir os novos
       await env.DB.prepare('DELETE FROM produto_venda_itens WHERE venda_id = ?').bind(id).run()
 
       for (const item of body.itens) {
-        const prod        = prodMap[item.produto_id]
-        const precoUnit   = item.preco_unitario_centimos != null ? Number(item.preco_unitario_centimos) : prod.preco_centimos
-        const eOferta     = item.oferta === true || item.oferta === 1 ? 1 : 0
+        const prod      = prodMap[item.produto_id]
+        const precoUnit = item.preco_unitario_centimos != null ? Number(item.preco_unitario_centimos) : prod.preco_centimos
+        const eOferta   = item.oferta === true || item.oferta === 1 ? 1 : 0
         await env.DB.prepare(
           'INSERT INTO produto_venda_itens (venda_id, produto_id, quantidade, preco_unitario_centimos, oferta) VALUES (?, ?, ?, ?, ?)'
         ).bind(id, item.produto_id, item.quantidade, precoUnit, eOferta).run()
       }
     }
 
-    // Devolver a venda atualizada com itens
+    // Devolver a venda atualizada
     const { results: updatedVendas } = await env.DB.prepare(`
       SELECT
         pv.id, pv.total_centimos, pv.meio_pagamento, pv.notas, pv.criado_em,
