@@ -8,7 +8,6 @@ import { useAdminUser, isSuperAdmin } from '@/hooks/useAdminUser'
 import { Navigate } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
 
-// Meios que exigem nota explicativa
 const MEIOS_COM_NOTA_OBRIGATORIA = ['mbway', 'transferencia', 'outro']
 
 const MEIO_LABELS = [
@@ -31,7 +30,7 @@ interface Produto {
 interface CarrinhoItem {
   produto: Produto
   quantidade: number
-  oferta: boolean  // true = este item é oferecido
+  oferta: boolean
 }
 
 interface Cliente {
@@ -53,15 +52,17 @@ export default function VendasProdutosPage() {
   return <VendasProdutosContent />
 }
 
+// Guard defensivo: nome pode ser null/undefined em certos registos da API
 function ClienteAvatar({ c, size = 8 }: { c: Cliente; size?: number }) {
   const [err, setErr] = useState(false)
   const sz = `w-${size} h-${size}`
-  if (c.foto_perfil && !err) {
-    return <img src={c.foto_perfil} alt={c.nome} className={`${sz} rounded-xl object-cover flex-shrink-0`} onError={() => setErr(true)} />
+  const inicial = c?.nome ? c.nome.charAt(0).toUpperCase() : '?'
+  if (c?.foto_perfil && !err) {
+    return <img src={c.foto_perfil} alt={c.nome ?? ''} className={`${sz} rounded-xl object-cover flex-shrink-0`} onError={() => setErr(true)} />
   }
   return (
     <div className={`${sz} bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0`}>
-      <span className="text-brand-700 font-semibold text-xs">{c.nome.charAt(0).toUpperCase()}</span>
+      <span className="text-brand-700 font-semibold text-xs">{inicial}</span>
     </div>
   )
 }
@@ -73,20 +74,16 @@ function VendasProdutosContent() {
   const [carrinho, setCarrinho] = useState<CarrinhoItem[]>([])
   const [modalAberto, setModalAberto] = useState(false)
 
-  // Pagamento
-  const [meioPagamento,     setMeioPagamento]     = useState('dinheiro')
-  const [notaPagamento,     setNotaPagamento]      = useState('')   // obrigatória p/ mbway/transf/outro
-  const [gorjetaCentimos,   setGorjetaCentimos]    = useState('')   // valor gorjeta em €
-  const [meioGorjeta,       setMeioGorjeta]        = useState('dinheiro')
-  const [ofertaToda,        setOfertaToda]         = useState(false) // oferece tudo
-  const [ofertaTipo,        setOfertaTipo]         = useState('')    // fidelidade | desconto | cortesia | outro
+  const [meioPagamento,   setMeioPagamento]   = useState('dinheiro')
+  const [notaPagamento,   setNotaPagamento]   = useState('')
+  const [gorjetaCentimos, setGorjetaCentimos] = useState('')
+  const [meioGorjeta,     setMeioGorjeta]     = useState('dinheiro')
+  const [ofertaToda,      setOfertaToda]      = useState(false)
+  const [ofertaTipo,      setOfertaTipo]      = useState('')
 
-  // Cliente
   const [clienteQuery, setClienteQuery] = useState('')
   const [clienteSel,   setClienteSel]   = useState<Cliente | null>(null)
   const [dropAberto,   setDropAberto]   = useState(false)
-
-  // Admin
   const [adminUserSel, setAdminUserSel] = useState<AdminUser | null>(null)
 
   const [erro,    setErro]    = useState('')
@@ -94,7 +91,6 @@ function VendasProdutosContent() {
 
   const isSA = isSuperAdmin(adminUser)
 
-  // ── Queries ──────────────────────────────────────────────────────────────
   const { data: produtosData, isLoading: loadingProdutos } = useQuery({
     queryKey: ['produtos-ativos'],
     queryFn:  () => adminApi.get<Produto[]>('/api/admin/produtos?ativo=1'),
@@ -102,7 +98,7 @@ function VendasProdutosContent() {
 
   const { data: clientesData } = useQuery({
     queryKey: ['clientes-search-vendas', clienteQuery],
-    queryFn:  () => adminApi.get<{ items: Cliente[]; total: number }>(`/api/admin/clients?search=${encodeURIComponent(clienteQuery)}&perPage=10`),
+    queryFn:  () => adminApi.get<any>(`/api/admin/clients?search=${encodeURIComponent(clienteQuery)}&perPage=10`),
     enabled:  clienteQuery.length >= 2,
   })
 
@@ -112,7 +108,6 @@ function VendasProdutosContent() {
     enabled:  isSA,
   })
 
-  // ── Agrupamento por categoria ─────────────────────────────────────────────
   const porCategoria = useMemo(() => {
     const produtos = (produtosData?.data ?? []) as Produto[]
     const mapa: Record<string, Produto[]> = {}
@@ -123,12 +118,10 @@ function VendasProdutosContent() {
     return Object.entries(mapa).sort(([a], [b]) => a.localeCompare(b))
   }, [produtosData])
 
-  // ── Carrinho helpers ──────────────────────────────────────────────────────
   const totalCentimos = carrinho.reduce((acc, i) =>
     acc + (i.oferta ? 0 : i.produto.preco_centimos * i.quantidade), 0)
   const totalBrutoCentimos = carrinho.reduce((acc, i) =>
     acc + i.produto.preco_centimos * i.quantidade, 0)
-  const ofertaValorCentimos = ofertaToda ? totalBrutoCentimos : 0
 
   function addProduto(produto: Produto) {
     setCarrinho(prev => {
@@ -148,12 +141,9 @@ function VendasProdutosContent() {
   }
 
   function toggleOfertaItem(produtoId: number) {
-    setCarrinho(prev => prev.map(i =>
-      i.produto.id === produtoId ? { ...i, oferta: !i.oferta } : i
-    ))
+    setCarrinho(prev => prev.map(i => i.produto.id === produtoId ? { ...i, oferta: !i.oferta } : i))
   }
 
-  // ── Mutation — registar venda ─────────────────────────────────────────────
   const mutation = useMutation({
     mutationFn: (payload: object) => adminApi.post('/api/admin/produto-vendas', payload),
     onSuccess: () => {
@@ -179,8 +169,8 @@ function VendasProdutosContent() {
 
   function confirmarVenda() {
     setErro('')
-    if (MEIOS_COM_NOTA_OBRIGATORIA.includes(meioPagamento) && !notaPagamento.trim()) {
-      setErro(`Para "${MEIO_LABELS.find(m => m.value === meioPagamento)?.label}" é obrigatório indicar para quem ou o motivo nas notas.`)
+    if (!ofertaToda && MEIOS_COM_NOTA_OBRIGATORIA.includes(meioPagamento) && !notaPagamento.trim()) {
+      setErro(`Para "${MEIO_LABELS.find(m => m.value === meioPagamento)?.label}" é obrigatório indicar para quem ou o motivo.`)
       return
     }
     if (ofertaToda && !ofertaTipo) {
@@ -189,32 +179,31 @@ function VendasProdutosContent() {
     }
     const gorjetaCent = gorjetaCentimos.trim() !== '' ? Math.round(parseFloat(gorjetaCentimos) * 100) : null
     const payload: any = {
-      meio_pagamento:   ofertaToda ? 'oferta' : meioPagamento,
-      total_centimos:   ofertaToda ? 0 : totalCentimos + (gorjetaCent ?? 0),
+      meio_pagamento: ofertaToda ? 'oferta' : meioPagamento,
+      total_centimos: ofertaToda ? 0 : totalCentimos,
       itens: carrinho.map(i => ({
         produto_id:              i.produto.id,
         quantidade:              i.quantidade,
         preco_unitario_centimos: i.produto.preco_centimos,
         oferta:                  i.oferta,
       })),
-      cliente_id:        clienteSel?.id ?? null,
-      notas:             notaPagamento.trim() || null,
-      gorjeta:           gorjetaCent,
-      meio_gorjeta:      gorjetaCent ? meioGorjeta : null,
-      oferta_tipo:       ofertaToda ? ofertaTipo : null,
-      oferta_valor:      ofertaToda ? ofertaValorCentimos : null,
+      cliente_id:   clienteSel?.id ?? null,
+      notas:        notaPagamento.trim() || null,
+      gorjeta:      gorjetaCent,
+      meio_gorjeta: gorjetaCent ? meioGorjeta : null,
+      oferta_tipo:  ofertaToda ? ofertaTipo : null,
+      oferta_valor: ofertaToda ? totalBrutoCentimos : null,
     }
     if (isSA && adminUserSel) payload.admin_user_id = adminUserSel.id
     mutation.mutate(payload)
   }
 
-  // Resultados da pesquisa de clientes — seguir mesmo padrão da criação de reserva
-  const clientes = useMemo(() => {
-    const raw = clientesData?.data as any
+  // Normaliza resposta da API — pode devolver array ou { items, total }
+  const clientes = useMemo<Cliente[]>(() => {
+    const raw = clientesData?.data
     if (!raw) return []
-    // A API /api/admin/clients devolve { items, total, ... } ou diretamente um array
-    if (Array.isArray(raw)) return raw as Cliente[]
-    if (Array.isArray(raw.items)) return raw.items as Cliente[]
+    if (Array.isArray(raw)) return raw
+    if (Array.isArray((raw as any).items)) return (raw as any).items
     return []
   }, [clientesData])
 
@@ -234,7 +223,7 @@ function VendasProdutosContent() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ── Grelha de produtos ── */}
+        {/* Grelha de produtos */}
         <div className="lg:col-span-2 space-y-6">
           {porCategoria.length === 0 && (
             <Card><p className="text-sm text-gray-400 text-center py-8">Sem produtos ativos. Adiciona produtos na página de Configuração.</p></Card>
@@ -249,8 +238,7 @@ function VendasProdutosContent() {
                     <button key={produto.id} onClick={() => addProduto(produto)}
                       className={`relative text-left p-3 rounded-xl border-2 transition-all duration-150 ${
                         noCarrinho ? 'border-brand-400 bg-brand-50' : 'border-gray-200 bg-white hover:border-brand-300 hover:shadow-sm'
-                      }`}
-                    >
+                      }`}>
                       {noCarrinho && (
                         <span className="absolute top-2 right-2 bg-brand-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
                           {noCarrinho.quantidade}
@@ -266,7 +254,7 @@ function VendasProdutosContent() {
           ))}
         </div>
 
-        {/* ── Carrinho ── */}
+        {/* Carrinho */}
         <div>
           <Card className="sticky top-4">
             <div className="flex items-center gap-2 mb-4">
@@ -278,7 +266,6 @@ function VendasProdutosContent() {
                 </span>
               )}
             </div>
-
             {carrinho.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <ShoppingBag size={32} className="mx-auto mb-2 opacity-40" />
@@ -290,43 +277,35 @@ function VendasProdutosContent() {
                   {carrinho.map(item => (
                     <div key={item.produto.id} className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-medium truncate ${ item.oferta ? 'line-through text-gray-400' : 'text-gray-800' }`}>{item.produto.nome}</p>
+                        <p className={`text-xs font-medium truncate ${item.oferta ? 'line-through text-gray-400' : 'text-gray-800'}`}>{item.produto.nome}</p>
                         <p className="text-xs text-gray-400">{(item.produto.preco_centimos / 100).toFixed(2)} € × {item.quantidade}</p>
                       </div>
-                      <button
-                        onClick={() => toggleOfertaItem(item.produto.id)}
+                      <button onClick={() => toggleOfertaItem(item.produto.id)}
                         title={item.oferta ? 'Remover oferta' : 'Oferecer este produto'}
                         className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
                           item.oferta ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-400 hover:bg-amber-50 hover:text-amber-500'
-                        }`}
-                      >
+                        }`}>
                         <Gift size={11} />
                       </button>
                       <div className="flex items-center gap-1">
                         <button onClick={() => setQty(item.produto.id, item.quantidade - 1)}
-                          className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
-                          <Minus size={10} />
-                        </button>
+                          className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><Minus size={10} /></button>
                         <span className="text-xs font-semibold w-5 text-center">{item.quantidade}</span>
                         <button onClick={() => setQty(item.produto.id, item.quantidade + 1)}
-                          className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
-                          <Plus size={10} />
-                        </button>
+                          className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center"><Plus size={10} /></button>
                       </div>
-                      <p className={`text-xs font-semibold w-14 text-right ${ item.oferta ? 'text-amber-500' : 'text-gray-900' }`}>
+                      <p className={`text-xs font-semibold w-14 text-right ${item.oferta ? 'text-amber-500' : 'text-gray-900'}`}>
                         {item.oferta ? '0.00 €' : ((item.produto.preco_centimos * item.quantidade) / 100).toFixed(2) + ' €'}
                       </p>
                     </div>
                   ))}
                 </div>
-
                 <div className="border-t border-gray-100 pt-3 mb-4">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-semibold text-gray-700">Total</span>
                     <span className="text-lg font-bold text-gray-900">{(totalCentimos / 100).toFixed(2)} €</span>
                   </div>
                 </div>
-
                 <button onClick={abrirModal}
                   className="w-full py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors">
                   💳 Pagamento
@@ -337,14 +316,11 @@ function VendasProdutosContent() {
         </div>
       </div>
 
-      {/* ── Modal de checkout ── */}
+      {/* Modal de checkout */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 relative">
-            <button onClick={fecharModal} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-              <X size={20} />
-            </button>
-
+            <button onClick={fecharModal} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
             <h2 className="text-lg font-bold text-gray-900 mb-1">Confirmar Pagamento</h2>
             <p className="text-sm text-gray-500 mb-5">
               Total: <span className="font-bold text-gray-900">{(totalBrutoCentimos / 100).toFixed(2)} €</span>
@@ -357,14 +333,13 @@ function VendasProdutosContent() {
               </div>
             ) : (
               <div className="space-y-4">
-
-                {/* Resumo do carrinho */}
+                {/* Resumo */}
                 <div className="bg-gray-50 rounded-xl p-3 space-y-1">
                   {carrinho.map(i => (
                     <div key={i.produto.id} className="flex justify-between text-sm">
                       <span className={i.oferta ? 'text-gray-400 line-through' : 'text-gray-700'}>
                         {i.produto.nome} × {i.quantidade}
-                        {i.oferta && <span className="ml-1 text-amber-500 text-xs no-underline">🎁 Oferta</span>}
+                        {i.oferta && <span className="ml-1 text-amber-500 text-xs">🎁 Oferta</span>}
                       </span>
                       <span className="font-medium">
                         {i.oferta ? '0.00 €' : ((i.produto.preco_centimos * i.quantidade) / 100).toFixed(2) + ' €'}
@@ -392,7 +367,7 @@ function VendasProdutosContent() {
                   )}
                 </div>
 
-                {/* Meio de pagamento (só se não for oferta total) */}
+                {/* Meio de pagamento */}
                 {!ofertaToda && (
                   <>
                     <div>
@@ -406,15 +381,13 @@ function VendasProdutosContent() {
                       <div>
                         <label className="label text-xs">
                           Para quem / Motivo <span className="text-red-500">*</span>
-                          <span className="ml-1 text-gray-400 font-normal">(obrigatório para este meio)</span>
+                          <span className="ml-1 text-gray-400 font-normal">(obrigatório)</span>
                         </label>
                         <textarea className="input text-sm w-full resize-none" rows={2}
-                          placeholder={`Ex.: MB Way para ${meioPagamento === 'mbway' ? 'João Silva (+351 912...)' : meioPagamento === 'transferencia' ? 'conta X, ref. Y' : 'descrição'}`}
+                          placeholder={meioPagamento === 'mbway' ? 'Ex.: MB Way para João Silva (+351 912...)' : meioPagamento === 'transferencia' ? 'Ex.: Transferência para conta X, ref. Y' : 'Descrição'}
                           value={notaPagamento} onChange={e => setNotaPagamento(e.target.value)} />
                       </div>
                     )}
-
-                    {/* Gorjeta */}
                     <div className="border border-gray-100 rounded-xl p-3 space-y-2 bg-gray-50">
                       <p className="text-xs font-semibold text-gray-500">Gorjeta (opcional)</p>
                       <div className="flex gap-2">
@@ -441,9 +414,7 @@ function VendasProdutosContent() {
                         <p className="text-sm font-medium text-brand-800">{clienteSel.nome}</p>
                         {clienteSel.telefone && <p className="text-xs text-brand-500">{clienteSel.telefone}</p>}
                       </div>
-                      <button onClick={() => { setClienteSel(null); setClienteQuery('') }} className="text-brand-400 hover:text-brand-600">
-                        <X size={14} />
-                      </button>
+                      <button onClick={() => { setClienteSel(null); setClienteQuery('') }} className="text-brand-400 hover:text-brand-600"><X size={14} /></button>
                     </div>
                   ) : (
                     <div className="relative">
@@ -451,16 +422,17 @@ function VendasProdutosContent() {
                         placeholder="Pesquisar por nome, email ou telefone..."
                         value={clienteQuery}
                         onFocus={() => { if (clientes.length > 0) setDropAberto(true) }}
+                        onBlur={() => setTimeout(() => setDropAberto(false), 150)}
                         onChange={e => { setClienteQuery(e.target.value); setDropAberto(true) }} />
                       {dropAberto && clientes.length > 0 && clienteQuery.length >= 2 && (
                         <div className="absolute z-20 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
                           {clientes.map(c => (
                             <button key={c.id} type="button"
                               className="w-full text-left px-3 py-2 hover:bg-brand-50 flex items-center gap-2"
-                              onMouseDown={() => { setClienteSel(c); setClienteQuery(''); setDropAberto(false) }}>
+                              onMouseDown={e => { e.preventDefault(); setClienteSel(c); setClienteQuery(''); setDropAberto(false) }}>
                               <ClienteAvatar c={c} size={6} />
                               <div>
-                                <p className="text-sm font-medium text-gray-800">{c.nome}</p>
+                                <p className="text-sm font-medium text-gray-800">{c.nome ?? '(sem nome)'}</p>
                                 {c.telefone && <p className="text-xs text-gray-400">{c.telefone}</p>}
                                 {c.email && <p className="text-xs text-gray-400">{c.email}</p>}
                               </div>
@@ -475,7 +447,7 @@ function VendasProdutosContent() {
                   )}
                 </div>
 
-                {/* Vendedor (superAdmin) */}
+                {/* Vendedor */}
                 {isSA && (
                   <div>
                     <label className="label text-xs">Vendedor</label>
@@ -487,7 +459,7 @@ function VendasProdutosContent() {
                   </div>
                 )}
 
-                {/* Notas livres (quando não é meio especial — para não duplicar com nota obrigatória) */}
+                {/* Notas livres (quando não há nota obrigatória) */}
                 {!MEIOS_COM_NOTA_OBRIGATORIA.includes(meioPagamento) && !ofertaToda && (
                   <div>
                     <label className="label text-xs">Notas (opcional)</label>
@@ -501,9 +473,7 @@ function VendasProdutosContent() {
 
                 <div className="flex gap-3 pt-1">
                   <button onClick={fecharModal}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                    Cancelar
-                  </button>
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancelar</button>
                   <button onClick={confirmarVenda} disabled={mutation.isPending}
                     className="flex-1 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-colors disabled:opacity-60">
                     {mutation.isPending ? 'A processar...' : 'Confirmar Venda'}
