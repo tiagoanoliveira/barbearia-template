@@ -20,22 +20,26 @@ interface BarberForService extends Barber {
 type Step = 1 | 2 | 3 | 4
 
 interface BookingState {
-  service:   Service | null
-  barber:    BarberForService | null
-  anyBarber: boolean
-  date:      string
-  time:      string
-  notes:     string
+  service:     Service | null
+  barber:      BarberForService | null
+  anyBarber:   boolean
+  date:        string
+  time:        string
+  notes:       string
+  // Nome do barbeiro guardado separadamente para mostrar no passo 4
+  // mesmo antes de barbersForService terminar de carregar
+  barberName:  string
 }
 
 interface BookingDraft {
-  serviceId: number | null
-  barberId:  number | null
-  anyBarber: boolean
-  date:      string
-  time:      string
-  notes:     string
-  step:      Step
+  serviceId:  number | null
+  barberId:   number | null
+  barberName: string
+  anyBarber:  boolean
+  date:       string
+  time:       string
+  notes:      string
+  step:       Step
 }
 
 const DRAFT_KEY = 'booking_draft_v3'
@@ -60,7 +64,8 @@ function isClosedDay(dow: number): boolean {
 }
 
 const INITIAL: BookingState = {
-  service: null, barber: null, anyBarber: false, date: '', time: '', notes: '',
+  service: null, barber: null, anyBarber: false,
+  date: '', time: '', notes: '', barberName: '',
 }
 
 export default function BookingPage() {
@@ -68,8 +73,8 @@ export default function BookingPage() {
   const [searchParams] = useSearchParams()
   const storage        = useMemo(() => getSafeStorage(), [])
 
-  const [step, setStep]       = useState<Step>(1)
-  const [booking, setBooking] = useState<BookingState>(INITIAL)
+  const [step, setStep]         = useState<Step>(1)
+  const [booking, setBooking]   = useState<BookingState>(INITIAL)
   const [calMonth, setCalMonth] = useState(new Date())
   const [error, setError]       = useState<string | null>(null)
   const [tosChecked, setTosChecked] = useState(true)
@@ -82,14 +87,14 @@ export default function BookingPage() {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
   }
 
-  // ── Serviços públicos (com min_price e has_price_variation) ──────────────
+  // ── Serviços públicos ────────────────────────────────────────────────────
   const { data: servicesRes } = useQuery({
     queryKey: ['public-services'],
     queryFn:  () => api.get<Service[]>('/api/services'),
   })
   const services = servicesRes?.data ?? []
 
-  // ── Barbeiros que fazem o serviço seleccionado ────────────────────────────
+  // ── Barbeiros que fazem o serviço seleccionado ───────────────────────────
   const { data: barbersForServiceRes } = useQuery({
     queryKey: ['service-barbers', booking.service?.id],
     queryFn:  () => api.get<BarberForService[]>(`/api/services/${booking.service!.id}/barbers`),
@@ -104,7 +109,7 @@ export default function BookingPage() {
     if (!singleBarber) return
     setBooking(b => {
       if (!b.anyBarber && b.barber?.id === singleBarber.id) return b
-      return { ...b, barber: singleBarber, anyBarber: false }
+      return { ...b, barber: singleBarber, anyBarber: false, barberName: singleBarber.name }
     })
   }, [singleBarber])
 
@@ -116,16 +121,32 @@ export default function BookingPage() {
       if (!raw) return
       const draft = JSON.parse(raw) as BookingDraft
       const svc = draft.serviceId ? services.find(s => s.id === draft.serviceId) ?? null : null
+
       setBooking(b => ({
         ...b,
-        service:   svc,
-        anyBarber: !!draft.anyBarber,
-        date:      draft.date  || '',
-        time:      draft.time  || '',
-        notes:     draft.notes || '',
+        service:    svc,
+        anyBarber:  !!draft.anyBarber,
+        barberName: draft.barberName || '',
+        date:       draft.date  || '',
+        time:       draft.time  || '',
+        notes:      draft.notes || '',
       }))
-      const s = (draft.step ?? 1) as Step
-      if (s >= 1 && s <= 4) setStep(s)
+
+      // Calcular o passo correcto com os dados disponíveis neste momento.
+      // O barbeiro (objecto completo) ainda não está restaurado aqui — só
+      // depois de barbersForService carregar. Por isso usamos draft.barberId
+      // e draft.anyBarber para decidir se o passo 2 está completo.
+      const barberDone = !!draft.anyBarber || !!draft.barberId
+      const dateDone   = !!(draft.date && draft.time)
+
+      let targetStep: Step = draft.step ?? 1
+      if (targetStep === 4 && !dateDone)   targetStep = 3
+      if (targetStep >= 3 && !barberDone && !svc) targetStep = 1
+      if (targetStep >= 3 && !barberDone && svc)  targetStep = 2
+      if (targetStep === 4 && !dateDone)   targetStep = 3
+      if (targetStep >= 1 && !svc)         targetStep = 1
+
+      if (targetStep >= 1 && targetStep <= 4) setStep(targetStep)
     } catch {}
   }, [services, storage])
 
@@ -138,7 +159,12 @@ export default function BookingPage() {
       const draft = JSON.parse(raw) as BookingDraft
       if (!draft.barberId || draft.anyBarber) return
       const b = barbersForService.find(b => b.id === draft.barberId)
-      if (b) setBooking(bk => ({ ...bk, barber: b }))
+      if (b) setBooking(bk => ({ ...bk, barber: b, barberName: b.name }))
+      else {
+        // Barbeiro do draft já não existe (inactivo) — volta ao passo 2
+        setBooking(bk => ({ ...bk, barber: null, barberName: '', date: '', time: '' }))
+        setStep(2)
+      }
     } catch {}
   }, [barbersForService, storage, booking.barber])
 
@@ -146,18 +172,19 @@ export default function BookingPage() {
   useEffect(() => {
     if (!storage) return
     const draft: BookingDraft = {
-      serviceId: booking.service?.id ?? null,
-      barberId:  booking.anyBarber ? null : booking.barber?.id ?? null,
-      anyBarber: booking.anyBarber,
-      date:      booking.date,
-      time:      booking.time,
-      notes:     booking.notes,
+      serviceId:  booking.service?.id ?? null,
+      barberId:   booking.anyBarber ? null : (booking.barber?.id ?? null),
+      barberName: booking.anyBarber ? '' : booking.barberName,
+      anyBarber:  booking.anyBarber,
+      date:       booking.date,
+      time:       booking.time,
+      notes:      booking.notes,
       step,
     }
     try { storage.setItem(DRAFT_KEY, JSON.stringify(draft)) } catch {}
   }, [booking, step, storage])
 
-  // ── service_id na URL (vindo de /services ou homepage) ───────────────────
+  // ── service_id na URL ────────────────────────────────────────────────────
   useEffect(() => {
     const id = searchParams.get('service_id')
     if (!id || !services.length || booking.service) return
@@ -165,7 +192,7 @@ export default function BookingPage() {
     if (s) setBooking(b => ({ ...b, service: s }))
   }, [searchParams, services, booking.service])
 
-  // ── Pré-carregar slots dos próximos 3 dias quando barbeiro + serviço estiverem prontos ──
+  // ── Pré-carregar slots ───────────────────────────────────────────────────
   useEffect(() => {
     const barberId  = booking.anyBarber ? null : booking.barber?.id
     const serviceId = booking.service?.id
@@ -177,7 +204,7 @@ export default function BookingPage() {
       d.setDate(today.getDate() + i)
       const dow      = d.getDay()
       const dateStr  = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      const closedDay = isClosedDay(dow)
+      const closedDay  = isClosedDay(dow)
       const restricted = booking.service ? !serviceAvailableOnDay(booking.service.id, dow) : false
       if (closedDay || restricted) continue
 
@@ -217,23 +244,20 @@ export default function BookingPage() {
   // ── Confirmar reserva ─────────────────────────────────────────────────────
   const confirmMutation = useMutation({
     mutationFn: () => {
-      // Calcular o barbeiro efectivo no momento do envio:
-      // 1. Se anyBarber → enviar 'any' (backend faz pickBarber)
-      // 2. Se barbeiro seleccionado → usar esse ID
-      // 3. Se só existe 1 barbeiro (passo saltado) → usar singleBarber
-      // NUNCA enviar undefined — isso faria o backend tratar como anyBarber
       const effectiveBarberId: number | 'any' | undefined = booking.anyBarber
         ? 'any'
         : (booking.barber?.id ?? singleBarber?.id)
 
+      // Verificações de integridade — redireciona para o passo em falta
+      if (!booking.service) { goToStep(1); throw new Error('Serviço não definido.') }
       if (!booking.anyBarber && effectiveBarberId === undefined) {
-        // Barbeiro não resolvido — não deve acontecer em fluxo normal,
-        // mas protege contra race condition do draft/query
-        throw new Error('Não foi possível identificar o barbeiro. Por favor volta atrás e seleciona novamente.')
+        goToStep(singleBarber === null ? 2 : 1)
+        throw new Error('Barbeiro não definido. Por favor seleciona novamente.')
       }
+      if (!booking.date || !booking.time) { goToStep(3); throw new Error('Data ou hora não definida.') }
 
       return api.post('/api/reservations', {
-        service_id: booking.service!.id,
+        service_id: booking.service.id,
         barber_id:  effectiveBarberId,
         date:       booking.date,
         time:       booking.time,
@@ -267,12 +291,18 @@ export default function BookingPage() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSelectService = (s: Service) => {
-    // Ao mudar serviço, limpar barbeiro, data e hora
-    setBooking(bk => ({ ...bk, service: s, barber: null, anyBarber: false, date: '', time: '' }))
+    setBooking(bk => ({ ...bk, service: s, barber: null, anyBarber: false, barberName: '', date: '', time: '' }))
   }
 
   const handleSelectBarber = (barber: BarberForService | null, anyBarber: boolean) => {
-    setBooking(bk => ({ ...bk, barber: anyBarber ? null : barber, anyBarber, date: '', time: '' }))
+    setBooking(bk => ({
+      ...bk,
+      barber:     anyBarber ? null : barber,
+      anyBarber,
+      barberName: anyBarber ? '' : (barber?.name ?? ''),
+      date:       '',
+      time:       '',
+    }))
     setTimeout(() => goToStep(3), 200)
   }
 
@@ -294,9 +324,8 @@ export default function BookingPage() {
   )
 
   const goNext = useCallback(() => {
-    // Se há só 1 barbeiro, garante que fica seleccionado antes de saltar o passo 2
     if (step === 1 && singleBarber) {
-      setBooking(b => ({ ...b, barber: singleBarber, anyBarber: false }))
+      setBooking(b => ({ ...b, barber: singleBarber, anyBarber: false, barberName: singleBarber.name }))
       goToStep(3)
       return
     }
@@ -311,10 +340,15 @@ export default function BookingPage() {
   const showLoginGate = step === 4 && !isLoggedIn
   const serviceRestriction = booking.service ? serviceRestrictions[booking.service.id] : null
 
-  // Preço efectivo = preço do barbeiro seleccionado para este serviço
   const effectivePrice = booking.anyBarber
       ? booking.service?.min_price ?? booking.service?.price
       : booking.barber?.price ?? booking.service?.price
+
+  // Nome do barbeiro para mostrar no passo 4:
+  // usa o objecto em memória se disponível, senão o nome guardado no draft
+  const displayBarberName = booking.anyBarber
+    ? 'Sem preferência (atribuição automática)'
+    : (booking.barber?.name ?? singleBarber?.name ?? booking.barberName || '—')
 
   const steps: { n: Step; label: string }[] = singleBarber
       ? [
@@ -437,10 +471,9 @@ export default function BookingPage() {
                       </div>
                   )}
 
-                  {/* ── PASSO 2: Barbeiro (filtrado pelo serviço) ── */}
+                  {/* ── PASSO 2: Barbeiro ── */}
                   {step === 2 && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* Opção "sem preferência" */}
                         <button onClick={() => handleSelectBarber(null, true)}
                                 className={`flex items-center gap-3 p-4 rounded-2xl border transition-all text-left ${
                                     booking.anyBarber
@@ -563,9 +596,7 @@ export default function BookingPage() {
                           },
                           {
                             icon: User, label: 'Barbeiro',
-                            value: booking.anyBarber
-                              ? 'Sem preferência (atribuição automática)'
-                              : (booking.barber?.name ?? singleBarber?.name ?? '—'),
+                            value: displayBarberName,
                           },
                           {
                             icon: Calendar, label: 'Data',
