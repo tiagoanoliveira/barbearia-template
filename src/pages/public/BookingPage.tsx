@@ -216,14 +216,30 @@ export default function BookingPage() {
 
   // ── Confirmar reserva ─────────────────────────────────────────────────────
   const confirmMutation = useMutation({
-    mutationFn: () =>
-        api.post('/api/reservations', {
-          service_id: booking.service!.id,
-          barber_id:  booking.anyBarber ? 'any' : (booking.barber?.id ?? singleBarber?.id),
-          date:       booking.date,
-          time:       booking.time,
-          notes:      booking.notes || undefined,
-        }),
+    mutationFn: () => {
+      // Calcular o barbeiro efectivo no momento do envio:
+      // 1. Se anyBarber → enviar 'any' (backend faz pickBarber)
+      // 2. Se barbeiro seleccionado → usar esse ID
+      // 3. Se só existe 1 barbeiro (passo saltado) → usar singleBarber
+      // NUNCA enviar undefined — isso faria o backend tratar como anyBarber
+      const effectiveBarberId: number | 'any' | undefined = booking.anyBarber
+        ? 'any'
+        : (booking.barber?.id ?? singleBarber?.id)
+
+      if (!booking.anyBarber && effectiveBarberId === undefined) {
+        // Barbeiro não resolvido — não deve acontecer em fluxo normal,
+        // mas protege contra race condition do draft/query
+        throw new Error('Não foi possível identificar o barbeiro. Por favor volta atrás e seleciona novamente.')
+      }
+
+      return api.post('/api/reservations', {
+        service_id: booking.service!.id,
+        barber_id:  effectiveBarberId,
+        date:       booking.date,
+        time:       booking.time,
+        notes:      booking.notes || undefined,
+      })
+    },
     onSuccess: (res) => {
       if (!res.success) { setError(res.error ?? 'Erro ao confirmar reserva.'); return }
       try { storage?.removeItem(DRAFT_KEY) } catch {}
@@ -543,7 +559,6 @@ export default function BookingPage() {
                         {[
                           {
                             icon: Scissors, label: 'Serviço',
-                            // Preço efectivo: do barbeiro se escolhido, min_price se "sem preferência"
                             value: `${booking.service?.name} — ${effectivePrice}€`,
                           },
                           {
