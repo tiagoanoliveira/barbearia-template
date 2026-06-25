@@ -132,19 +132,15 @@ export default function BookingPage() {
         notes:      draft.notes || '',
       }))
 
-      // Calcular o passo correcto com os dados disponíveis neste momento.
-      // O barbeiro (objecto completo) ainda não está restaurado aqui — só
-      // depois de barbersForService carregar. Por isso usamos draft.barberId
-      // e draft.anyBarber para decidir se o passo 2 está completo.
       const barberDone = !!draft.anyBarber || !!draft.barberId
       const dateDone   = !!(draft.date && draft.time)
 
       let targetStep: Step = draft.step ?? 1
-      if (targetStep === 4 && !dateDone)   targetStep = 3
+      if (targetStep === 4 && !dateDone)          targetStep = 3
       if (targetStep >= 3 && !barberDone && !svc) targetStep = 1
       if (targetStep >= 3 && !barberDone && svc)  targetStep = 2
-      if (targetStep === 4 && !dateDone)   targetStep = 3
-      if (targetStep >= 1 && !svc)         targetStep = 1
+      if (targetStep === 4 && !dateDone)          targetStep = 3
+      if (targetStep >= 1 && !svc)                targetStep = 1
 
       if (targetStep >= 1 && targetStep <= 4) setStep(targetStep)
     } catch {}
@@ -248,7 +244,6 @@ export default function BookingPage() {
         ? 'any'
         : (booking.barber?.id ?? singleBarber?.id)
 
-      // Verificações de integridade — redireciona para o passo em falta
       if (!booking.service) { goToStep(1); throw new Error('Serviço não definido.') }
       if (!booking.anyBarber && effectiveBarberId === undefined) {
         goToStep(singleBarber === null ? 2 : 1)
@@ -341,14 +336,14 @@ export default function BookingPage() {
   const serviceRestriction = booking.service ? serviceRestrictions[booking.service.id] : null
 
   const effectivePrice = booking.anyBarber
-      ? booking.service?.min_price ?? booking.service?.price
-      : booking.barber?.price ?? booking.service?.price
+      ? (booking.service?.min_price ?? booking.service?.price)
+      : (booking.barber?.price ?? booking.service?.price)
 
-  // Nome do barbeiro para mostrar no passo 4:
-  // usa o objecto em memória se disponível, senão o nome guardado no draft
+  // Nome do barbeiro para mostrar no passo 4.
+  // Parênteses explícitos para separar ?? de || (TS5076).
   const displayBarberName = booking.anyBarber
     ? 'Sem preferência (atribuição automática)'
-    : (booking.barber?.name ?? singleBarber?.name ?? booking.barberName || '—')
+    : ((booking.barber?.name ?? singleBarber?.name ?? booking.barberName) || '—')
 
   const steps: { n: Step; label: string }[] = singleBarber
       ? [
