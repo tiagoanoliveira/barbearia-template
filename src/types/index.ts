@@ -139,6 +139,29 @@ export function isDiscountUsable(d: Discount): boolean {
   return true
 }
 
+// ─── Faturação (Moloni On) ─────────────────────────────────────────────────
+
+export interface InvoiceLineItem {
+  description: string
+  quantity: number
+  unit_price: number  // em euros
+}
+
+export interface InvoicePayload {
+  /** NIF a usar na fatura (null = sem contribuinte / consumidor final) */
+  nif: string | null
+  /** Nome do cliente */
+  customer_name: string
+  /** Email do cliente (para envio da fatura) */
+  customer_email?: string
+  /** Linhas da fatura */
+  lines: InvoiceLineItem[]
+  /** Valor total a faturar em euros (editável pelo admin) */
+  total_override: number | null
+  /** Se true, guarda NIF no perfil do cliente */
+  save_nif_to_profile: boolean
+}
+
 // ─── Cliente ─────────────────────────────────────────────────────────────────────────────
 export interface Client {
   id: number

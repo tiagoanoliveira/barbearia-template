@@ -13,6 +13,8 @@ import Modal from '@/components/ui/Modal'
 import type { Reservation, ReservationStatus, Service, MeioPagamento, Discount, ReservationHistoricoItem } from '@/types'
 import { isDiscountUsable } from '@/types'
 import { hasMeaningfulReservationComment } from '@/utils/reservationComments'
+import { featureFlags } from '@/config/theme'
+import { InvoicingModal } from '@/components/admin/invoicing-modal'
 
 // ─── Constantes partilhadas ──────────────────────────────────────────────────────────────────────
 const STATUS_LABEL_MAP: Record<string, string> = {
@@ -697,6 +699,7 @@ export function CheckoutModal({
   const [comentario, setComentario]   = useState<string>(reservation.comentario_pagamento ?? '')
   const [error, setError]             = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
+  const [showInvoicing, setShowInvoicing] = useState(false)
 
   // ── Handler de seleção de desconto (tabela) ───────────────────────────────────────────────────────────────────
   const handleSelectDiscount = (discountId: number | null) => {
@@ -842,6 +845,21 @@ export function CheckoutModal({
       footer={
         <>
           <button className="btn-secondary text-sm" onClick={onClose}>Cancelar</button>
+          {featureFlags.invoicing.enabled && !editMode && (
+              <button
+                  className="text-sm px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium transition-colors disabled:opacity-50"
+                  onClick={async () => {
+                    const err = validate()
+                    if (err) { setError(err); return }
+                    // Executa o checkout primeiro, depois abre faturação
+                    await handleConfirm()
+                    setShowInvoicing(true)
+                  }}
+                  disabled={saving}
+              >
+                🧾 Confirmar e Faturar
+              </button>
+          )}
           <button className="btn-primary text-sm" onClick={handleConfirm} disabled={saving}>
             {saving ? 'A guardar...' : editMode ? 'Guardar Pagamento' : 'Confirmar'}
           </button>
@@ -1129,6 +1147,15 @@ export function CheckoutModal({
           <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
       </div>
+      {/* Modal de faturação */}
+      {showInvoicing && (
+          <InvoicingModal
+              reservation={reservation}
+              valorFaturar={valorPagoEfectivo}
+              onClose={() => setShowInvoicing(false)}
+              onInvoiced={() => { setShowInvoicing(false); onClose() }}
+          />
+      )}
     </Modal>
   )
 }

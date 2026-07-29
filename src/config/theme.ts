@@ -156,6 +156,12 @@ export const barberShopConfig = {
     showGeneralSeparately: true,
   },
 
+  // ─ Faturação (Moloni On) ─────────────────────────────────────────────────
+  invoicing: {
+    /** Ativa o botão "Confirmar e Faturar" no modal de checkout */
+    enabled: false,
+  },
+
   // ─ Personalização visual ─────────────────────────────────────────────────
   theme: {
     navbarBg:       'bg-primary-900 backdrop-blur-md',
@@ -167,6 +173,13 @@ export const barberShopConfig = {
     bookingCard:    'bg-gray-900/95 border-white/10',
     adminBg:        'bg-gray-50',
     adminSidebar:   'bg-gray-950',
+  },
+} as const
+
+export const featureFlags = {
+  /** Ativa o botão "Confirmar e Faturar" no modal de checkout */
+  invoicing: {
+    enabled: true,
   },
 } as const
 
