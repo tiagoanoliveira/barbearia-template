@@ -145,13 +145,13 @@ export function InvoicingModal({ reservation, valorFaturar, onClose, onInvoiced 
             }
 
             // Chamar API de faturação (Moloni On)
-            await adminApi.post('/api/admin/invoicing/emit', {
+            const response = await adminApi.post('/api/admin/invoicing/emit', {
                 reservation_id: reservation.id,
                 nif:            nifToUse,
                 customer_name:  clientData?.name ?? reservation.client_name,
                 customer_email: clientData?.email ?? reservation.client_email,
                 lines,
-                total_override: totalLinhas,
+                payment_method: (reservation as any).payment_method ?? 'dinheiro',
             })
 
             qc.invalidateQueries({ queryKey: ['reservations'] })

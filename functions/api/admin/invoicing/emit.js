@@ -39,17 +39,13 @@ async function moloniRequest(env, query, variables = {}) {
     return json.data
 }
 
-// ── Obter metodo de pagamento por omissão (ex: Numerário) ──────────────────
-async function getDefaultPaymentMethodId(env, companyId) {
-    if (env.MOLONI_PAYMENT_METHOD_ID) {
-        return Number(env.MOLONI_PAYMENT_METHOD_ID)
-    }
-
+// ── Resolver paymentMethodId a partir do nome escolhido no Checkout ────────
+async function getPaymentMethodId(env, companyId, paymentMethodName) {
     const data = await moloniRequest(env, `
         query GetPaymentMethods($companyId: Int!) {
             paymentMethods(companyId: $companyId, options: { pagination: { page: 1, qty: 50 } }) {
                 errors { field msg }
-                data { paymentMethodId name isNumerary }
+                data { paymentMethodId name isDefault }
             }
         }
     `, { companyId })
@@ -60,14 +56,32 @@ async function getDefaultPaymentMethodId(env, companyId) {
     }
 
     const methods = data?.paymentMethods?.data ?? []
-    const method = methods.find(m => m.isNumerary) ?? methods[0]
-
-    if (!method) {
+    if (methods.length === 0) {
         throw new Error('Não existe nenhum método de pagamento configurado na Moloni.')
     }
 
-    return method.paymentMethodId
+    // Mapeamento entre os valores usados no Checkout e nomes prováveis na Moloni
+    const aliasMap = {
+        'multibanco': ['multibanco', 'mb', 'cartão'],
+        'dinheiro':   ['dinheiro', 'numerário', 'numerario', 'cash'],
+        'outro':      ['outro', 'transferência', 'transferencia', 'outros'],
+    }
+
+    if (paymentMethodName) {
+        const key = paymentMethodName.trim().toLowerCase()
+        const aliases = aliasMap[key] ?? [key]
+
+        const matched = methods.find(m =>
+            aliases.some(alias => m.name.toLowerCase().includes(alias))
+        )
+        if (matched) return matched.paymentMethodId
+    }
+
+    // Fallback: usar o metodo marcado como isDefault, ou o primeiro da lista
+    const fallback = methods.find(m => m.isDefault) ?? methods[0]
+    return fallback.paymentMethodId
 }
+
 // ── Obter automaticamente o documentSetId da série "Faturas-Recibo" ────────
 async function getDocumentSetId(env, companyId) {
     if (env.MOLONI_DOCUMENT_SET_ID) {
@@ -282,7 +296,7 @@ async function getOrCreateCustomerId(env, companyId, vat, name, email) {
 export async function onRequestPost({ request, env }) {
     try {
         const body = await request.json()
-        const { reservation_id, nif, customer_name, customer_email, lines } = body
+        const { reservation_id, nif, customer_name, customer_email, lines, payment_method } = body
 
         if (!Array.isArray(lines) || lines.length === 0) {
             return Response.json({ success: false, error: 'Nenhuma linha de fatura foi enviada.' }, { status: 400 })
@@ -296,7 +310,7 @@ export async function onRequestPost({ request, env }) {
         const taxId = await getStandardTaxId(env, companyId)
         const categoryId = await getDefaultCategoryId(env, companyId)
         const measurementUnitId = await getDefaultMeasurementUnitId(env, companyId)
-        const paymentMethodId = await getDefaultPaymentMethodId(env, companyId)
+        const paymentMethodId = await getPaymentMethodId(env, companyId, payment_method)
 
         // 2. Resolver (ou criar) cada produto/serviço da fatura
         const productsPayload = []
