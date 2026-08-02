@@ -678,9 +678,13 @@ export function CheckoutModal({
     : null
 
   const initialValorPago = (() => {
-    if (hadOferta && reservation.oferta_valor != null)
-      return Math.max(0, precoServico - reservation.oferta_valor)
-    return reservation.valor_pago ?? precoServico
+    if (hadOferta && reservation.ofertavalor != null) {
+      return Math.max(0, precoServico - reservation.ofertavalor)
+    }
+    if (reservation.valorpago != null && reservation.valorpago > 0) {
+      return reservation.valorpago
+    }
+    return precoServico
   })()
 
   const [temOferta, setTemOferta]   = useState(hadOferta)

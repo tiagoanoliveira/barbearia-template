@@ -393,16 +393,26 @@ export async function onRequestPost({ request, env }) {
         if (customer_email) {
             try {
                 await moloniRequest(env, `
-            mutation SendInvoiceReceiptMail($companyId: Int!, $documents: [Int]!) {
-                invoiceReceiptSendMail(
-                    companyId: $companyId
-                    documents: $documents
-                    mailData: {}
-                )
-            }
-        `, {
+                    mutation SendInvoiceReceiptMail(
+                        $companyId: Int!
+                        $documents: [Int]!
+                        $mailData: MailData!
+                    ) {
+                        invoiceReceiptSendMail(
+                            companyId: $companyId
+                            documents: $documents
+                            mailData: $mailData
+                        )
+                    }
+                `, {
                     companyId,
                     documents: [created.documentId],
+                    mailData: {
+                        to: {
+                            email: customer_email,
+                            name:  customer_name || undefined,
+                        },
+                    },
                 })
                 emailSent = true
                 emailProvider = 'moloni'
@@ -414,7 +424,7 @@ export async function onRequestPost({ request, env }) {
         // Fallback: se Moloni não conseguiu enviar, tentamos nós com PDF em anexo
         if (customer_email && !emailSent) {
             try {
-                // 1) Pedir à Moloni para gerar o PDF
+                // 1) Pedir à Moloni para gerar o PDF (processo assíncrono do lado da Moloni)
                 await moloniRequest(env, `
                     mutation GenerateInvoiceReceiptPDF($companyId: Int!, $documentId: Int!) {
                         invoiceReceiptGetPDF(companyId: $companyId, documentId: $documentId)
@@ -424,26 +434,44 @@ export async function onRequestPost({ request, env }) {
                     documentId: created.documentId,
                 })
 
-                // 2) Obter token e path para download
-                const pdfTokenData = await moloniRequest(env, `
-                    query GetInvoiceReceiptPDFToken($documentId: Int!) {
-                        invoiceReceiptGetPDFToken(documentId: $documentId) {
-                            data { token path filename }
-                            errors { field msg }
-                        }
-                    }
-                `, {
-                    documentId: created.documentId,
-                })
+                // 2) Obter token e path para download — com retry, porque o PDF demora
+                //    alguns segundos a ficar disponível do lado da Moloni.
+                const sleep = ms => new Promise(r => setTimeout(r, ms))
 
-                const pdfErrors = pdfTokenData?.invoiceReceiptGetPDFToken?.errors
-                if (pdfErrors && pdfErrors.length > 0) {
-                    throw new Error(`Erro na obtenção do token do PDF: ${JSON.stringify(pdfErrors)}`)
+                let tokenInfo = null
+                const MAX_ATTEMPTS = 5
+                const DELAY_MS = 1500
+
+                for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+                    const pdfTokenData = await moloniRequest(env, `
+                        query GetInvoiceReceiptPDFToken($documentId: Int!) {
+                            invoiceReceiptGetPDFToken(documentId: $documentId) {
+                                data { token path filename }
+                                errors { field msg }
+                            }
+                        }
+                    `, {
+                        documentId: created.documentId,
+                    })
+
+                    const pdfErrors = pdfTokenData?.invoiceReceiptGetPDFToken?.errors
+                    const notReadyYet = pdfErrors?.some(e => /not ready|isn't ready/i.test(e.msg))
+
+                    if (notReadyYet && attempt < MAX_ATTEMPTS) {
+                        await sleep(DELAY_MS)
+                        continue
+                    }
+
+                    if (pdfErrors && pdfErrors.length > 0) {
+                        throw new Error(`Erro na obtenção do token do PDF: ${JSON.stringify(pdfErrors)}`)
+                    }
+
+                    tokenInfo = pdfTokenData?.invoiceReceiptGetPDFToken?.data
+                    break
                 }
 
-                const tokenInfo = pdfTokenData?.invoiceReceiptGetPDFToken?.data
                 if (!tokenInfo?.token || !tokenInfo?.path) {
-                    throw new Error('Resposta inválida ao obter token do PDF.')
+                    throw new Error('Resposta inválida ao obter token do PDF após várias tentativas.')
                 }
 
                 const pdfUrl = `https://mediaapi.moloni.org${tokenInfo.path}?jwt=${tokenInfo.token}`
