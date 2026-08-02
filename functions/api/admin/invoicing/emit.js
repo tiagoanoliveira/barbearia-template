@@ -76,7 +76,7 @@ async function getDocumentSetId(env, companyId) {
 async function getStandardTaxId(env, companyId) {
     const data = await moloniRequest(env, `
         query GetTaxes($companyId: Int!) {
-            taxes(companyId: $companyId) {
+            taxes(companyId: $companyId, options: { pagination: { page: 1, qty: 50 } }) {
                 errors { field msg }
                 data { taxId name value isDefault }
             }
@@ -96,7 +96,7 @@ async function getStandardTaxId(env, companyId) {
 async function getDefaultCategoryId(env, companyId) {
     const data = await moloniRequest(env, `
         query GetCategories($companyId: Int!) {
-            productCategories(companyId: $companyId) {
+            productCategories(companyId: $companyId, options: { pagination: { page: 1, qty: 10 } }) {
                 errors { field msg }
                 data { productCategoryId name }
             }
@@ -122,7 +122,7 @@ async function getDefaultCategoryId(env, companyId) {
 async function getDefaultMeasurementUnitId(env, companyId) {
     const data = await moloniRequest(env, `
         query GetUnits($companyId: Int!) {
-            measurementUnits(companyId: $companyId) {
+            measurementUnits(companyId: $companyId, options: { pagination: { page: 1, qty: 50 } }) {
                 errors { field msg }
                 data { measurementUnitId name abbreviation }
             }
@@ -149,7 +149,10 @@ async function getDefaultMeasurementUnitId(env, companyId) {
 async function getOrCreateProductId(env, companyId, name, price, taxId, categoryId, measurementUnitId) {
     const searchData = await moloniRequest(env, `
         query FindProduct($companyId: Int!, $search: String!) {
-            products(companyId: $companyId, search: $search) {
+            products(companyId: $companyId, options: {
+                search: { field: ALL, value: $search }
+                pagination: { page: 1, qty: 10 }
+            }) {
                 errors { field msg }
                 data { productId name price }
             }
@@ -201,7 +204,10 @@ async function getOrCreateCustomerId(env, companyId, vat, name, email) {
     if (vat && vat !== '999999990') {
         const searchData = await moloniRequest(env, `
             query FindCustomer($companyId: Int!, $search: String!) {
-                customers(companyId: $companyId, search: $search) {
+                customers(companyId: $companyId, options: {
+                    search: { field: ALL, value: $search }
+                    pagination: { page: 1, qty: 10 }
+                }) {
                     errors { field msg }
                     data { customerId vat name }
                 }
