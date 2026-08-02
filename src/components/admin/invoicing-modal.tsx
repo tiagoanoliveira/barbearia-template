@@ -301,8 +301,6 @@ export function InvoicingModal({ reservation, valorFaturar, onClose, onInvoiced 
 
                     {/* Serviços / linhas da fatura */}
                     <div>
-                        <p className="text-xs text-gray-500 mb-2 font-medium">Linhas da fatura</p>
-
                         {/* Cabeçalho das colunas */}
                         <div className="grid grid-cols-[1fr_60px_80px_28px] gap-2 px-0.5 mb-1">
                             <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Descrição</span>
@@ -346,14 +344,6 @@ export function InvoicingModal({ reservation, valorFaturar, onClose, onInvoiced 
                             ))}
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={addLine}
-                            className="mt-2 text-xs text-blue-500 hover:underline"
-                        >
-                            + Adicionar linha manual
-                        </button>
-
                         {/* Adicionar a partir de lista pré-definida (serviços/produtos tabelados) */}
                         <div className="mt-2 flex gap-2 items-center">
                             <select
@@ -377,6 +367,14 @@ export function InvoicingModal({ reservation, valorFaturar, onClose, onInvoiced 
                                 Adicionar à fatura
                             </button>
                         </div>
+
+                        <button
+                            type="button"
+                            onClick={addLine}
+                            className="mt-2 text-xs text-blue-500 hover:underline"
+                        >
+                            + Adicionar linha manual
+                        </button>
 
                         <div className="mt-2 flex justify-between text-xs text-gray-500">
                             <span>Total a faturar:</span>
