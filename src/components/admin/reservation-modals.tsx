@@ -776,7 +776,7 @@ export function CheckoutModal({
     return null
   }
 
-  const performCheckout = async (): Promise<boolean> => {
+  const performCheckout = async (markAsConcluded: boolean = true): Promise<boolean> => {
     const err = validate()
     if (err) {
       setError(err)
@@ -803,7 +803,7 @@ export function CheckoutModal({
         await reservationsApi.update(reservation.id, {
           barber_id:        pendingEditForm.barber_id,
           service_id:       pendingEditForm.service_id,
-          status:           'concluida',
+          status:           markAsConcluded ? 'concluida' : (pendingEditForm.status ?? reservation.status),
           data_hora:        pendingEditForm.data_hora,
           nota_privada:     pendingEditForm.nota_privada,
           send_email:       pendingEditForm.sendEmail,
@@ -811,8 +811,12 @@ export function CheckoutModal({
           ...paymentPayload,
         })
       } else {
+        const statusPatch = !editMode && markAsConcluded
+            ? { status: 'concluida' as const }
+            : {}
+
         await reservationsApi.update(reservation.id, {
-          ...(!editMode && { status: 'concluida' }),
+          ...statusPatch,
           ...paymentPayload,
         })
       }
@@ -843,7 +847,7 @@ export function CheckoutModal({
 
   // botão "Confirmar" → faz checkout e depois fecha modal
   const handleConfirm = async () => {
-    const ok = await performCheckout()
+    const ok = await performCheckout(true)
     if (ok) {
       onClose()
     }
@@ -851,7 +855,7 @@ export function CheckoutModal({
 
   // botão "Confirmar e Faturar" → faz checkout e depois abre faturação
   const handleConfirmAndInvoice = async () => {
-    const ok = await performCheckout()
+    const ok = await performCheckout(false)
     if (ok) {
       setShowInvoicing(true)
     }
@@ -1168,6 +1172,7 @@ export function CheckoutModal({
           <InvoicingModal
               reservation={reservation}
               valorFaturar={valorPagoEfectivo}
+              meioPagamento={meioPagamento}      // NOVO
               onClose={() => setShowInvoicing(false)}
               onInvoiced={() => { setShowInvoicing(false); onClose() }}
           />

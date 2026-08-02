@@ -1,6 +1,6 @@
 // functions/api/admin/invoicing/emit.js
 // Emissão de faturas-recibo via Moloni ON (GraphQL API, autenticação por API Key)
-
+import { sendEmail, shell } from '../../../utils/email.js'
 const MOLONI_ENDPOINT = 'https://api.molonion.pt/v1'
 const INVOICE_RECEIPT_TYPE_ID = 27 // Invoice Receipt (FR)
 
@@ -336,34 +336,34 @@ export async function onRequestPost({ request, env }) {
 
         // 4. Emitir a fatura-recibo
         const invoiceData = await moloniRequest(env, `
-            mutation CreateInvoiceReceipt(
-                $companyId: Int!
-                $documentSetId: Int!
-                $customerId: Int!
-                $date: DateTime!
-                $expirationDate: Date!
-                $ourReference: String
-                $products: [DocumentProductInput!]!
-                $payments: [DocumentPaymentMethodInput]!
-            ) {
-                invoiceReceiptCreate(
-                    companyId: $companyId
-                    data: {
-                        documentSetId: $documentSetId
-                        customerId: $customerId
-                        date: $date
-                        expirationDate: $expirationDate
-                        status: 1
-                        ourReference: $ourReference
-                        products: $products
-                        payments: $payments
-                    }
-                ) {
-                    errors { field msg }
-                    data { documentId number totalValue status }
-                }
+    mutation CreateInvoiceReceipt(
+        $companyId: Int!
+        $documentSetId: Int!
+        $customerId: Int!
+        $date: DateTime!
+        $expirationDate: Date!
+        $ourReference: String
+        $products: [DocumentProductInput!]!
+        $payments: [DocumentPaymentMethodInput]!
+    ) {
+        invoiceReceiptCreate(
+            companyId: $companyId
+            data: {
+                documentSetId: $documentSetId
+                customerId: $customerId
+                date: $date
+                expirationDate: $expirationDate
+                status: 1
+                ourReference: $ourReference
+                products: $products
+                payments: $payments
             }
-        `, {
+        ) {
+            errors { field msg }
+            data { documentId number totalValue status }
+        }
+    }
+`, {
             companyId,
             documentSetId,
             customerId,
@@ -385,8 +385,110 @@ export async function onRequestPost({ request, env }) {
             return Response.json({ success: false, error: errors }, { status: 422 })
         }
 
-        return Response.json({ success: true, data: invoiceData.invoiceReceiptCreate.data })
+        const created = invoiceData.invoiceReceiptCreate.data
+        let emailSent = false
+        let emailProvider = null
 
+        // Tentar enviar via Moloni ON se tivermos email do cliente
+        if (customer_email) {
+            try {
+                await moloniRequest(env, `
+            mutation SendInvoiceReceiptMail($companyId: Int!, $documents: [Int]!) {
+                invoiceReceiptSendMail(
+                    companyId: $companyId
+                    documents: $documents
+                    mailData: {}
+                )
+            }
+        `, {
+                    companyId,
+                    documents: [created.documentId],
+                })
+                emailSent = true
+                emailProvider = 'moloni'
+            } catch (mailErr) {
+                console.error('[invoicing/emit] falha ao enviar email via Moloni:', mailErr)
+            }
+        }
+
+        // Fallback: se Moloni não conseguiu enviar, tentamos nós com PDF em anexo
+        if (customer_email && !emailSent) {
+            try {
+                // 1) Pedir à Moloni para gerar o PDF
+                await moloniRequest(env, `
+                    mutation GenerateInvoiceReceiptPDF($companyId: Int!, $documentId: Int!) {
+                        invoiceReceiptGetPDF(companyId: $companyId, documentId: $documentId)
+                    }
+                `, {
+                    companyId,
+                    documentId: created.documentId,
+                })
+
+                // 2) Obter token e path para download
+                const pdfTokenData = await moloniRequest(env, `
+                    query GetInvoiceReceiptPDFToken($documentId: Int!) {
+                        invoiceReceiptGetPDFToken(documentId: $documentId) {
+                            data { token path filename }
+                            errors { field msg }
+                        }
+                    }
+                `, {
+                    documentId: created.documentId,
+                })
+
+                const pdfErrors = pdfTokenData?.invoiceReceiptGetPDFToken?.errors
+                if (pdfErrors && pdfErrors.length > 0) {
+                    throw new Error(`Erro na obtenção do token do PDF: ${JSON.stringify(pdfErrors)}`)
+                }
+
+                const tokenInfo = pdfTokenData?.invoiceReceiptGetPDFToken?.data
+                if (!tokenInfo?.token || !tokenInfo?.path) {
+                    throw new Error('Resposta inválida ao obter token do PDF.')
+                }
+
+                const pdfUrl = `https://mediaapi.moloni.org${tokenInfo.path}?jwt=${tokenInfo.token}`
+
+                // 3) Fazer download do PDF e convertê-lo para Base64
+                const pdfRes = await fetch(pdfUrl)
+                if (!pdfRes.ok) {
+                    throw new Error(`Falha ao descarregar PDF (HTTP ${pdfRes.status})`)
+                }
+                const pdfArrayBuffer = await pdfRes.arrayBuffer()
+                const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfArrayBuffer)))
+
+                // 4) Construir HTML de email e enviar via Resend
+                const htmlBody = shell('header-gold', 'Fatura da sua reserva', `
+                    <p>Olá ${customer_name || ''},</p>
+                    <p>Em anexo encontra a sua fatura/recibo relativa à reserva.</p>
+                    <p>Obrigado pela preferência!</p>
+                `)
+
+                await sendEmail({ env }, {
+                    to:      customer_email,
+                    subject: `Fatura/Recibo ${created.number}`,
+                    html:    htmlBody,
+                    attachments: [{
+                        filename: tokenInfo.filename || `fatura-${created.number}.pdf`,
+                        content:  pdfBase64,
+                        type:     'application/pdf',
+                    }],
+                })
+
+                emailSent = true
+                emailProvider = 'local'
+            } catch (fallbackErr) {
+                console.error('[invoicing/emit] falha ao enviar email com PDF localmente:', fallbackErr)
+            }
+        }
+
+        return Response.json({
+            success: true,
+            data: {
+                ...created,
+                emailSent,
+                emailProvider,
+            },
+        })
     } catch (e) {
         console.error('[invoicing/emit] erro:', e)
         return Response.json(

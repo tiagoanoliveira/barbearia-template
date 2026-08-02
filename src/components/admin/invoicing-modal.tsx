@@ -6,17 +6,19 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Modal from '@/components/ui/Modal'
 import { adminApi } from '@/api/client'
-import type { Reservation, InvoiceLineItem, Service } from '@/types'
+import { reservationsApi } from '@/api/reservations'
+import type { Reservation, InvoiceLineItem, Service, MeioPagamento } from '@/types'
 import { ClientDetailModal } from '@/components/admin/client-detail-modal'
 
 interface Props {
     reservation: Reservation
     valorFaturar: number           // valor base (já calculado pelo checkout)
+    meioPagamento?: MeioPagamento | null
     onClose: () => void
     onInvoiced: () => void         // callback após fatura emitida com sucesso
 }
 
-export function InvoicingModal({ reservation, valorFaturar, onClose, onInvoiced }: Props) {
+export function InvoicingModal({ reservation, valorFaturar, meioPagamento, onClose, onInvoiced }: Props) {
     const qc = useQueryClient()
     const clientId = reservation.client_id
 
@@ -66,7 +68,7 @@ export function InvoicingModal({ reservation, valorFaturar, onClose, onInvoiced 
     const [serviceToAddId, setServiceToAddId] = useState<string>('')
 
     // ── Preço tabelado do serviço da reserva ────────────────────────────────────
-    const precoServico = reservation.service_price ?? valorFaturar ?? 0
+    const precoServico = valorFaturar ?? reservation.service_price ?? 0
 
     // ── Estado ────────────────────────────────────────────────────────────────
     const [emitirComContribuinte, setEmitirComContribuinte] = useState(true)
@@ -144,15 +146,39 @@ export function InvoicingModal({ reservation, valorFaturar, onClose, onInvoiced 
                 }
             }
 
-            // Chamar API de faturação (Moloni On)
+            const paymentMethodName =
+                meioPagamento
+                ?? reservation.meio_pagamento
+                ?? 'dinheiro'
+
             const response = await adminApi.post('/api/admin/invoicing/emit', {
                 reservation_id: reservation.id,
                 nif:            nifToUse,
                 customer_name:  clientData?.name ?? reservation.client_name,
                 customer_email: clientData?.email ?? reservation.client_email,
                 lines,
-                payment_method: (reservation as any).payment_method ?? 'dinheiro',
+                payment_method: paymentMethodName,
             })
+
+            // Se a API de faturação devolveu erro, mostrar no modal e não avançar
+            if (!response.success) {
+                const rawError = response.error
+                const message =
+                    typeof rawError === 'string'
+                        ? rawError
+                        : Array.isArray(rawError)
+                            ? JSON.stringify(rawError)
+                            : 'Erro ao emitir fatura. Verifica os dados na Moloni On.'
+                setError(message)
+                setSaving(false)
+                return
+            }
+
+            try {
+                await reservationsApi.update(reservation.id, { status: 'concluida' })
+            } catch (statusErr) {
+                console.error('[InvoicingModal] falha ao atualizar estado da reserva para concluída:', statusErr)
+            }
 
             qc.invalidateQueries({ queryKey: ['reservations'] })
             qc.invalidateQueries({ queryKey: ['client', reservation.client_id] })
