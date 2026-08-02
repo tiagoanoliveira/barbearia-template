@@ -1,7 +1,8 @@
 // functions/api/admin/invoicing/emit.js
-// Emissão de faturas via Moloni ON (GraphQL API, autenticação por API Key)
+// Emissão de faturas-recibo via Moloni ON (GraphQL API, autenticação por API Key)
 
 const MOLONI_ENDPOINT = 'https://api.molonion.pt/v1'
+const INVOICE_RECEIPT_TYPE_ID = 27 // Invoice Receipt (FR)
 
 // ── Helper genérico: executar uma query/mutation GraphQL na Moloni ON ──────
 async function moloniRequest(env, query, variables = {}) {
@@ -32,11 +33,32 @@ async function moloniRequest(env, query, variables = {}) {
     }
 
     if (json.errors) {
-        // Erros GraphQL de nível superior (sintaxe, autenticação, etc.)
         throw new Error(`Erro GraphQL Moloni: ${JSON.stringify(json.errors)}`)
     }
 
     return json.data
+}
+
+// ── Obter automaticamente o documentSetId da série "Faturas-Recibo" ────────
+async function getDocumentSetId(env, companyId) {
+    if (env.MOLONI_DOCUMENT_SET_ID) {
+        return Number(env.MOLONI_DOCUMENT_SET_ID)
+    }
+
+    const data = await moloniRequest(env, `
+        query GetDocumentSets($companyId: Int!, $documentTypeId: Int!) {
+            documentSetsForDocument(companyId: $companyId, documentTypeId: $documentTypeId) {
+                documentSets { documentSetId name }
+            }
+        }
+    `, { companyId, documentTypeId: INVOICE_RECEIPT_TYPE_ID })
+
+    const sets = data?.documentSetsForDocument?.documentSets ?? []
+    if (sets.length === 0) {
+        throw new Error('Não existe nenhuma série de "Faturas-Recibo" configurada na Moloni.')
+    }
+
+    return sets[0].documentSetId
 }
 
 // ── Obter o ID da taxa normal (23%) da empresa ──────────────────────────────
@@ -59,7 +81,7 @@ async function getStandardTaxId(env, companyId) {
     return tax.taxId
 }
 
-// ── Obter categoria de produto e unidade de medida por omissão ─────────────
+// ── Obter categoria de produto por omissão (cria uma se não existir) ───────
 async function getDefaultCategoryId(env, companyId) {
     const data = await moloniRequest(env, `
         query GetCategories($companyId: Int!) {
@@ -73,7 +95,6 @@ async function getDefaultCategoryId(env, companyId) {
     const categories = data?.productCategories?.data ?? []
     if (categories.length > 0) return categories[0].productCategoryId
 
-    // Nenhuma categoria existe — criar uma genérica
     const created = await moloniRequest(env, `
         mutation CreateCategory($companyId: Int!) {
             productCategoryCreate(companyId: $companyId, data: { name: "Barbearia" }) {
@@ -86,6 +107,7 @@ async function getDefaultCategoryId(env, companyId) {
     return created?.productCategoryCreate?.data?.productCategoryId
 }
 
+// ── Obter unidade de medida por omissão (cria uma se não existir) ──────────
 async function getDefaultMeasurementUnitId(env, companyId) {
     const data = await moloniRequest(env, `
         query GetUnits($companyId: Int!) {
@@ -221,12 +243,10 @@ export async function onRequestPost({ request, env }) {
         }
 
         const companyId = Number(env.MOLONI_COMPANY_ID)
-        const documentSetId = Number(env.MOLONI_DOCUMENT_SET_ID)
-
         if (!companyId) throw new Error('MOLONI_COMPANY_ID não está configurado.')
-        if (!documentSetId) throw new Error('MOLONI_DOCUMENT_SET_ID não está configurado.')
 
-        // 1. Recolher dados de apoio (taxa, categoria, unidade) em paralelo
+        // 1. Resolver série de documentos, taxa, categoria e unidade de medida
+        const documentSetId = await getDocumentSetId(env, companyId)
         const taxId = await getStandardTaxId(env, companyId)
         const categoryId = await getDefaultCategoryId(env, companyId)
         const measurementUnitId = await getDefaultMeasurementUnitId(env, companyId)
@@ -250,17 +270,17 @@ export async function onRequestPost({ request, env }) {
             env, companyId, nif, customer_name, customer_email
         )
 
-        // 4. Emitir a fatura finalizada
+        // 4. Emitir a fatura-recibo
         const invoiceData = await moloniRequest(env, `
-            mutation CreateInvoice(
+            mutation CreateInvoiceReceipt(
                 $companyId: Int!
                 $documentSetId: Int!
                 $customerId: Int!
                 $date: DateTime!
                 $ourReference: String
-                $products: [InvoiceProductInput!]!
+                $products: [InvoiceReceiptProductInput!]!
             ) {
-                invoiceCreate(
+                invoiceReceiptCreate(
                     companyId: $companyId
                     data: {
                         documentSetId: $documentSetId
@@ -284,12 +304,12 @@ export async function onRequestPost({ request, env }) {
             products: productsPayload,
         })
 
-        const errors = invoiceData?.invoiceCreate?.errors
+        const errors = invoiceData?.invoiceReceiptCreate?.errors
         if (errors && errors.length > 0) {
             return Response.json({ success: false, error: errors }, { status: 422 })
         }
 
-        return Response.json({ success: true, data: invoiceData.invoiceCreate.data })
+        return Response.json({ success: true, data: invoiceData.invoiceReceiptCreate.data })
 
     } catch (e) {
         console.error('[invoicing/emit] erro:', e)
