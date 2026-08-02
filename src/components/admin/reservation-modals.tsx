@@ -678,11 +678,11 @@ export function CheckoutModal({
     : null
 
   const initialValorPago = (() => {
-    if (hadOferta && reservation.ofertavalor != null) {
-      return Math.max(0, precoServico - reservation.ofertavalor)
+    if (hadOferta && reservation.oferta_valor != null) {
+      return Math.max(0, precoServico - reservation.oferta_valor)
     }
-    if (reservation.valorpago != null && reservation.valorpago > 0) {
-      return reservation.valorpago
+    if (reservation.valor_pago != null && reservation.valor_pago > 0) {
+      return reservation.valor_pago
     }
     return precoServico
   })()
