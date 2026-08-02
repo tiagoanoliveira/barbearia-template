@@ -776,9 +776,13 @@ export function CheckoutModal({
     return null
   }
 
-  const handleConfirm = async () => {
+  const performCheckout = async (): Promise<boolean> => {
     const err = validate()
-    if (err) { setError(err); return }
+    if (err) {
+      setError(err)
+      return false
+    }
+
     setSaving(true)
     try {
       // O desconto_id enviado à API não deve incluir o sentinel (-1)
@@ -829,11 +833,29 @@ export function CheckoutModal({
       }
 
       qc.invalidateQueries({ queryKey: [invalidateKey] })
-      onClose()
-    } catch {}
-    finally { setSaving(false) }
+      return true
+    } catch {
+      return false
+    } finally {
+      setSaving(false)
+    }
   }
 
+  // botão "Confirmar" → faz checkout e depois fecha modal
+  const handleConfirm = async () => {
+    const ok = await performCheckout()
+    if (ok) {
+      onClose()
+    }
+  }
+
+  // botão "Confirmar e Faturar" → faz checkout e depois abre faturação
+  const handleConfirmAndInvoice = async () => {
+    const ok = await performCheckout()
+    if (ok) {
+      setShowInvoicing(true)
+    }
+  }
   // Flag de conveniência: há algo (desconto tabela ou gratuita legada) para mostrar
   const hasAnyDiscount = allUsable.length > 0 || reservasGratuitas > 0
 
@@ -847,14 +869,8 @@ export function CheckoutModal({
           <button className="btn-secondary text-sm" onClick={onClose}>Cancelar</button>
           {featureFlags.invoicing.enabled && !editMode && (
               <button
-                  className="text-sm px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium transition-colors disabled:opacity-50"
-                  onClick={async () => {
-                    const err = validate()
-                    if (err) { setError(err); return }
-                    // Executa o checkout primeiro, depois abre faturação
-                    await handleConfirm()
-                    setShowInvoicing(true)
-                  }}
+                  className="text-sm px-2 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium transition-colors disabled:opacity-50"
+                  onClick={handleConfirmAndInvoice}
                   disabled={saving}
               >
                 🧾 Confirmar e Faturar
