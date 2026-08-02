@@ -39,6 +39,35 @@ async function moloniRequest(env, query, variables = {}) {
     return json.data
 }
 
+// ── Obter metodo de pagamento por omissão (ex: Numerário) ──────────────────
+async function getDefaultPaymentMethodId(env, companyId) {
+    if (env.MOLONI_PAYMENT_METHOD_ID) {
+        return Number(env.MOLONI_PAYMENT_METHOD_ID)
+    }
+
+    const data = await moloniRequest(env, `
+        query GetPaymentMethods($companyId: Int!) {
+            paymentMethods(companyId: $companyId, options: { pagination: { page: 1, qty: 50 } }) {
+                errors { field msg }
+                data { paymentMethodId name isNumerary }
+            }
+        }
+    `, { companyId })
+
+    const errors = data?.paymentMethods?.errors
+    if (errors && errors.length > 0) {
+        throw new Error(`Erro ao obter métodos de pagamento: ${JSON.stringify(errors)}`)
+    }
+
+    const methods = data?.paymentMethods?.data ?? []
+    const method = methods.find(m => m.isNumerary) ?? methods[0]
+
+    if (!method) {
+        throw new Error('Não existe nenhum método de pagamento configurado na Moloni.')
+    }
+
+    return method.paymentMethodId
+}
 // ── Obter automaticamente o documentSetId da série "Faturas-Recibo" ────────
 async function getDocumentSetId(env, companyId) {
     if (env.MOLONI_DOCUMENT_SET_ID) {
@@ -267,6 +296,7 @@ export async function onRequestPost({ request, env }) {
         const taxId = await getStandardTaxId(env, companyId)
         const categoryId = await getDefaultCategoryId(env, companyId)
         const measurementUnitId = await getDefaultMeasurementUnitId(env, companyId)
+        const paymentMethodId = await getDefaultPaymentMethodId(env, companyId)
 
         // 2. Resolver (ou criar) cada produto/serviço da fatura
         const productsPayload = []
@@ -287,6 +317,9 @@ export async function onRequestPost({ request, env }) {
             env, companyId, nif, customer_name, customer_email
         )
 
+        const totalValue = productsPayload.reduce((sum, p) => sum + p.qty * p.price, 0)
+        const todayIso = new Date().toISOString()
+
         // 4. Emitir a fatura-recibo
         const invoiceData = await moloniRequest(env, `
             mutation CreateInvoiceReceipt(
@@ -294,8 +327,10 @@ export async function onRequestPost({ request, env }) {
                 $documentSetId: Int!
                 $customerId: Int!
                 $date: DateTime!
+                $expirationDate: Date!
                 $ourReference: String
-                $products: [InvoiceReceiptProductInput!]!
+                $products: [DocumentProductInput!]!
+                $payments: [DocumentPaymentMethodInput]!
             ) {
                 invoiceReceiptCreate(
                     companyId: $companyId
@@ -303,9 +338,11 @@ export async function onRequestPost({ request, env }) {
                         documentSetId: $documentSetId
                         customerId: $customerId
                         date: $date
+                        expirationDate: $expirationDate
                         status: 1
                         ourReference: $ourReference
                         products: $products
+                        payments: $payments
                     }
                 ) {
                     errors { field msg }
@@ -316,9 +353,17 @@ export async function onRequestPost({ request, env }) {
             companyId,
             documentSetId,
             customerId,
-            date: new Date().toISOString(),
+            date: todayIso,
+            expirationDate: todayIso.split('T')[0],
             ourReference: `RES-${reservation_id}`,
             products: productsPayload,
+            payments: [
+                {
+                    paymentMethodId,
+                    date: todayIso,
+                    value: totalValue,
+                },
+            ],
         })
 
         const errors = invoiceData?.invoiceReceiptCreate?.errors
