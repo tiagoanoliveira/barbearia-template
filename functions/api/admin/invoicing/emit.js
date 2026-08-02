@@ -45,20 +45,31 @@ async function getDocumentSetId(env, companyId) {
         return Number(env.MOLONI_DOCUMENT_SET_ID)
     }
 
-    const data = await moloniRequest(env, `
+    const result = await moloniRequest(env, `
         query GetDocumentSets($companyId: Int!, $documentTypeId: Int!) {
             documentSetsForDocument(companyId: $companyId, documentTypeId: $documentTypeId) {
-                documentSets { documentSetId name }
+                errors { field msg }
+                data {
+                    documentSetId
+                    name
+                    isDefault
+                }
             }
         }
     `, { companyId, documentTypeId: INVOICE_RECEIPT_TYPE_ID })
 
-    const sets = data?.documentSetsForDocument?.documentSets ?? []
+    const errors = result?.documentSetsForDocument?.errors
+    if (errors && errors.length > 0) {
+        throw new Error(`Erro ao obter séries de documentos: ${JSON.stringify(errors)}`)
+    }
+
+    const sets = result?.documentSetsForDocument?.data ?? []
     if (sets.length === 0) {
         throw new Error('Não existe nenhuma série de "Faturas-Recibo" configurada na Moloni.')
     }
 
-    return sets[0].documentSetId
+    const defaultSet = sets.find(s => s.isDefault) ?? sets[0]
+    return defaultSet.documentSetId
 }
 
 // ── Obter o ID da taxa normal (23%) da empresa ──────────────────────────────
