@@ -304,7 +304,7 @@ function HistoricoEdicoes({ historico }: { historico: ReservationHistoricoItem[]
 }
 
 export function ReservationDetailModal({
-  reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout, onEditPayment,
+  reservation, onClose, onEdit, onChangeStatus, onCancel, onCheckout, onEditPayment, onInvoice,
 }: {
   reservation: Reservation
   onClose: () => void
@@ -313,6 +313,7 @@ export function ReservationDetailModal({
   onCancel: () => void
   onCheckout: () => void
   onEditPayment?: () => void
+  onInvoice?: () => void
 }) {
   const r = reservation
   const dt    = new Date(r.data_hora)
@@ -367,6 +368,12 @@ export function ReservationDetailModal({
             <button onClick={onEditPayment}
               className="text-xs px-3 py-1.5 rounded-full bg-purple-100 text-purple-700 font-medium hover:bg-purple-200">
               💳 Editar Pagamento
+            </button>
+          )}
+          {r.status === 'concluida' && onInvoice && (
+            <button onClick={onInvoice}
+                className="text-xs px-3 py-1.5 rounded-full bg-amber-100 text-amber-700 font-medium hover:bg-amber-200">
+              🧾 Faturar
             </button>
           )}
           {r.status !== 'faltou' && r.status !== 'cancelada' && (

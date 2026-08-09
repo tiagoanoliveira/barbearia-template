@@ -713,6 +713,9 @@ export default function CalendarPage() {
                 {r.status === 'concluida' && (
                   <CtxItem icon="💳" label="Editar Pagamento" onClick={() => { setModal({ type: 'res_checkout', r, editMode: true }); closeCtx() }} />
                 )}
+                {r.status === 'concluida' && (
+                    <CtxItem icon="🧾" label="Faturar" onClick={() => { setModal({ type: 'res_checkout', r }); closeCtx() }} />
+                )}
                 {r.status !== 'concluida' && r.status !== 'cancelada' && r.status !== 'faltou' && (
                   <CtxItem icon="✅" label="Chegou" onClick={() => { setModal({ type: 'res_checkout', r }); closeCtx() }} />
                 )}
