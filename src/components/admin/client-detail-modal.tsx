@@ -288,9 +288,10 @@ export function ClientDetailModal({
     ? `Editar ${clientData.name}`
     : (
         <span className="flex items-center gap-2">
+          <ClientAvatar client={clientData} size={16} />
           {clientData.name}
           <span className="text-xs font-normal text-gray-400">#{clientData.id}</span>
-          {clientData.blocked && (
+          {Boolean(clientData.blocked) && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-[11px] font-semibold text-red-700">
               <ShieldAlert size={11} /> Bloqueado
             </span>
@@ -436,20 +437,9 @@ export function ClientDetailModal({
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 text-base flex items-center gap-2 flex-wrap">
                   {clientData.name}
-                  <span className="text-xs font-normal text-gray-400">#{clientData.id}</span>
-                  {clientData.blocked && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-[11px] font-semibold text-red-700">
-                      <ShieldAlert size={11} /> Bloqueado
-                    </span>
-                  )}
                 </p>
                 {clientData.email && <p className="text-xs text-gray-500">{clientData.email}</p>}
-                {clientData.blocked && clientData.blocked_reason && (
-                  <p className="mt-1 text-[11px] text-red-700 bg-red-50 rounded-md px-2 py-1 flex items-start gap-1.5">
-                    <ShieldAlert size={11} className="mt-0.5" />
-                    <span>{clientData.blocked_reason}</span>
-                  </p>
-                )}
+                {clientData.phone && <p className="text-xs text-gray-500">{clientData.phone}</p>}
               </div>
             </div>
 
