@@ -809,7 +809,7 @@ export function ClientCreateModal({
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">
-                Email
+                Email <span className="text-red-400">*</span>
               </label>
 
               <input
@@ -824,7 +824,7 @@ export function ClientCreateModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">
-                Telefone
+                Telefone <span className="text-red-400">*</span>
               </label>
 
               <input
