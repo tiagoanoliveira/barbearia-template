@@ -153,6 +153,7 @@ export function InvoicingModal({ reservation, valorFaturar, meioPagamento, onClo
 
             const response = await adminApi.post('/api/admin/invoicing/emit', {
                 reservation_id: reservation.id,
+                customer_number: clientData?.id ?? reservation.client_id,
                 nif:            nifToUse,
                 customer_name:  clientData?.name ?? reservation.client_name,
                 customer_email: clientData?.email ?? reservation.client_email,
