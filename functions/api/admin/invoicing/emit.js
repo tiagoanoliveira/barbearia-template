@@ -243,7 +243,7 @@ async function getOrCreateProductId(env, companyId, name, price, taxId, category
 }
 
 // ── Encontrar cliente pelo NIF, ou criar se não existir ─────────────────────
-async function getOrCreateCustomerId(env, companyId, vat, name, email) {
+async function getOrCreateCustomerId(env, companyId, clientNumber, vat, name, email) {
     if (vat && vat !== '999999990') {
         const searchData = await moloniRequest(env, `
             query FindCustomer($companyId: Int!, $search: String!) {
@@ -257,13 +257,31 @@ async function getOrCreateCustomerId(env, companyId, vat, name, email) {
             }
         `, { companyId, search: vat })
 
-        const found = (searchData?.customers?.data ?? []).find(c => c.vat === vat)
-        if (found) return found.customerId
+        const found = (searchData?.customers?.data ?? []).find(
+            c => c.vat === vat
+        )
+
+        if (found) {
+            if (
+                found.number &&
+                clientNumber !== undefined &&
+                clientNumber !== null &&
+                String(found.number) !== String(clientNumber)
+            ) {
+                throw new Error(
+                    `O cliente com NIF ${vat} já existe na Moloni com o número ` +
+                    `${found.number}, mas o website usa o número ${clientNumber}.`
+                )
+            }
+
+            return found.customerId
+        }
     }
 
     const createData = await moloniRequest(env, `
         mutation CreateCustomer(
             $companyId: Int!
+            $number: String!
             $vat: String
             $name: String!
             $email: String
@@ -271,6 +289,7 @@ async function getOrCreateCustomerId(env, companyId, vat, name, email) {
             customerCreate(
                 companyId: $companyId
                 data: {
+                    number: $number
                     vat: $vat
                     name: $name
                     email: $email
@@ -279,10 +298,10 @@ async function getOrCreateCustomerId(env, companyId, vat, name, email) {
                 }
             ) {
                 errors { field msg }
-                data { customerId name }
+                data { customerId number name }
             }
         }
-    `, { companyId, vat: vat ?? '999999990', name, email: email || null })
+    `, { companyId, number: String(clientNumber), vat: vat ?? '999999990', name, email: email || null })
 
     const errors = createData?.customerCreate?.errors
     if (errors && errors.length > 0) {
@@ -296,7 +315,7 @@ async function getOrCreateCustomerId(env, companyId, vat, name, email) {
 export async function onRequestPost({ request, env }) {
     try {
         const body = await request.json()
-        const { reservation_id, nif, customer_name, customer_email, lines, payment_method } = body
+        const { reservation_id, nif, customer_number, customer_name, customer_email, lines, payment_method } = body
 
         if (!Array.isArray(lines) || lines.length === 0) {
             return Response.json({ success: false, error: 'Nenhuma linha de fatura foi enviada.' }, { status: 400 })
@@ -328,7 +347,7 @@ export async function onRequestPost({ request, env }) {
 
         // 3. Resolver (ou criar) o cliente
         const customerId = await getOrCreateCustomerId(
-            env, companyId, nif, customer_name, customer_email
+            env, companyId, customer_number, nif, customer_name, customer_email
         )
 
         const totalValue = productsPayload.reduce((sum, p) => sum + p.qty * p.price, 0)
