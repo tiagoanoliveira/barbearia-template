@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Users, ChevronRight, Phone, Mail, ShieldAlert } from 'lucide-react'
+import { Search, Users, Plus, ChevronRight, Phone, Mail, ShieldAlert } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { pt } from 'date-fns/locale'
 
@@ -8,7 +8,7 @@ import { clientsApi } from '@/api/clients'
 import { Card } from '@/components/ui/Card'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import EmptyState from '@/components/ui/EmptyState'
-import { ClientDetailModal } from '@/components/admin/client-detail-modal'
+import { ClientDetailModal, ClientCreateModal } from '@/components/admin/client-detail-modal'
 import { barberShopConfig } from '@/config/theme'
 import type { Client } from '@/types'
 
@@ -56,6 +56,7 @@ export default function ClientsPage() {
   const [page, setPage]         = useState(1)
   const [selected, setSelected] = useState<Client | null>(null)
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all')
+  const [isCreating, setIsCreating] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['clients', { search, page, blockedFilter }],
@@ -121,6 +122,14 @@ export default function ClientsPage() {
             </button>
           </div>
           <span className="text-sm text-gray-500 whitespace-nowrap">{total} clientes</span>
+          <button
+              type="button"
+              className="btn-primary flex items-center gap-1 text-sm"
+              onClick={() => setIsCreating(true)}
+          >
+            <Plus size={14} />
+            Novo cliente
+          </button>
         </div>
       </div>
 
@@ -227,6 +236,11 @@ export default function ClientsPage() {
       </Card>
 
       {selected && <ClientDetailModal clientId={selected.id} initialClient={selected} onClose={() => setSelected(null)} />}
+      {isCreating && (
+          <ClientCreateModal
+              onClose={() => setIsCreating(false)}
+          />
+      )}
     </div>
   )
 }

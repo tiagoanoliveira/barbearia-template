@@ -631,3 +631,158 @@ export function ClientDetailModal({
     </>
   )
 }
+
+export function ClientCreateModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient()
+
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [duplicateClient, setDuplicateClient] = useState<Client | null>(null)
+
+  const handleCreate = async () => {
+    setSaving(true)
+    setSaveError(null)
+    setDuplicateClient(null)
+
+    try {
+      const name = form.name.trim()
+      const email = form.email.trim()
+      const phone = form.phone.trim()
+
+      if (!name) {
+        setSaveError('O nome é obrigatório.')
+        return
+      }
+
+      // Verificar duplicados por email ou telefone
+      if (email || phone) {
+        const search = email || phone
+        const res = await clientsApi.list({ search, perPage: 10 })
+        const existing = res.data?.items?.find(c =>
+            (email && c.email && c.email.toLowerCase() === email.toLowerCase()) ||
+            (phone && c.phone && c.phone === phone)
+        )
+
+        if (existing) {
+          setDuplicateClient(existing)
+          setSaveError('Já existe um cliente com este contacto.')
+          return
+        }
+      }
+
+      const createRes = await clientsApi.create({
+        name,
+        email: email || undefined,
+        phone: phone || undefined,
+      })
+
+      if (!createRes.success || !createRes.data) {
+        throw new Error(createRes.error ?? 'Não foi possível criar o cliente.')
+      }
+
+      // atualizar lista de clientes
+      qc.invalidateQueries({ queryKey: ['clients'] })
+
+      onClose()
+    } catch (e: unknown) {
+      setSaveError(
+          e instanceof Error ? e.message : 'Não foi possível criar o cliente.'
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+      <Modal
+          open={true}
+          onClose={onClose}
+          title="Novo cliente"
+          footer={
+            <>
+              <button
+                  className="btn-secondary"
+                  onClick={onClose}
+                  disabled={saving}
+              >
+                Cancelar
+              </button>
+              <button
+                  className="btn-primary"
+                  onClick={handleCreate}
+                  disabled={saving}
+              >
+                {saving ? 'A criar...' : 'Criar cliente'}
+              </button>
+            </>
+          }
+      >
+        <div className="space-y-3 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Nome <span className="text-red-400">*</span>
+              </label>
+              <input
+                  type="text"
+                  value={form.name}
+                  onChange={e => {
+                    setForm(f => ({ ...f, name: e.target.value }))
+                    setSaveError(null)
+                  }}
+                  className="input text-sm w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Email</label>
+              <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => {
+                    setForm(f => ({ ...f, email: e.target.value }))
+                    setSaveError(null)
+                  }}
+                  className="input text-sm w-full"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Telefone</label>
+              <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={e => {
+                    setForm(f => ({ ...f, phone: e.target.value }))
+                    setSaveError(null)
+                  }}
+                  className="input text-sm w-full"
+              />
+            </div>
+          </div>
+
+          {duplicateClient && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 space-y-1">
+                <p className="font-semibold">
+                  Já existe um cliente com este contacto:
+                </p>
+                <p>
+                  {duplicateClient.name}
+                  {duplicateClient.email && ` · ${duplicateClient.email}`}
+                  {duplicateClient.phone && ` · ${duplicateClient.phone}`}
+                </p>
+              </div>
+          )}
+
+          {saveError && (
+              <p className="text-xs text-red-500 mt-1">{saveError}</p>
+          )}
+        </div>
+      </Modal>
+  )
+}
