@@ -13,6 +13,16 @@ export interface ClientUpdatePayload {
   blocked_reason?: string | null
 }
 
+export interface ClientCreatePayload {
+  name: string
+  email?: string
+  phone?: string
+  nif?: number | ''
+  notes?: string | null
+  reservas_concluidas?: number
+  reservas_gratuitas_disponiveis?: number
+}
+
 export interface ClientsFilter {
   page?: number
   perPage?: number
@@ -33,8 +43,8 @@ export const clientsApi = {
   get: (id: number) =>
     adminApi.get<Client>(`/api/admin/clients/${id}`),
 
-  create: (data: { name: string; email?: string; phone?: string }) =>
-    adminApi.post<Client>('/api/admin/clients', data),
+  create: (data: ClientCreatePayload) =>
+      adminApi.post<Client>('/api/admin/clients', data),
 
   update: (id: number, data: ClientUpdatePayload) =>
     adminApi.patch<Client>(`/api/admin/clients/${id}`, data),

@@ -411,7 +411,7 @@ export function ClientDetailModal({
                   </span>
                 </span>
               </label>
-              {form.blocked && (
+              {Boolean(form.blocked) && (
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Motivo do bloqueio (visível na mensagem de erro)</label>
                   <textarea
@@ -632,70 +632,136 @@ export function ClientDetailModal({
   )
 }
 
-export function ClientCreateModal({ onClose }: { onClose: () => void }) {
+export function ClientCreateModal({
+                                    onClose,
+                                  }: {
+  onClose: () => void
+}) {
   const qc = useQueryClient()
 
   const [form, setForm] = useState({
     name: '',
     email: '',
     phone: '',
+    nif: '',
+    reservas_concluidas: 0,
+    reservas_gratuitas_disponiveis: 0,
+    notes: '',
   })
+
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [duplicateClient, setDuplicateClient] = useState<Client | null>(null)
+  const [duplicateField, setDuplicateField] = useState<'email' | 'phone' | null>(null)
 
   const handleCreate = async () => {
     setSaving(true)
     setSaveError(null)
     setDuplicateClient(null)
+    setDuplicateField(null)
 
     try {
       const name = form.name.trim()
       const email = form.email.trim()
       const phone = form.phone.trim()
+      const nif = form.nif.trim()
 
       if (!name) {
         setSaveError('O nome é obrigatório.')
         return
       }
 
-      // Verificar duplicados por email ou telefone
-      if (email || phone) {
-        const search = email || phone
-        const res = await clientsApi.list({ search, perPage: 10 })
-        const existing = res.data?.items?.find(c =>
-            (email && c.email && c.email.toLowerCase() === email.toLowerCase()) ||
-            (phone && c.phone && c.phone === phone)
-        )
+      if (nif && !/^\d+$/.test(nif)) {
+        setSaveError('O NIF deve conter apenas números.')
+        return
+      }
 
-        if (existing) {
-          setDuplicateClient(existing)
-          setSaveError('Já existe um cliente com este contacto.')
-          return
-        }
+      /*
+       * Procuramos cada contacto separadamente.
+       * Isto evita depender de o backend pesquisar vários termos ao mesmo tempo.
+       */
+      const searches = [
+        email ? clientsApi.list({ search: email, perPage: 50 }) : null,
+        phone ? clientsApi.list({ search: phone, perPage: 50 }) : null,
+      ]
+
+      const [emailResult, phoneResult] = await Promise.all(searches)
+
+      const emailMatches = emailResult?.data?.items ?? []
+      const phoneMatches = phoneResult?.data?.items ?? []
+
+      const normalizedEmail = email.toLowerCase()
+      const normalizedPhone = phone.replace(/\s+/g, '')
+
+      const emailDuplicate = email
+          ? emailMatches.find(client =>
+              client.email?.trim().toLowerCase() === normalizedEmail
+          )
+          : undefined
+
+      const phoneDuplicate = phone
+          ? phoneMatches.find(client =>
+              client.phone?.replace(/\s+/g, '') === normalizedPhone
+          )
+          : undefined
+
+      if (emailDuplicate) {
+        setDuplicateClient(emailDuplicate)
+        setDuplicateField('email')
+        setSaveError('Já existe um cliente com este email.')
+        return
+      }
+
+      if (phoneDuplicate) {
+        setDuplicateClient(phoneDuplicate)
+        setDuplicateField('phone')
+        setSaveError('Já existe um cliente com este telefone.')
+        return
       }
 
       const createRes = await clientsApi.create({
         name,
         email: email || undefined,
         phone: phone || undefined,
+        nif: nif ? Number(nif) : '',
+        notes: form.notes.trim() || null,
+        reservas_concluidas: Math.max(0, form.reservas_concluidas),
+        reservas_gratuitas_disponiveis: Math.max(
+            0,
+            form.reservas_gratuitas_disponiveis,
+        ),
       })
 
       if (!createRes.success || !createRes.data) {
-        throw new Error(createRes.error ?? 'Não foi possível criar o cliente.')
+        throw new Error(
+            createRes.error ?? 'Não foi possível criar o cliente.',
+        )
       }
 
-      // atualizar lista de clientes
-      qc.invalidateQueries({ queryKey: ['clients'] })
-
+      await qc.invalidateQueries({ queryKey: ['clients'] })
       onClose()
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       setSaveError(
-          e instanceof Error ? e.message : 'Não foi possível criar o cliente.'
+          error instanceof Error
+              ? error.message
+              : 'Não foi possível criar o cliente.',
       )
     } finally {
       setSaving(false)
     }
+  }
+
+  const updateForm = <K extends keyof typeof form>(
+      field: K,
+      value: (typeof form)[K],
+  ) => {
+    setForm(current => ({
+      ...current,
+      [field]: value,
+    }))
+    setSaveError(null)
+    setDuplicateClient(null)
+    setDuplicateField(null)
   }
 
   return (
@@ -706,13 +772,16 @@ export function ClientCreateModal({ onClose }: { onClose: () => void }) {
           footer={
             <>
               <button
+                  type="button"
                   className="btn-secondary"
                   onClick={onClose}
                   disabled={saving}
               >
                 Cancelar
               </button>
+
               <button
+                  type="button"
                   className="btn-primary"
                   onClick={handleCreate}
                   disabled={saving}
@@ -728,50 +797,125 @@ export function ClientCreateModal({ onClose }: { onClose: () => void }) {
               <label className="block text-xs text-gray-500 mb-1">
                 Nome <span className="text-red-400">*</span>
               </label>
+
               <input
                   type="text"
                   value={form.name}
-                  onChange={e => {
-                    setForm(f => ({ ...f, name: e.target.value }))
-                    setSaveError(null)
-                  }}
+                  onChange={event => updateForm('name', event.target.value)}
                   className="input text-sm w-full"
+                  autoFocus
               />
             </div>
+
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Email</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                Email
+              </label>
+
               <input
                   type="email"
                   value={form.email}
-                  onChange={e => {
-                    setForm(f => ({ ...f, email: e.target.value }))
-                    setSaveError(null)
-                  }}
-                  className="input text-sm w-full"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Telefone</label>
-              <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={e => {
-                    setForm(f => ({ ...f, phone: e.target.value }))
-                    setSaveError(null)
-                  }}
+                  onChange={event => updateForm('email', event.target.value)}
                   className="input text-sm w-full"
               />
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Telefone
+              </label>
+
+              <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={event => updateForm('phone', event.target.value)}
+                  className="input text-sm w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                NIF
+              </label>
+
+              <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.nif}
+                  onChange={event => updateForm('nif', event.target.value)}
+                  className="input text-sm w-full"
+                  placeholder="Ex.: 260676527"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Reservas concluídas
+              </label>
+
+              <input
+                  type="number"
+                  min={0}
+                  value={form.reservas_concluidas}
+                  onChange={event =>
+                      updateForm(
+                          'reservas_concluidas',
+                          Math.max(0, Number(event.target.value)),
+                      )
+                  }
+                  className="input text-sm w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Gratuitas disponíveis
+              </label>
+
+              <input
+                  type="number"
+                  min={0}
+                  value={form.reservas_gratuitas_disponiveis}
+                  onChange={event =>
+                      updateForm(
+                          'reservas_gratuitas_disponiveis',
+                          Math.max(0, Number(event.target.value)),
+                      )
+                  }
+                  className="input text-sm w-full"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              Notas internas
+            </label>
+
+            <textarea
+                rows={3}
+                value={form.notes}
+                onChange={event => updateForm('notes', event.target.value)}
+                className="input text-sm w-full resize-none"
+            />
+          </div>
+
           {duplicateClient && (
-              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 space-y-1">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 <p className="font-semibold">
-                  Já existe um cliente com este contacto:
+                  Já existe um cliente com este contacto.
                 </p>
-                <p>
+
+                <p className="mt-1">
+                  {duplicateField === 'email' ? 'Email' : 'Telefone'} já utilizado
+                  por:
+                </p>
+
+                <p className="font-medium">
                   {duplicateClient.name}
                   {duplicateClient.email && ` · ${duplicateClient.email}`}
                   {duplicateClient.phone && ` · ${duplicateClient.phone}`}
@@ -780,7 +924,9 @@ export function ClientCreateModal({ onClose }: { onClose: () => void }) {
           )}
 
           {saveError && (
-              <p className="text-xs text-red-500 mt-1">{saveError}</p>
+              <p className="text-xs text-red-500">
+                {saveError}
+              </p>
           )}
         </div>
       </Modal>
