@@ -287,7 +287,7 @@ export function ClientDetailModal({
   const modalTitle = editMode
     ? `Editar ${clientData.name}`
     : (
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-4">
           <ClientAvatar client={clientData} size={16} />
           {clientData.name}
           <span className="text-xs font-normal text-gray-400">#{clientData.id}</span>
@@ -432,17 +432,6 @@ export function ClientDetailModal({
           </div>
         ) : (
           <div className="space-y-4 text-sm">
-            <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
-              <ClientAvatar client={clientData} size={16} />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-900 text-base flex items-center gap-2 flex-wrap">
-                  {clientData.name}
-                </p>
-                {clientData.email && <p className="text-xs text-gray-500">{clientData.email}</p>}
-                {clientData.phone && <p className="text-xs text-gray-500">{clientData.phone}</p>}
-              </div>
-            </div>
-
             <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
               <button onClick={() => setActiveTab('info')}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
@@ -532,7 +521,7 @@ export function ClientDetailModal({
                   </div>
                 </section>
 
-                {clientData.blocked && (
+                {Boolean(clientData.blocked) && (
                   <section>
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 flex items-center gap-1.5">
                       <ShieldAlert size={12} className="text-red-500" /> Estado de bloqueio
