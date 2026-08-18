@@ -170,19 +170,6 @@ export default function CalendarPage() {
     catch { return getDayConfig(new Date()) }
   }, [selectedDate])
 
-  const START_H     = dayConfig.openHour
-  const END_H       = dayConfig.closeHour
-  const TOTAL_SLOTS = (END_H - START_H) * SLOTS_PER_H
-  const OPEN_H      = START_H
-  const CLOSE_H     = END_H
-  // Pausa: slot index relativo ao início do dia
-  const BREAK_START_SLOT = dayConfig.breakStartMinutes != null
-      ? Math.floor((dayConfig.breakStartMinutes - dayConfig.openMinutes) / SLOT_DURATION)
-      : null
-  const BREAK_END_SLOT = dayConfig.breakEndMinutes != null
-      ? Math.floor((dayConfig.breakEndMinutes - dayConfig.openMinutes) / SLOT_DURATION)
-      : null
-
   // ── Outros estados ───────────────────────────────────────────────────────
   const [ctx, setCtx]       = useState<ContextTarget | null>(null)
   const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 })
@@ -205,6 +192,8 @@ export default function CalendarPage() {
 
   const [newResForm, setNewResForm]     = useState<Partial<Reservation & { sendEmail: boolean; nota_privada: string }>>({})
   const [newResSaving, setNewResSaving] = useState(false)
+
+  const [overlapReservations, setOverlapReservations] = useState<Reservation[] | null>(null)
 
   const gridRef = useRef<HTMLDivElement>(null)
   const pendingReservationIdRef = useRef<number | null>(null)
@@ -238,6 +227,62 @@ export default function CalendarPage() {
   const reservations: Reservation[] = resRes?.data?.items ?? []
   const unavailable: Unavailable[]  = (uRes?.data as unknown as Unavailable[]) ?? []
   const isLoading = loadingRes || loadingU
+
+  const BUSINESS_OPEN_H  = dayConfig.openHour
+  const BUSINESS_CLOSE_H = dayConfig.closeHour
+
+  const {
+    START_H,
+    END_H,
+    TOTAL_SLOTS,
+    BREAK_START_SLOT,
+    BREAK_END_SLOT,
+  } = useMemo(() => {
+    // minutos de abertura/fecho segundo o config
+    let openMin  = dayConfig.openMinutes
+    let closeMin = dayConfig.closeMinutes
+
+    if (reservations.length > 0) {
+      let earliest = openMin
+      let latest   = closeMin
+
+      reservations.forEach(r => {
+        const d = new Date(r.data_hora)
+        const start = d.getHours() * 60 + d.getMinutes()
+
+        const service = services.find(s => s.id === r.service_id)
+        const dur = r.service_duration ?? service?.duration ?? 60
+        const end = start + dur
+
+        if (start < earliest) earliest = start
+        if (end > latest)    latest   = end
+      })
+
+      openMin  = earliest
+      closeMin = latest
+    }
+
+    const startH = Math.floor(openMin / 60)
+    const endH   = Math.ceil(closeMin / 60)
+
+    const totalSlots = (endH - startH) * SLOTS_PER_H
+
+    const breakStartSlot = dayConfig.breakStartMinutes != null
+        ? Math.floor((dayConfig.breakStartMinutes - openMin) / SLOT_DURATION)
+        : null
+
+    const breakEndSlot = dayConfig.breakEndMinutes != null
+        ? Math.floor((dayConfig.breakEndMinutes - openMin) / SLOT_DURATION)
+        : null
+
+    return {
+      START_H: startH,
+      END_H: endH,
+      TOTAL_SLOTS: totalSlots,
+      BREAK_START_SLOT: breakStartSlot,
+      BREAK_END_SLOT: breakEndSlot,
+    }
+  }, [dayConfig, reservations, services])
 
   const changeDate = useCallback((delta: number) => {
     const dt = new Date(selectedDate + 'T12:00:00')
@@ -293,8 +338,8 @@ export default function CalendarPage() {
       if (uForm.is_all_day) {
         const dayStart = (uForm.data_hora_inicio ?? `${selectedDate}T00:00:00`).substring(0, 10)
         const dayEnd   = (uForm.data_hora_fim    ?? uForm.data_hora_inicio ?? `${selectedDate}T00:00:00`).substring(0, 10)
-        payload.data_hora_inicio = `${dayStart}T${String(OPEN_H).padStart(2,'0')}:00:00`
-        payload.data_hora_fim    = `${dayEnd}T${String(CLOSE_H).padStart(2,'0')}:00:00`
+        payload.data_hora_inicio = `${dayStart}T${String(BUSINESS_OPEN_H).padStart(2,'0')}:00:00`
+        payload.data_hora_fim    = `${dayEnd}T${String(BUSINESS_CLOSE_H).padStart(2,'0')}:00:00`
       }
       if (isNew || !uForm.id) {
         const conflictsRes = await barbersApi.checkConflicts({
@@ -621,6 +666,19 @@ export default function CalendarPage() {
                               </span>
                             </div>
                           )}
+                          {rList.length > 1 && (
+                              <button
+                                  type="button"
+                                  className="absolute top-0.5 right-1 z-30 bg-red-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 shadow"
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    setOverlapReservations(rList)
+                                  }}
+                                  title={`${rList.length} reservas neste horário`}
+                              >
+                                +{rList.length - 1}
+                              </button>
+                          )}
                           {rList.map(r => {
                             const service   = services.find(s => s.id === r.service_id)
                             const baseColor = service?.color || b.color || '#888'
@@ -794,6 +852,35 @@ export default function CalendarPage() {
           invalidateKey="cal-reservations"
           onClose={close}
         />
+      )}
+
+      {overlapReservations && (
+          <Modal
+              open={true}
+              onClose={() => setOverlapReservations(null)}
+              title="Reservas neste horário"
+          >
+            <div className="space-y-2 text-sm">
+              {overlapReservations.map(r => (
+                  <button
+                      key={r.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 flex flex-col"
+                      onClick={() => {
+                        setModal({ type: 'res_detail', r })
+                        setOverlapReservations(null)
+                      }}
+                  >
+          <span className="font-semibold">
+            {r.client_name} – {r.service_name}
+          </span>
+                    <span className="text-xs text-gray-500">
+            {format(new Date(r.data_hora), 'HH:mm', { locale: pt })} · {r.barber_name}
+          </span>
+                  </button>
+              ))}
+            </div>
+          </Modal>
       )}
 
       <Modal open={modal?.type === 'res_copy'} onClose={close} title="Copiar reserva"
