@@ -92,34 +92,6 @@ function serviceShortLabel(serviceName: string, abbreviation?: string) {
     .toUpperCase() || 'SV'
 }
 
-function reservationInterval(
-    reservation: Reservation,
-    services: Service[],
-) {
-  const service = services.find(s => s.id === reservation.service_id)
-  const duration =
-      reservation.service_duration ?? service?.duration ?? 60
-
-  const start = new Date(reservation.data_hora)
-  const end = addMinutes(start, duration)
-
-  return { start, end }
-}
-
-function reservationsOverlap(
-    a: Reservation,
-    b: Reservation,
-    services: Service[],
-) {
-  const aInterval = reservationInterval(a, services)
-  const bInterval = reservationInterval(b, services)
-
-  return (
-      aInterval.start < bInterval.end &&
-      bInterval.start < aInterval.end
-  )
-}
-
 type ContextTarget =
   | { kind: 'slot';        barberId: number; slot: number }
   | { kind: 'reservation'; reservation: Reservation }
@@ -758,15 +730,7 @@ export default function CalendarPage() {
                             const compact = dur < 30
                             const heightPx  = Math.max(SLOT_H, Math.round((dur / SLOT_DURATION) * SLOT_H))
                             const barColor2 = STATUS_BAR_LOCAL[r.status] ?? baseColor
-                            const overlappingReservations = reservations.filter(other => {
-                              if (other.id === r.id) return false
-                              if (other.status === 'cancelada') return false
-                              if (other.barber_id !== r.barber_id) return false
 
-                              return reservationsOverlap(r, other, services)
-                            })
-
-                            const overlapCount = overlappingReservations.length
                             return (
                               <div key={r.id}
                                 className="absolute inset-x-0.5 top-0 rounded overflow-visible cursor-pointer flex flex-col justify-start pl-2.5 pr-1 py-0.5 z-20"
@@ -777,23 +741,6 @@ export default function CalendarPage() {
                                 }}
                                 onClick={e => openCtx(e, { kind: 'reservation', reservation: r })}
                               >
-                                {overlapCount > 0 && (
-                                    <button
-                                        type="button"
-                                        className="absolute -top-1 right-1 z-30 min-w-[22px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold shadow"
-                                        onClick={e => {
-                                          e.stopPropagation()
-
-                                          setOverlapReservations([
-                                            r,
-                                            ...overlappingReservations,
-                                          ])
-                                        }}
-                                        title={`${overlapCount + 1} reservas sobrepostas`}
-                                    >
-                                      +{overlapCount}
-                                    </button>
-                                )}
                                 {compact ? (
                                   <p className="text-[12px] font-semibold leading-tight truncate text-black whitespace-nowrap">
                                     {shortLabel}{' '}
