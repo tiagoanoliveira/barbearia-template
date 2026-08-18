@@ -487,15 +487,53 @@ export default function CalendarPage() {
 
   const resByBarberSlot = useMemo(() => {
     const map = new Map<string, Reservation[]>()
+
     reservations.forEach(r => {
       if (r.status === 'cancelada') return
-      const slot = timeToSlot(r.data_hora, START_H)
-      const key  = `${r.barber_id}_${slot}`
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(r)
+
+      const service = services.find(s => s.id === r.service_id)
+      const duration = r.service_duration ?? service?.duration ?? 60
+
+      const start = new Date(r.data_hora)
+      const end = addMinutes(start, duration)
+
+      const startMinutes =
+          start.getHours() * 60 + start.getMinutes()
+
+      const endMinutes =
+          end.getHours() * 60 + end.getMinutes()
+
+      const firstSlot = Math.max(
+          0,
+          Math.floor((startMinutes - START_H * 60) / SLOT_DURATION),
+      )
+
+      // A reserva ocupa todos os slots cujo início é anterior ao seu fim.
+      const lastSlotExclusive = Math.ceil(
+          (endMinutes - START_H * 60) / SLOT_DURATION,
+      )
+
+      for (
+          let slot = firstSlot;
+          slot < lastSlotExclusive;
+          slot++
+      ) {
+        const key = `${r.barber_id}_${slot}`
+
+        if (!map.has(key)) {
+          map.set(key, [])
+        }
+
+        const list = map.get(key)!
+
+        if (!list.some(existing => existing.id === r.id)) {
+          list.push(r)
+        }
+      }
     })
+
     return map
-  }, [reservations, START_H])
+  }, [reservations, services, START_H])
 
   const unavailByBarber = useMemo(() => {
     const map = new Map<number, Unavailable[]>()
@@ -607,7 +645,12 @@ export default function CalendarPage() {
                     {barbers.map(b => {
                       const blocked = isSlotBlocked(b.id, slot)
                       const key     = `${b.id}_${slot}`
-                      const rList   = resByBarberSlot.get(key) ?? []
+                      const overlappingList = resByBarberSlot.get(key) ?? []
+
+                      const rList = overlappingList.filter(r => {
+                        const reservationStartSlot = timeToSlot(r.data_hora, START_H)
+                        return reservationStartSlot === slot
+                      })
                       const colBg   = hexToRgba(b.color ?? '#d4a017', 0.1)
                       const isBreakSlot = BREAK_START_SLOT != null && BREAK_END_SLOT != null
                           && slot >= BREAK_START_SLOT && slot < BREAK_END_SLOT
