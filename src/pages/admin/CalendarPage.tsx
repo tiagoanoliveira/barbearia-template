@@ -645,9 +645,9 @@ export default function CalendarPage() {
                     {barbers.map(b => {
                       const blocked = isSlotBlocked(b.id, slot)
                       const key     = `${b.id}_${slot}`
-                      const overlappingList = resByBarberSlot.get(key) ?? []
+                      const overlapList = resByBarberSlot.get(key) ?? []
 
-                      const rList = overlappingList.filter(r => {
+                      const startList = overlapList.filter(r => {
                         const reservationStartSlot = timeToSlot(r.data_hora, START_H)
                         return reservationStartSlot === slot
                       })
@@ -659,7 +659,7 @@ export default function CalendarPage() {
                           ? 'relative border-l border-b-2 border-slate-400'
                           : 'relative border-l border-b border-gray-400'
 
-                      if (!blocked && rList.length === 0) {
+                      if (!blocked && startList.length === 0) {
                         if (isBreakSlot) {
                           return (
                               <div key={key}
@@ -709,20 +709,20 @@ export default function CalendarPage() {
                               </span>
                             </div>
                           )}
-                          {rList.length > 1 && (
+                          {overlapList.length > 1 && (
                               <button
                                   type="button"
                                   className="absolute top-0.5 right-1 z-30 bg-red-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 shadow"
                                   onClick={e => {
                                     e.stopPropagation()
-                                    setOverlapReservations(rList)
+                                    setOverlapReservations(overlapList)
                                   }}
-                                  title={`${rList.length} reservas neste horário`}
+                                  title={`${overlapList.length} reservas neste horário`}
                               >
-                                +{rList.length - 1}
+                                +{overlapList.length - 1}
                               </button>
                           )}
-                          {rList.map(r => {
+                          {startList.map(r => {
                             const service   = services.find(s => s.id === r.service_id)
                             const baseColor = service?.color || b.color || '#888'
                             const dur       = r.service_duration ?? service?.duration ?? 60
