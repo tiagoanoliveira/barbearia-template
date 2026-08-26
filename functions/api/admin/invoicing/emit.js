@@ -3,6 +3,14 @@
 import { sendEmail, shell } from '../../../utils/email.js'
 const MOLONI_ENDPOINT = 'https://api.molonion.pt/v1'
 const INVOICE_RECEIPT_TYPE_ID = 27 // Invoice Receipt (FR)
+// Taxa de IVA normal em Portugal — os preços dos serviços no site já incluem este IVA
+const TAX_RATE = 0.23
+
+// Converte um preço com IVA incluído (o que o cliente paga) no preço líquido
+// que a Moloni espera antes de voltar a aplicar o IVA sobre o produto.
+function toNetPrice(grossPrice) {
+    return Math.round((grossPrice / (1 + TAX_RATE)) * 100) / 100
+}
 
 // ── Helper genérico: executar uma query/mutation GraphQL na Moloni ON ──────
 async function moloniRequest(env, query, variables = {}) {
@@ -334,13 +342,14 @@ export async function onRequestPost({ request, env }) {
         // 2. Resolver (ou criar) cada produto/serviço da fatura
         const productsPayload = []
         for (const [idx, l] of lines.entries()) {
+            const netPrice = toNetPrice(l.unit_price)
             const productId = await getOrCreateProductId(
-                env, companyId, l.description, l.unit_price, taxId, categoryId, measurementUnitId
+                env, companyId, l.description, netPrice, taxId, categoryId, measurementUnitId
             )
             productsPayload.push({
                 productId,
                 qty: l.quantity,
-                price: l.unit_price,
+                price: netPrice,
                 ordering: idx + 1,
             })
         }
@@ -350,7 +359,7 @@ export async function onRequestPost({ request, env }) {
             env, companyId, customer_number, nif, customer_name, customer_email
         )
 
-        const totalValue = productsPayload.reduce((sum, p) => sum + p.qty * p.price, 0)
+        const totalValue = lines.reduce((sum, l) => sum + l.quantity * l.unit_price, 0)
         const todayIso = new Date().toISOString()
 
         // 4. Emitir a fatura-recibo
